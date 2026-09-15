@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import RedirectResponse
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlmodel import Session, select
@@ -11,13 +20,14 @@ from app.auth import (
     load_project_and_membership,
     make_csrf_token,
     optional_user,
+    project_writer,
     verify_csrf,
     verify_password,
 )
 from app.db import get_session
-from app.models import Project, ProjectMember, Ticket, TicketStatus, User
+from app.models import Priority, Project, ProjectMember, Ticket, TicketStatus, TicketType, User
 from app.routers.api_auth import _set_session
-from app.services import create_project
+from app.services import create_project, create_ticket
 
 router = APIRouter(tags=["web"])
 
@@ -31,6 +41,9 @@ COLUMNS = (
 # Reused to give the register form the same EmailStr format check RegisterRequest gives the
 # JSON route, without hand-rolling a regex.
 _email_adapter = TypeAdapter(EmailStr)
+
+# Hoisted so `Form(...)` isn't called in an argument default (ruff B008).
+_DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> Response:
@@ -230,4 +243,43 @@ def board(
                 column.value: [t for t in tickets if t.status == column] for column in COLUMNS
             },
         },
+    )
+
+
+@router.post("/projects/{slug}/tickets", dependencies=[Depends(verify_csrf)])
+def create_ticket_form(
+    request: Request,
+    tasks: BackgroundTasks,
+    title: str = Form(...),
+    type: TicketType = _DEFAULT_TICKET_TYPE,
+    description: str = Form(""),
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    # create_ticket (app/services.py) is the same function the JSON route calls -- atomic
+    # ticket-number allocation, title/description/story_points/meta limits (Ruling R24, since
+    # this form bypasses any Pydantic schema), and the TICKET_CREATED notification all live
+    # there exactly once.
+    try:
+        ticket = create_ticket(
+            session,
+            project,
+            user,
+            title=title,
+            description=description,
+            type=type,
+            priority=Priority.MEDIUM,
+            tasks=tasks,
+        )
+    except HTTPException as exc:
+        # Not a page and not JSON: the modal's error slot renders whatever text comes back
+        # (see partials/ticket_modal.html's htmx:after-request handler), so plain text is enough.
+        return Response(str(exc.detail), status_code=exc.status_code, media_type="text/plain")
+    return render(
+        request,
+        "partials/ticket_card.html",
+        {"user": user, "project": project, "ticket": ticket, "columns": COLUMNS},
+        status_code=status.HTTP_201_CREATED,
     )

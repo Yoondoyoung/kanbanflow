@@ -1,1 +1,37 @@
-{# Replaced in full by Task 22 #}
+<div x-show="modal" x-cloak
+     class="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
+  <div id="ticket-modal" x-data="{ error: '' }" class="bg-white rounded p-5 w-full max-w-md" @click.outside="modal = false"
+       role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading">
+    <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
+    <form hx-post="/projects/{{ project.slug }}/tickets"
+          hx-target="#column-BACKLOG"
+          hx-swap="afterbegin"
+          @htmx:after-request="if ($event.detail.successful) { modal = false; error = ''; $el.reset(); } else { error = $event.detail.xhr.responseText; }"
+          class="space-y-3">
+      <p x-show="error" x-text="error" class="text-red-600 text-xs" role="alert"></p>
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <div>
+        <label for="ticket-title" class="block text-xs font-medium mb-1">Title</label>
+        <input id="ticket-title" class="w-full border rounded px-3 py-2" name="title" required>
+      </div>
+      <div>
+        <label for="ticket-type" class="block text-xs font-medium mb-1">Type</label>
+        <select id="ticket-type" class="w-full border rounded px-3 py-2" name="type" required>
+          <option value="STORY">Story</option>
+          <option value="BUG">Bug</option>
+          <option value="DEMO_REQUEST">Demo request</option>
+          <option value="TASK" selected>Task</option>
+        </select>
+      </div>
+      <div>
+        <label for="ticket-description" class="block text-xs font-medium mb-1">Description</label>
+        <textarea id="ticket-description" class="w-full border rounded px-3 py-2" name="description" rows="4"
+                  placeholder="Markdown supported"></textarea>
+      </div>
+      <div class="flex gap-2 justify-end">
+        <button type="button" class="px-3 py-1.5 text-sm" @click="modal = false">Cancel</button>
+        <button class="bg-slate-900 text-white rounded px-4 py-1.5 text-sm">Create</button>
+      </div>
+    </form>
+  </div>
+</div>
