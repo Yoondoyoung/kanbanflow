@@ -1,0 +1,100 @@
+from fastapi import APIRouter, Depends, Form, Request, Response, status
+from fastapi.responses import RedirectResponse
+from sqlmodel import Session, select
+
+from app.auth import SESSION_COOKIE, hash_password, make_csrf_token, optional_user, verify_password
+from app.db import get_session
+from app.models import User
+from app.routers.api_auth import _set_session
+
+router = APIRouter(tags=["web"])
+
+
+def render(request: Request, name: str, context: dict, status_code: int = 200) -> Response:
+    from app.main import templates
+
+    user = context.get("user")
+    context = {
+        "request": request,
+        "csrf_token": make_csrf_token(user.id) if user else "",
+        **context,
+    }
+    return templates.TemplateResponse(request, name, context, status_code=status_code)
+
+
+@router.get("/")
+def index(user: User | None = Depends(optional_user)) -> Response:
+    target = "/dashboard" if user else "/login"
+    return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/login")
+def login_page(request: Request, user: User | None = Depends(optional_user)) -> Response:
+    if user:
+        return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    return render(request, "login.html", {"user": None})
+
+
+@router.post("/login")
+def login_submit(
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(...),
+    session: Session = Depends(get_session),
+) -> Response:
+    user = session.exec(select(User).where(User.email == email.lower())).first()
+    if user is None or not verify_password(password, user.password_hash):
+        return render(
+            request,
+            "login.html",
+            {"user": None, "error": "Invalid email or password"},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+    response = RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    _set_session(response, user.id)
+    return response
+
+
+@router.get("/register")
+def register_page(request: Request, user: User | None = Depends(optional_user)) -> Response:
+    if user:
+        return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    return render(request, "register.html", {"user": None})
+
+
+@router.post("/register")
+def register_submit(
+    request: Request,
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    session: Session = Depends(get_session),
+) -> Response:
+    if len(password.encode("utf-8")) < 8:
+        return render(
+            request,
+            "register.html",
+            {"user": None, "error": "Password must be at least 8 characters"},
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+    if session.exec(select(User).where(User.email == email.lower())).first():
+        return render(
+            request,
+            "register.html",
+            {"user": None, "error": "That email is already registered"},
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    user = User(name=name, email=email.lower(), password_hash=hash_password(password))
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    response = RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+    _set_session(response, user.id)
+    return response
+
+
+@router.post("/logout")
+def logout_submit() -> Response:
+    response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
