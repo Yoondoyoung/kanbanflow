@@ -22,6 +22,10 @@ _STATUS_QUERY = Query(default=None, alias="status")
 _TYPE_QUERY = Query(default=None, alias="type")
 _LIMIT_QUERY = Query(default=50, ge=1, le=200)
 
+# The only Ticket columns a PATCH may set to NULL (app/models.py: the rest are
+# NOT NULL). completed_at is nullable too but is owned by set_status, not PATCH.
+NULLABLE_TICKET_FIELDS = {"story_points", "assignee_id", "resolution_notes"}
+
 
 def _project_for_write(slug: str, user: User, session: Session) -> Project:
     project, member = load_project_and_membership(slug, user, session)
@@ -136,6 +140,17 @@ def patch_ticket(
 ) -> Ticket:
     ticket, project, _ = load_ticket_for_write(ticket_id, user, session)
     data = body.model_dump(exclude_unset=True)
+    # Every TicketUpdate field is `| None`, so an explicit JSON null is *set*,
+    # not omitted by exclude_unset. Columns that are NOT NULL then blow up as
+    # an unhandled IntegrityError (500), and `meta` is worse: it is
+    # Column(JSON, nullable=False), so JSON null serialises to the literal
+    # string 'null', satisfies NOT NULL, and every later read of the project's
+    # ticket list fails response validation. Reject nulls for the non-nullable
+    # fields up front -- before any mutation -- the way update_project's
+    # per-field `is not None` checks already do (app/routers/api_projects.py).
+    for field, value in data.items():
+        if value is None and field not in NULLABLE_TICKET_FIELDS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{field} may not be null")
     if "meta" in data and data["meta"] is not None:
         validate_meta(data["meta"])
     if "assignee_id" in data:

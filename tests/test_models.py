@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import JSON, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
@@ -65,4 +66,40 @@ def test_ticket_number_is_unique_per_project(session: Session):
             )
         )
     with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_ticket_meta_is_a_non_null_json_column_defaulting_to_empty(session: Session):
+    # Spec §4: meta is JSON and NOT NULL with a {} default. The default comes
+    # from the model (default_factory), the NOT NULL from the column -- assert
+    # both, since patch_ticket's null guard depends on the column being NOT NULL.
+    user = make_user(session)
+    project = Project(name="P", slug="p")
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+
+    column = Ticket.__table__.c.meta
+    assert isinstance(column.type, JSON)
+    assert column.nullable is False
+
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        title="t",
+        type=TicketType.TASK,
+        status=TicketStatus.BACKLOG,
+        creator_id=user.id,
+    )
+    session.add(ticket)
+    session.commit()
+    session.refresh(ticket)
+    assert ticket.meta == {}
+
+    # NOT NULL is enforced by the database, not just declared on the model.
+    # (Assigning Python None through the ORM would *not* trip it: SQLAlchemy's
+    # JSON type serialises None to the JSON null literal, which is exactly why
+    # patch_ticket has to reject {"meta": null} itself.)
+    with pytest.raises(IntegrityError):
+        session.exec(text("UPDATE ticket SET meta = NULL WHERE id = :id").bindparams(id=ticket.id))
         session.commit()

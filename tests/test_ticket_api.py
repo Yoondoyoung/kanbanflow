@@ -135,3 +135,40 @@ def test_only_owner_deletes(client, seeded, make_user, add_member, login_as):
     client.post("/api/v1/auth/logout")
     login_as("ada@example.com")
     assert client.delete(f"/api/v1/tickets/{ticket_id}").status_code == 204
+
+
+@pytest.mark.parametrize("field", ["title", "description", "type", "priority", "meta"])
+def test_patch_rejects_explicit_null_on_non_nullable_field(client, seeded, field):
+    # Every TicketUpdate field is `| None`, so exclude_unset keeps an explicit
+    # JSON null. Without the guard in patch_ticket these reach setattr and the
+    # NOT NULL column blows up as an unhandled IntegrityError (500).
+    _, project = seeded
+    before = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]
+    response = client.patch(f"/api/v1/tickets/{before['id']}", json={field: None})
+    assert response.status_code == 422
+    assert response.json()["detail"] == f"{field} may not be null"
+    assert client.get(f"/api/v1/tickets/{before['id']}").json() == before
+
+
+def test_patch_null_meta_does_not_poison_the_project_ticket_list(client, seeded):
+    # meta is Column(JSON, nullable=False): a JSON null serialises to the
+    # literal string 'null', satisfies NOT NULL, and *persists* -- after which
+    # every member's GET of the project's ticket list fails response validation.
+    _, project = seeded
+    ticket_id = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]["id"]
+    assert client.patch(f"/api/v1/tickets/{ticket_id}", json={"meta": None}).status_code == 422
+    listing = client.get(f"/api/v1/projects/{project.slug}/tickets")
+    assert listing.status_code == 200
+    assert all(t["meta"] == {} for t in listing.json()["items"])
+
+
+def test_patch_accepts_null_on_the_nullable_fields(client, seeded):
+    _, project = seeded
+    ticket_id = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]["id"]
+    client.patch(f"/api/v1/tickets/{ticket_id}", json={"story_points": 8})
+    response = client.patch(
+        f"/api/v1/tickets/{ticket_id}",
+        json={"story_points": None, "assignee_id": None, "resolution_notes": None},
+    )
+    assert response.status_code == 200
+    assert response.json()["story_points"] is None
