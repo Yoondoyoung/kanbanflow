@@ -1,6 +1,7 @@
 import pytest
 from sqlmodel import Session
 
+from app.models import Project
 from app.routers.api_projects import slugify
 
 
@@ -92,8 +93,6 @@ def test_concurrent_project_creation_race_returns_409_not_500(
     # request makes — that's the pre-check's select() — since there's no
     # standalone function analogous to api_auth's hash_password to monkeypatch
     # in this route.
-    from app.models import Project
-
     make_user(email="ada@example.com")
     login_as("ada@example.com")
 
