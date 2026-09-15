@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
-from app.auth import _load, current_user
+from app.auth import current_user, load_project_and_membership
 from app.db import get_session
 from app.models import Project, Ticket, User
 from app.schemas import TicketCreate, TicketOut
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/v1", tags=["tickets"])
 
 
 def _project_for_write(slug: str, user: User, session: Session) -> Project:
-    project, member = _load(slug, user, session)
+    project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a project member")
     return project

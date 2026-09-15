@@ -16,6 +16,9 @@ from app.models import (
 
 META_MAX_BYTES = 8 * 1024
 META_MAX_DEPTH = 3
+TITLE_MAX_LENGTH = 255
+DESCRIPTION_MAX_LENGTH = 20_000
+VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
 
 
 def _depth(value, level: int = 1) -> int:
@@ -71,6 +74,21 @@ def create_ticket(
     clean_title = title.strip()
     if not clean_title:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "title must not be empty")
+    if len(clean_title) > TITLE_MAX_LENGTH:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"title must be at most {TITLE_MAX_LENGTH} characters",
+        )
+    if len(description) > DESCRIPTION_MAX_LENGTH:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"description must be at most {DESCRIPTION_MAX_LENGTH} characters",
+        )
+    if story_points is not None and story_points not in VALID_STORY_POINTS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "story_points must be one of 1, 2, 3, 5, 8, 13",
+        )
     if meta is None:
         meta = {}
     validate_meta(meta)

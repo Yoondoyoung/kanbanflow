@@ -85,7 +85,9 @@ async def verify_csrf(request: Request, user: User = Depends(current_user)) -> N
     assert_csrf_matches(form.get(CSRF_FIELD), user.id)
 
 
-def _load(slug: str, user: User, session: Session) -> tuple[Project, ProjectMember | None]:
+def load_project_and_membership(
+    slug: str, user: User, session: Session
+) -> tuple[Project, ProjectMember | None]:
     project = session.exec(select(Project).where(Project.slug == slug)).first()
     if project is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
@@ -100,7 +102,7 @@ def _load(slug: str, user: User, session: Session) -> tuple[Project, ProjectMemb
 def project_reader(
     slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
 ) -> tuple[Project, ProjectMember]:
-    project, member = _load(slug, user, session)
+    project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     return project, member
@@ -109,7 +111,7 @@ def project_reader(
 def project_writer(
     slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
 ) -> tuple[Project, ProjectMember]:
-    project, member = _load(slug, user, session)
+    project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a project member")
     return project, member

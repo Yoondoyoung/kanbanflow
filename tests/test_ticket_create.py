@@ -111,6 +111,37 @@ def test_create_ticket_rejects_non_dict_meta_even_when_falsy(session, make_user,
     assert excinfo.value.status_code == 422
 
 
+def test_create_ticket_rejects_invalid_story_points_directly(session, make_user, make_project):
+    # TicketCreate's STORY_POINTS Literal only guards HTTP callers. Task 12
+    # and Task 17 call create_ticket directly, and Task 22 calls it from a
+    # Form(...) route with no Pydantic model in between — so the domain
+    # constraint must also be enforced here, at the one choke point every
+    # caller funnels through.
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with pytest.raises(HTTPException) as excinfo:
+        create_ticket(session, project, owner, title="T", story_points=999)
+    assert excinfo.value.status_code == 422
+
+
+def test_create_ticket_rejects_title_over_255_chars_directly(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with pytest.raises(HTTPException) as excinfo:
+        create_ticket(session, project, owner, title="x" * 256)
+    assert excinfo.value.status_code == 422
+
+
+def test_create_ticket_rejects_description_over_20000_chars_directly(
+    session, make_user, make_project
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with pytest.raises(HTTPException) as excinfo:
+        create_ticket(session, project, owner, title="T", description="x" * 20001)
+    assert excinfo.value.status_code == 422
+
+
 def test_ticket_number_gapless_after_rollback(session, make_user, make_project):
     # Proves the property the shared transaction buys: if the commit that
     # carries the ticket insert fails AFTER the counter has been
