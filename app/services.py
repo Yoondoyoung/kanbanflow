@@ -1,13 +1,16 @@
 import json
+import re
 
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.models import (
     Priority,
     Project,
     ProjectMember,
+    Role,
     Ticket,
     TicketStatus,
     TicketType,
@@ -21,6 +24,52 @@ META_MAX_DEPTH = 3
 TITLE_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 20_000
 VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
+NAME_MAX_LENGTH = 100
+
+
+def slugify(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:50].strip("-")
+
+
+def _slug_conflict_detail(slug: str) -> str:
+    return f"Slug already taken: {slug}"
+
+
+def create_project(session: Session, name: str, user: User) -> Project:
+    # Shared by the JSON route (app/routers/api_projects.py) and the dashboard
+    # form (app/routers/web.py) so slug derivation, the collision pre-check, the
+    # IntegrityError race guard (Ruling R16), and the creator-becomes-OWNER
+    # membership insert exist in exactly one place. ProjectCreate already
+    # enforces these name limits on the JSON path via Pydantic; the form route
+    # has no schema in front of it (Ruling R36), so the check lives here where
+    # both callers get it.
+    clean_name = name.strip()
+    if not clean_name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "name must not be blank")
+    if len(clean_name) > NAME_MAX_LENGTH:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"name must be at most {NAME_MAX_LENGTH} characters",
+        )
+    slug = slugify(clean_name)
+    if not slug:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name yields an empty slug")
+    if session.exec(select(Project).where(Project.slug == slug)).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug))
+    project = Project(name=clean_name, slug=slug)
+    session.add(project)
+    try:
+        session.flush()
+        session.add(ProjectMember(project_id=project.id, user_id=user.id, role=Role.OWNER))
+        session.commit()
+    except IntegrityError:
+        # Two concurrent project creations that derive the same slug can both
+        # pass the pre-check above; the unique constraint on Project.slug
+        # catches the loser here (Ruling R16).
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
+    session.refresh(project)
+    return project
 
 
 def _depth(value, level: int = 1) -> int:

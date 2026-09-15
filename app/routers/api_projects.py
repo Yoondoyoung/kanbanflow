@@ -1,5 +1,3 @@
-import re
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
@@ -9,17 +7,14 @@ from app.db import get_session
 from app.models import Project, ProjectMember, Role, Ticket, User, WebhookType
 from app.schemas import MemberAdd, MemberOut, MemberUpdate, ProjectCreate, ProjectOut, ProjectUpdate
 
+# slugify moved to app.services (single source of truth, shared with the
+# dashboard form route) but stays importable from here: tests/conftest.py and
+# tests/test_projects.py import it from this module.
+from app.services import create_project, slugify  # noqa: F401
+
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 _ALREADY_MEMBER = "Already a member"
-
-
-def slugify(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:50].strip("-")
-
-
-def _slug_conflict_detail(slug: str) -> str:
-    return f"Slug already taken: {slug}"
 
 
 def _out(project: Project, role: Role | None) -> ProjectOut:
@@ -35,32 +30,12 @@ def _out(project: Project, role: Role | None) -> ProjectOut:
 
 
 @router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
-def create_project(
+def post_project(
     body: ProjectCreate,
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ):
-    slug = slugify(body.name)
-    if not slug:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name yields an empty slug")
-    if session.exec(select(Project).where(Project.slug == slug)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug))
-    project = Project(name=body.name.strip(), slug=slug)
-    session.add(project)
-    try:
-        session.flush()
-        session.add(ProjectMember(project_id=project.id, user_id=user.id, role=Role.OWNER))
-        session.commit()
-    except IntegrityError:
-        # Two concurrent project creations that derive the same slug can both
-        # pass the pre-check above (routes run sync in FastAPI's threadpool,
-        # so this is a real race, not a theoretical one). The unique
-        # constraint on Project.slug catches the loser here; turn that into
-        # the same 409 the pre-check gives the common case, not an unhandled
-        # 500.
-        session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
-    session.refresh(project)
+    project = create_project(session, body.name, user)
     return _out(project, Role.OWNER)
 
 

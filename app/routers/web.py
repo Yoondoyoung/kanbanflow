@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Form, Request, Response, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlmodel import Session, select
@@ -6,14 +6,17 @@ from sqlmodel import Session, select
 from app.auth import (
     DUMMY_HASH,
     SESSION_COOKIE,
+    current_user,
     hash_password,
     make_csrf_token,
     optional_user,
+    verify_csrf,
     verify_password,
 )
 from app.db import get_session
-from app.models import User
+from app.models import Project, ProjectMember, User
 from app.routers.api_auth import _set_session
+from app.services import create_project
 
 router = APIRouter(tags=["web"])
 
@@ -136,3 +139,55 @@ def logout_submit() -> Response:
     response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response
+
+
+def _dashboard_context(session: Session, user: User, error: str | None = None) -> dict:
+    rows = session.exec(
+        select(Project, ProjectMember)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .where(ProjectMember.user_id == user.id)
+        .order_by(Project.created_at.desc())
+    ).all()
+    context = {
+        "user": user,
+        "projects": [project for project, _ in rows],
+        "roles": {project.id: member.role.value for project, member in rows},
+    }
+    if error:
+        context["error"] = error
+    return context
+
+
+@router.get("/dashboard")
+def dashboard(
+    request: Request,
+    user: User | None = Depends(optional_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    return render(request, "dashboard.html", _dashboard_context(session, user))
+
+
+@router.post("/projects", dependencies=[Depends(verify_csrf)])
+def create_project_form(
+    request: Request,
+    name: str = Form(...),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    # create_project (app/services.py) is the same function the JSON route
+    # (POST /api/v1/projects) calls -- slug derivation, the name limits
+    # (Ruling R36, since this form bypasses ProjectCreate entirely), the slug
+    # collision check, and the creator-becomes-OWNER membership insert all
+    # live there exactly once.
+    try:
+        project = create_project(session, name, user)
+    except HTTPException as exc:
+        return render(
+            request,
+            "dashboard.html",
+            _dashboard_context(session, user, error=exc.detail),
+            status_code=exc.status_code,
+        )
+    return RedirectResponse(f"/projects/{project.slug}", status_code=status.HTTP_303_SEE_OTHER)

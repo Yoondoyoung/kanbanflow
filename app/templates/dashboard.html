@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Kanban Flow{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+  <section class="bg-white border rounded p-4">
+    <h1 class="font-semibold mb-3">Your projects</h1>
+    {% if projects %}
+      <ul class="divide-y">
+        {% for project in projects %}
+          <li class="py-2 flex items-center">
+            <a class="underline" href="/projects/{{ project.slug }}">{{ project.name }}</a>
+            <span class="ml-auto text-xs uppercase text-slate-500">{{ roles[project.id] }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-sm text-slate-500">No projects yet.</p>
+    {% endif %}
+  </section>
+  <section class="bg-white border rounded p-4">
+    <h2 class="font-semibold mb-3">New project</h2>
+    {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
+    <form method="post" action="/projects" class="flex gap-2">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <div class="flex-1">
+        <label for="project-name" class="sr-only">Project name</label>
+        <input
+          id="project-name"
+          class="w-full border rounded px-3 py-2"
+          name="name"
+          placeholder="Project name"
+          required
+          {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
+        >
+      </div>
+      <button class="bg-slate-900 text-white rounded px-4">Create</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
