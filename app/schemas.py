@@ -135,3 +135,8 @@ class TicketUpdate(BaseModel):
 class TicketPage(BaseModel):
     items: list[TicketOut]
     next_cursor: int | None = None
+
+
+class StatusUpdate(BaseModel):
+    status: TicketStatus
+    resolution_notes: str | None = None

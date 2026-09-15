@@ -12,6 +12,7 @@ from app.models import (
     TicketStatus,
     TicketType,
     User,
+    utcnow,
 )
 
 META_MAX_BYTES = 8 * 1024
@@ -121,6 +122,33 @@ def create_ticket(
         assignee_id=assignee_id,
         meta=meta,
     )
+    session.add(ticket)
+    session.commit()
+    session.refresh(ticket)
+    return ticket
+
+
+def set_status(
+    session: Session,
+    ticket: Ticket,
+    new_status: TicketStatus,
+    resolution_notes: str | None = None,
+) -> Ticket:
+    # Any status may move to any other; there is no transition graph to
+    # enforce. completed_at tracks DONE membership: entering DONE stamps it,
+    # leaving clears it. Re-affirming DONE (a double-clicked dropdown) must
+    # not restamp it to a new timestamp, so only stamp when not already DONE.
+    if new_status == TicketStatus.DONE:
+        if ticket.completed_at is None:
+            ticket.completed_at = utcnow()
+    else:
+        ticket.completed_at = None
+    ticket.status = new_status
+    # resolution_notes is only overwritten when the request supplies one; it
+    # is never cleared as a side effect of leaving DONE (ADR: losing an
+    # author's note to a mis-clicked dropdown is worse than a stale one).
+    if resolution_notes is not None:
+        ticket.resolution_notes = resolution_notes
     session.add(ticket)
     session.commit()
     session.refresh(ticket)

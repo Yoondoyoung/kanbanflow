@@ -13,8 +13,8 @@ from app.models import (
     TicketType,
     User,
 )
-from app.schemas import TicketCreate, TicketOut, TicketPage, TicketUpdate
-from app.services import create_ticket, validate_assignee, validate_meta
+from app.schemas import StatusUpdate, TicketCreate, TicketOut, TicketPage, TicketUpdate
+from app.services import create_ticket, set_status, validate_assignee, validate_meta
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
 
@@ -128,6 +128,17 @@ def patch_ticket(
     session.commit()
     session.refresh(ticket)
     return ticket
+
+
+@router.patch("/tickets/{ticket_id}/status", response_model=TicketOut)
+def patch_status(
+    ticket_id: str,
+    body: StatusUpdate,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Ticket:
+    ticket, _, _ = load_ticket_for_read(ticket_id, user, session)
+    return set_status(session, ticket, body.status, body.resolution_notes)
 
 
 @router.delete("/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
