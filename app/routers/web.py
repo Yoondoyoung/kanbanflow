@@ -14,11 +14,18 @@ from app.auth import (
     verify_password,
 )
 from app.db import get_session
-from app.models import Project, ProjectMember, User
+from app.models import Project, ProjectMember, Ticket, TicketStatus, User
 from app.routers.api_auth import _set_session
 from app.services import create_project
 
 router = APIRouter(tags=["web"])
+
+COLUMNS = (
+    TicketStatus.BACKLOG,
+    TicketStatus.SELECTED,
+    TicketStatus.IN_PROGRESS,
+    TicketStatus.DONE,
+)
 
 # Reused to give the register form the same EmailStr format check RegisterRequest gives the
 # JSON route, without hand-rolling a regex.
@@ -191,3 +198,42 @@ def create_project_form(
             status_code=exc.status_code,
         )
     return RedirectResponse(f"/projects/{project.slug}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/projects/{slug}")
+def board(
+    slug: str,
+    request: Request,
+    user: User | None = Depends(optional_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    project = session.exec(select(Project).where(Project.slug == slug)).first()
+    member = (
+        session.exec(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project.id, ProjectMember.user_id == user.id
+            )
+        ).first()
+        if project
+        else None
+    )
+    if project is None or member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    tickets = session.exec(
+        select(Ticket).where(Ticket.project_id == project.id).order_by(Ticket.ticket_number.desc())
+    ).all()
+    return render(
+        request,
+        "board.html",
+        {
+            "user": user,
+            "project": project,
+            "role": member.role.value,
+            "columns": COLUMNS,
+            "tickets_by_status": {
+                column.value: [t for t in tickets if t.status == column] for column in COLUMNS
+            },
+        },
+    )

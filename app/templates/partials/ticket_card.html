@@ -1,0 +1,29 @@
+<article id="ticket-{{ ticket.id }}" class="bg-white border rounded p-3 mb-2 text-sm">
+  <div class="flex items-baseline gap-2">
+    <span class="font-mono text-xs text-slate-500">#{{ ticket.ticket_number }}</span>
+    <span class="font-medium">{{ ticket.title }}</span>
+  </div>
+  <div class="mt-1 flex gap-2 text-xs text-slate-500">
+    <span>{{ ticket.type.value }}</span>
+    <span>{{ ticket.priority.value }}</span>
+    {% if ticket.story_points %}<span>{{ ticket.story_points }} pts</span>{% endif %}
+  </div>
+  {% if ticket.description %}
+    <div class="prose prose-sm mt-2">{{ ticket.description | markdown | safe }}</div>
+  {% endif %}
+  <form class="mt-2"
+        hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/status"
+        hx-target="#ticket-{{ ticket.id }}"
+        hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label for="status-{{ ticket.id }}" class="sr-only">Status for #{{ ticket.ticket_number }}</label>
+    <select id="status-{{ ticket.id }}" name="status" class="border rounded text-xs px-1 py-0.5"
+            onchange="this.form.requestSubmit()">
+      {% for column in columns %}
+        <option value="{{ column.value }}" {% if column == ticket.status %}selected{% endif %}>
+          {{ column.value }}
+        </option>
+      {% endfor %}
+    </select>
+  </form>
+</article>

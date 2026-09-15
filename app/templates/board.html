@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<div x-data="{ modal: false }">
+  <div class="flex items-center mb-4">
+    <h1 class="text-lg font-semibold">{{ project.name }}</h1>
+    <button class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm"
+            @click="modal = true">+ New Ticket</button>
+  </div>
+
+  <div class="grid grid-cols-4 gap-4">
+    {% for column in columns %}
+      <section class="bg-slate-100 rounded p-2" aria-labelledby="column-{{ column.value }}-heading">
+        <h2 id="column-{{ column.value }}-heading" class="text-xs font-semibold uppercase text-slate-600 mb-2">{{ column.value }}</h2>
+        <div id="column-{{ column.value }}">
+          {% for ticket in tickets_by_status[column.value] %}
+            {% include "partials/ticket_card.html" %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  </div>
+
+  {% include "partials/ticket_modal.html" %}
+</div>
+{% endblock %}
