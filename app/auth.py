@@ -108,13 +108,21 @@ def project_reader(
     return project, member
 
 
+def require_member(member: ProjectMember | None) -> ProjectMember:
+    """The one place a missing membership becomes 403 on a write path. Every
+    write-side dependency or helper -- whether it starts from a slug
+    (project_writer) or a ticket id (api_tickets.load_ticket_for_write) --
+    routes through this instead of re-deciding the status itself."""
+    if member is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a project member")
+    return member
+
+
 def project_writer(
     slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
 ) -> tuple[Project, ProjectMember]:
     project, member = load_project_and_membership(slug, user, session)
-    if member is None:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a project member")
-    return project, member
+    return project, require_member(member)
 
 
 def project_owner(

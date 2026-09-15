@@ -63,9 +63,12 @@ def test_non_member_cannot_transition(client, ticket_id, make_user, login_as):
     make_user(email="bob@example.com")
     client.post("/api/v1/auth/logout")
     login_as("bob@example.com")
+    # Spec: a non-member gets 403 on a write (not 404 -- that's the read rule).
+    # See Task 25 fix round 1: this route used to resolve membership through
+    # the read-flavoured lookup and leaked a 404 here instead.
     assert (
         client.patch(f"/api/v1/tickets/{ticket_id}/status", json={"status": "DONE"}).status_code
-        == 404
+        == 403
     )
 
 
