@@ -1,0 +1,219 @@
+"""V-8: every mutating endpoint enforces the permission matrix for every caller role.
+
+The matrix is data (the `endpoints` table below), not thirty hand-written functions --
+a missing row is a visible gap in the table, not a silently-absent test function.
+
+Two things the naive version of this test would get wrong (Ruling: Task 8 already
+made this mistake once):
+
+- An HTML route's CSRF dependency runs alongside its role check. Without a valid
+  CSRF token, a blocked write comes back 403 whether or not the role check ever
+  ran, which would hide a missing/broken role check behind a CSRF failure. Every
+  HTML call below carries a valid token for the *acting* user, so the status
+  observed is always the authorization decision, never a CSRF or routing miss.
+- A denied write can still mutate before it fails. `snapshot()` captures every
+  place these endpoints could write (project row, ticket set, ticket fields,
+  membership rows) and every denied cell asserts that snapshot is byte-for-byte
+  unchanged.
+"""
+
+import pytest
+from sqlmodel import Session, select
+
+from app.auth import make_csrf_token
+from app.models import Project, ProjectMember, Ticket
+
+OWNER_ONLY = "owner_only"
+ANY_MEMBER = "any_member"
+
+JSON = "json"
+FORM = "form"
+
+
+def endpoints(project, ticket_id, other_user_id):
+    """(kind, transport, method, url, kwargs) for every mutating route in the app.
+
+    kind says who the spec allows: ANY_MEMBER for ticket create/edit/transition,
+    OWNER_ONLY for project settings, membership, project delete, and ticket delete.
+    transport says whether the call needs a CSRF token (FORM) or not (JSON api).
+
+    Destructive rows (member removal, project delete) are ordered last -- deleting
+    the project first would turn every later row's assertion into a 404 for the
+    wrong reason.
+    """
+    slug = project.slug
+    return [
+        # -- JSON API: any project member may create/edit/transition tickets --
+        (ANY_MEMBER, JSON, "post", "/api/v1/tickets", {"json": {"slug": slug, "title": "T"}}),
+        (ANY_MEMBER, JSON, "patch", f"/api/v1/tickets/{ticket_id}", {"json": {"title": "Edited"}}),
+        (
+            ANY_MEMBER,
+            JSON,
+            "patch",
+            f"/api/v1/tickets/{ticket_id}/status",
+            {"json": {"status": "DONE"}},
+        ),
+        # -- HTML: same rules, reached through the htmx board instead of the API --
+        (ANY_MEMBER, FORM, "post", f"/projects/{slug}/tickets", {"data": {"title": "Form T"}}),
+        (
+            ANY_MEMBER,
+            FORM,
+            "post",
+            f"/projects/{slug}/tickets/1/status",
+            {"data": {"status": "DONE"}},
+        ),
+        # -- OWNER_ONLY: ticket delete, project settings, membership, project delete --
+        (OWNER_ONLY, JSON, "delete", f"/api/v1/tickets/{ticket_id}", {}),
+        (OWNER_ONLY, JSON, "patch", f"/api/v1/projects/{slug}", {"json": {"name": "Renamed"}}),
+        (
+            OWNER_ONLY,
+            JSON,
+            "post",
+            f"/api/v1/projects/{slug}/members",
+            {"json": {"email": "carol@example.com", "role": "MEMBER"}},
+        ),
+        (
+            OWNER_ONLY,
+            JSON,
+            "patch",
+            f"/api/v1/projects/{slug}/members/{other_user_id}",
+            {"json": {"role": "OWNER"}},
+        ),
+        (OWNER_ONLY, JSON, "delete", f"/api/v1/projects/{slug}/members/{other_user_id}", {}),
+        (OWNER_ONLY, JSON, "delete", f"/api/v1/projects/{slug}?confirm={slug}", {}),
+    ]
+
+
+@pytest.fixture
+def world(client, make_user, make_project, add_member, login_as):
+    owner = make_user(email="ada@example.com")
+    member = make_user(email="bob@example.com")
+    make_user(email="carol@example.com")
+    outsider = make_user(email="dan@example.com")
+    project = make_project(owner)
+    add_member(project, member)
+    login_as("ada@example.com")
+    ticket_id = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "Seed"}).json()[
+        "id"
+    ]
+    client.post("/api/v1/auth/logout")
+    return {
+        "project": project,
+        "ticket_id": ticket_id,
+        "owner": owner,
+        "member": member,
+        "outsider": outsider,
+    }
+
+
+def snapshot(engine, project_slug, ticket_id):
+    """Full state of everything a row in `endpoints()` could write to.
+
+    One composite snapshot instead of a per-endpoint diff function: a denied call
+    should touch nothing, so comparing this whole picture before/after is both
+    simpler and stricter than only checking the field the row's handler happens
+    to touch.
+    """
+    with Session(engine) as session:
+        project = session.exec(select(Project).where(Project.slug == project_slug)).first()
+        tickets = (
+            session.exec(select(Ticket).where(Ticket.project_id == project.id)).all()
+            if project
+            else []
+        )
+        members = (
+            session.exec(select(ProjectMember).where(ProjectMember.project_id == project.id)).all()
+            if project
+            else []
+        )
+        ticket = session.get(Ticket, ticket_id)
+        return {
+            "project_exists": project is not None,
+            "project_name": project.name if project else None,
+            "ticket_ids": sorted(t.id for t in tickets),
+            "ticket_title": ticket.title if ticket else None,
+            "ticket_status": ticket.status if ticket else None,
+            "members": sorted((m.user_id, m.role) for m in members),
+        }
+
+
+def call(client, transport, method, url, kwargs, actor):
+    """Issue the request. FORM (HTML) writes get a valid CSRF token for `actor` so
+    the observed status is the authorization decision, not a CSRF rejection."""
+    if transport == FORM:
+        data = dict(kwargs.get("data", {}))
+        data["_csrf"] = make_csrf_token(actor.id)
+        kwargs = {**kwargs, "data": data}
+    return getattr(client, method)(url, **kwargs)
+
+
+def test_owner_is_allowed_everywhere(client, world, engine, login_as):
+    login_as("ada@example.com")
+    for _, transport, method, url, kwargs in endpoints(
+        world["project"], world["ticket_id"], world["member"].id
+    ):
+        response = call(client, transport, method, url, kwargs, world["owner"])
+        assert response.status_code < 400, f"{method} {url} -> {response.status_code}"
+
+
+def test_member_is_blocked_only_on_owner_actions(client, world, engine, login_as):
+    login_as("bob@example.com")
+    for kind, transport, method, url, kwargs in endpoints(
+        world["project"], world["ticket_id"], world["owner"].id
+    ):
+        if kind == OWNER_ONLY:
+            before = snapshot(engine, world["project"].slug, world["ticket_id"])
+            response = call(client, transport, method, url, kwargs, world["member"])
+            assert response.status_code == 403, f"{method} {url} -> {response.status_code}"
+            after = snapshot(engine, world["project"].slug, world["ticket_id"])
+            assert after == before, f"side effect on denied {method} {url}"
+        else:
+            response = call(client, transport, method, url, kwargs, world["member"])
+            assert response.status_code < 400, f"{method} {url} -> {response.status_code}"
+
+
+def test_outsider_writes_are_403(client, world, engine, login_as):
+    login_as("dan@example.com")
+    for _, transport, method, url, kwargs in endpoints(
+        world["project"], world["ticket_id"], world["member"].id
+    ):
+        before = snapshot(engine, world["project"].slug, world["ticket_id"])
+        response = call(client, transport, method, url, kwargs, world["outsider"])
+        # Ticket routes resolve membership via the ticket (load_ticket_for_read),
+        # which 404s a non-member exactly like a missing ticket would; project
+        # routes resolve it via project_writer/project_owner, which 403s a
+        # non-member. Both are "denied", and either is a valid form of denied here.
+        assert response.status_code in (403, 404), f"{method} {url} -> {response.status_code}"
+        after = snapshot(engine, world["project"].slug, world["ticket_id"])
+        assert after == before, f"side effect on denied {method} {url}"
+
+
+def test_outsider_reads_are_404(client, world, login_as):
+    login_as("dan@example.com")
+    slug = world["project"].slug
+    for url in [
+        f"/api/v1/projects/{slug}",
+        f"/api/v1/projects/{slug}/members",
+        f"/api/v1/projects/{slug}/tickets",
+        f"/api/v1/tickets/{world['ticket_id']}",
+        f"/projects/{slug}",
+    ]:
+        assert client.get(url).status_code == 404, url
+
+
+def test_anonymous_api_calls_are_401(client, world):
+    slug = world["project"].slug
+    assert client.get(f"/api/v1/projects/{slug}").status_code == 401
+    assert client.post("/api/v1/tickets", json={"slug": slug, "title": "T"}).status_code == 401
+
+
+def test_anonymous_html_writes_are_401(client, world):
+    """Ruling: cover the HTML mutating routes too, not only /api/v1/*. Both reach
+    current_user the same way the JSON routes do, so an anonymous caller should
+    get the same 401 (not a redirect) rather than a special HTML-only path."""
+    slug = world["project"].slug
+    assert client.post(f"/projects/{slug}/tickets", data={"title": "T"}).status_code == 401
+    assert (
+        client.post(f"/projects/{slug}/tickets/1/status", data={"status": "DONE"}).status_code
+        == 401
+    )
