@@ -40,6 +40,10 @@ def endpoints(project, ticket_id, other_user_id):
     Destructive rows (member removal, project delete) are ordered last -- deleting
     the project first would turn every later row's assertion into a 404 for the
     wrong reason.
+
+    Project creation (POST /api/v1/projects, POST /projects) is deliberately not
+    a row here: any authenticated user may create a project, so there is no
+    membership dimension for this matrix to check.
     """
     slug = project.slug
     return [
@@ -179,11 +183,12 @@ def test_outsider_writes_are_403(client, world, engine, login_as):
     ):
         before = snapshot(engine, world["project"].slug, world["ticket_id"])
         response = call(client, transport, method, url, kwargs, world["outsider"])
-        # Ticket routes resolve membership via the ticket (load_ticket_for_read),
-        # which 404s a non-member exactly like a missing ticket would; project
-        # routes resolve it via project_writer/project_owner, which 403s a
-        # non-member. Both are "denied", and either is a valid form of denied here.
-        assert response.status_code in (403, 404), f"{method} {url} -> {response.status_code}"
+        # Spec (cs482_slice1_design.md:140): a non-member gets 403 on every write,
+        # full stop -- so project/ticket existence never leaks through a 404 vs.
+        # 403 distinction. A single exact expected value here (not a permissive
+        # tuple) is what makes this cell able to fail when a route's dependency
+        # gets this wrong.
+        assert response.status_code == 403, f"{method} {url} -> {response.status_code}"
         after = snapshot(engine, world["project"].slug, world["ticket_id"])
         assert after == before, f"side effect on denied {method} {url}"
 
