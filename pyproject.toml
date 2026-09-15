@@ -1,0 +1,49 @@
+[project]
+name = "kanbanflow"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Yoondoyoung", email = "qkzld13@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.20.0",
+    "anyio<4.15",  # pin: anyio>=4.15 deprecates the BlockingPortal alias that starlette's TestClient still imports, which fails collection under filterwarnings=error::DeprecationWarning
+    "bcrypt>=5.0.0",
+    "bleach>=6.4.0",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "markdown-it-py>=4.2.0",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "sqlmodel>=0.0.42",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["*.md"]  # ruff 0.16 formats fenced code in Markdown by default; this repo's design docs are off-limits
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]
