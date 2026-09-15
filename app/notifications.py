@@ -1,6 +1,15 @@
+import logging
+import time
 from collections.abc import Callable
 
+import httpx
+
 from app.models import Project, Ticket, WebhookType
+
+logger = logging.getLogger("app.notifications")
+
+TIMEOUT_SECONDS = 5.0
+BACKOFF_SECONDS = (1, 2, 4)
 
 EVENT_TICKET_CREATED = "TICKET_CREATED"
 EVENT_TICKET_DONE = "TICKET_DONE"
@@ -89,3 +98,42 @@ FORMATTERS: dict[WebhookType, Callable[[dict], dict]] = {
     WebhookType.DISCORD: format_discord,
     WebhookType.TEAMS: format_teams,
 }
+
+
+def dispatch(
+    webhook_type: WebhookType,
+    webhook_url: str,
+    payload: dict,
+    client: httpx.Client | None = None,
+) -> None:
+    """Best-effort chat webhook delivery. Never raises.
+
+    Runs after the response has been sent (inside a background task per
+    Task 17), so there is no caller left to handle an exception. Retries
+    up to 3 times with 1s/2s/4s backoff, then logs one WARNING and gives up.
+    """
+    formatter = FORMATTERS.get(webhook_type)
+    if formatter is None or not webhook_url:
+        return
+    body = formatter(payload)
+    owned = client is None
+    client = client or httpx.Client(timeout=TIMEOUT_SECONDS)
+    try:
+        for attempt in range(len(BACKOFF_SECONDS) + 1):
+            try:
+                response = client.post(webhook_url, json=body, timeout=TIMEOUT_SECONDS)
+                if response.status_code < 400:
+                    return
+            except httpx.HTTPError:
+                pass
+            if attempt < len(BACKOFF_SECONDS):
+                time.sleep(BACKOFF_SECONDS[attempt])
+        logger.warning(
+            "chat webhook delivery failed after %d attempts: project_id=%s ticket_number=%s",
+            len(BACKOFF_SECONDS) + 1,
+            payload["project_id"],
+            payload["ticket_number"],
+        )
+    finally:
+        if owned:
+            client.close()
