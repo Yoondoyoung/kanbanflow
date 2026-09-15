@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+import app.notifications as notifications
 from app.models import WebhookType
 from app.notifications import BACKOFF_SECONDS, dispatch
 
@@ -34,6 +35,7 @@ def test_successful_delivery_posts_once(no_sleep):
 
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         dispatch(WebhookType.SLACK, "https://example.com/hook", PAYLOAD, client=client)
+        assert not client.is_closed
 
     assert len(calls) == 1
     assert no_sleep == []
@@ -49,6 +51,7 @@ def test_failure_retries_three_times_then_warns(no_sleep, caplog):
     with caplog.at_level("WARNING", logger="app.notifications"):
         with httpx.Client(transport=httpx.MockTransport(handler)) as client:
             dispatch(WebhookType.SLACK, "https://example.com/hook", PAYLOAD, client=client)
+            assert not client.is_closed
 
     assert attempts["n"] == 4
     assert no_sleep == list(BACKOFF_SECONDS)
@@ -129,7 +132,42 @@ def test_client_error_response_is_retried_then_warns(no_sleep, caplog):
     with caplog.at_level("WARNING", logger="app.notifications"):
         with httpx.Client(transport=httpx.MockTransport(handler)) as client:
             dispatch(WebhookType.SLACK, "https://example.com/hook", PAYLOAD, client=client)
+            assert not client.is_closed
 
     assert attempts["n"] == 4
     assert no_sleep == list(BACKOFF_SECONDS)
     assert len(caplog.records) == 1
+
+
+def test_malformed_payload_does_not_raise(no_sleep, caplog):
+    # PAYLOAD without "project_id": the formatter doesn't need it, so delivery
+    # proceeds normally, but the final failure-warning line used to index it
+    # with payload["project_id"] (no .get) and would raise a bare KeyError
+    # with nothing to catch it. That must not escape dispatch.
+    malformed = {k: v for k, v in PAYLOAD.items() if k != "project_id"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("black hole", request=request)
+
+    with caplog.at_level("WARNING", logger="app.notifications"):
+        with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+            dispatch(WebhookType.SLACK, "https://example.com/hook", malformed, client=client)
+            assert not client.is_closed
+
+    assert no_sleep == list(BACKOFF_SECONDS)
+    assert len(caplog.records) == 1
+    assert "42" in caplog.text
+
+
+def test_formatter_exception_does_not_raise(no_sleep, caplog, monkeypatch):
+    def raising_formatter(payload: dict) -> dict:
+        raise RuntimeError("formatter bug")
+
+    monkeypatch.setitem(notifications.FORMATTERS, WebhookType.SLACK, raising_formatter)
+
+    with caplog.at_level("WARNING", logger="app.notifications"):
+        dispatch(WebhookType.SLACK, "https://example.com/hook", PAYLOAD)
+
+    assert no_sleep == []
+    assert len(caplog.records) == 1
+    assert "p1" in caplog.text and "42" in caplog.text

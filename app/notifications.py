@@ -115,25 +115,36 @@ def dispatch(
     formatter = FORMATTERS.get(webhook_type)
     if formatter is None or not webhook_url:
         return
-    body = formatter(payload)
     owned = client is None
     client = client or httpx.Client(timeout=TIMEOUT_SECONDS)
     try:
-        for attempt in range(len(BACKOFF_SECONDS) + 1):
-            try:
-                response = client.post(webhook_url, json=body, timeout=TIMEOUT_SECONDS)
-                if response.status_code < 400:
-                    return
-            except httpx.HTTPError:
-                pass
-            if attempt < len(BACKOFF_SECONDS):
-                time.sleep(BACKOFF_SECONDS[attempt])
-        logger.warning(
-            "chat webhook delivery failed after %d attempts: project_id=%s ticket_number=%s",
-            len(BACKOFF_SECONDS) + 1,
-            payload["project_id"],
-            payload["ticket_number"],
-        )
+        try:
+            body = formatter(payload)
+            for attempt in range(len(BACKOFF_SECONDS) + 1):
+                try:
+                    response = client.post(webhook_url, json=body, timeout=TIMEOUT_SECONDS)
+                    if response.status_code < 400:
+                        return
+                except httpx.HTTPError:
+                    pass
+                if attempt < len(BACKOFF_SECONDS):
+                    time.sleep(BACKOFF_SECONDS[attempt])
+            logger.warning(
+                "chat webhook delivery failed after %d attempts: project_id=%s ticket_number=%s",
+                len(BACKOFF_SECONDS) + 1,
+                payload.get("project_id"),
+                payload.get("ticket_number"),
+            )
+        except Exception:
+            # Anything beyond httpx.HTTPError (a malformed payload, a broken
+            # formatter, a non-JSON-serializable body, ...) must not escape:
+            # dispatch runs in a background task with no caller to catch it.
+            logger.warning(
+                "chat webhook delivery raised unexpectedly: project_id=%s ticket_number=%s",
+                payload.get("project_id"),
+                payload.get("ticket_number"),
+                exc_info=True,
+            )
     finally:
         if owned:
             client.close()
