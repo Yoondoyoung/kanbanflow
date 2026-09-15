@@ -71,6 +71,16 @@ def test_limit_above_200_is_rejected(client, seeded):
     )
 
 
+def test_board_query_rejects_invalid_status(client, seeded):
+    _, project = seeded
+    assert (
+        client.get(
+            f"/api/v1/projects/{project.slug}/tickets", params={"status": "NOT_A_REAL_STATUS"}
+        ).status_code
+        == 422
+    )
+
+
 def test_patch_updates_fields_and_rejects_bad_meta(client, seeded):
     _, project = seeded
     ticket_id = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]["id"]

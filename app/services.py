@@ -41,6 +41,21 @@ def validate_meta(meta) -> None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "meta exceeds 8 KB")
 
 
+def validate_assignee(session: Session, project: Project, assignee_id: str | None) -> None:
+    if assignee_id is None:
+        return
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == assignee_id,
+        )
+    ).first()
+    if member is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "assignee must be a project member"
+        )
+
+
 def allocate_ticket_number(session: Session, project_id: str) -> int:
     # Atomic per-project counter: UPDATE ... RETURNING runs inside the
     # caller's open transaction, alongside the ticket insert that follows.
@@ -92,17 +107,7 @@ def create_ticket(
     if meta is None:
         meta = {}
     validate_meta(meta)
-    if assignee_id is not None:
-        member = session.exec(
-            select(ProjectMember).where(
-                ProjectMember.project_id == project.id,
-                ProjectMember.user_id == assignee_id,
-            )
-        ).first()
-        if member is None:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "assignee must be a project member"
-            )
+    validate_assignee(session, project, assignee_id)
     ticket = Ticket(
         ticket_number=allocate_ticket_number(session, project.id),
         project_id=project.id,

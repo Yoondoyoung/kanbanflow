@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import Priority, Role, TicketStatus, TicketType, WebhookType
+from app.services import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
 
@@ -91,8 +92,8 @@ class MemberOut(BaseModel):
 
 class TicketCreate(BaseModel):
     slug: str
-    title: str = Field(min_length=1, max_length=255)
-    description: str = Field(default="", max_length=20000)
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: str = Field(default="", max_length=DESCRIPTION_MAX_LENGTH)
     type: TicketType = TicketType.TASK
     priority: Priority = Priority.MEDIUM
     story_points: STORY_POINTS | None = None
@@ -121,8 +122,8 @@ class TicketOut(BaseModel):
 
 
 class TicketUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=255)
-    description: str | None = Field(default=None, max_length=20000)
+    title: str | None = Field(default=None, min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: str | None = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
     type: TicketType | None = None
     priority: Priority | None = None
     story_points: STORY_POINTS | None = None

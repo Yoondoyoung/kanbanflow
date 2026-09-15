@@ -3,9 +3,18 @@ from sqlmodel import Session, select
 
 from app.auth import current_user, load_project_and_membership, project_reader
 from app.db import get_session
-from app.models import Priority, Project, ProjectMember, Role, Ticket, TicketType, User
+from app.models import (
+    Priority,
+    Project,
+    ProjectMember,
+    Role,
+    Ticket,
+    TicketStatus,
+    TicketType,
+    User,
+)
 from app.schemas import TicketCreate, TicketOut, TicketPage, TicketUpdate
-from app.services import create_ticket, validate_meta
+from app.services import create_ticket, validate_assignee, validate_meta
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
 
@@ -60,7 +69,7 @@ def post_ticket(
 
 @router.get("/projects/{slug}/tickets", response_model=TicketPage)
 def list_tickets(
-    status_filter: str | None = _STATUS_QUERY,
+    status_filter: TicketStatus | None = _STATUS_QUERY,
     assignee_id: str | None = None,
     type_filter: TicketType | None = _TYPE_QUERY,
     priority: Priority | None = None,
@@ -107,17 +116,8 @@ def patch_ticket(
     data = body.model_dump(exclude_unset=True)
     if "meta" in data and data["meta"] is not None:
         validate_meta(data["meta"])
-    if data.get("assignee_id") is not None:
-        member = session.exec(
-            select(ProjectMember).where(
-                ProjectMember.project_id == project.id,
-                ProjectMember.user_id == data["assignee_id"],
-            )
-        ).first()
-        if member is None:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "assignee must be a project member"
-            )
+    if "assignee_id" in data:
+        validate_assignee(session, project, data["assignee_id"])
     if "title" in data and data["title"] is not None:
         data["title"] = data["title"].strip()
         if not data["title"]:
