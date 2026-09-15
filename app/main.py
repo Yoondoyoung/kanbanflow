@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 
-from app.routers import api_auth, api_projects
+from app.routers import api_auth, api_projects, api_tickets
 
 app = FastAPI(title="Kanban Flow")
 app.include_router(api_auth.router)
 app.include_router(api_projects.router)
+app.include_router(api_tickets.router)
 
 
 @app.get("/health")

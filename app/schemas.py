@@ -1,8 +1,11 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import Role, WebhookType
+from app.models import Priority, Role, TicketStatus, TicketType, WebhookType
+
+STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
 
 
 def _check_password_byte_length(password: str) -> str:
@@ -84,3 +87,32 @@ class MemberOut(BaseModel):
     email: str
     role: Role
     joined_at: datetime
+
+
+class TicketCreate(BaseModel):
+    slug: str
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=20000)
+    type: TicketType = TicketType.TASK
+    priority: Priority = Priority.MEDIUM
+    story_points: STORY_POINTS | None = None
+    assignee_id: str | None = None
+    meta: dict = Field(default_factory=dict)
+
+
+class TicketOut(BaseModel):
+    id: str
+    ticket_number: int
+    project_id: str
+    title: str
+    description: str
+    type: TicketType
+    status: TicketStatus
+    priority: Priority
+    story_points: int | None
+    creator_id: str
+    assignee_id: str | None
+    resolution_notes: str | None
+    completed_at: datetime | None
+    meta: dict
+    created_at: datetime
