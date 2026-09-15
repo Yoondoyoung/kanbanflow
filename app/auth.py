@@ -1,6 +1,6 @@
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
-from itsdangerous import BadData, URLSafeTimedSerializer
+from itsdangerous import BadData, BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlmodel import Session
 
 from app.config import settings
@@ -57,3 +57,29 @@ def current_user(user: User | None = Depends(optional_user)) -> User:
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
     return user
+
+
+CSRF_FIELD = "_csrf"
+CSRF_MAX_AGE = 60 * 60 * 24
+_csrf_serializer = URLSafeTimedSerializer(settings.session_secret, salt="kf-csrf")
+
+
+def make_csrf_token(user_id: str) -> str:
+    return _csrf_serializer.dumps(user_id)
+
+
+def read_csrf_token(raw: str) -> str | None:
+    try:
+        return _csrf_serializer.loads(raw, max_age=CSRF_MAX_AGE)
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+def assert_csrf_matches(raw: str | None, user_id: str) -> None:
+    if not raw or read_csrf_token(raw) != user_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid CSRF token")
+
+
+async def verify_csrf(request: Request, user: User = Depends(current_user)) -> None:
+    form = await request.form()
+    assert_csrf_matches(form.get(CSRF_FIELD), user.id)
