@@ -109,3 +109,24 @@ def test_whitespace_only_project_name_is_rejected_and_not_persisted(client, make
     )
     assert response.status_code == 422
     assert client.get("/api/v1/projects").json() == []
+
+
+def test_slug_collision_from_the_form_is_a_readable_error_not_a_crash(client, make_user, login_as):
+    owner = make_user(email="ada@example.com")
+    login_as("ada@example.com")
+    client.post(
+        "/projects",
+        data={"name": "Payment Gateway", "_csrf": csrf_for(owner)},
+        follow_redirects=False,
+    )
+    response = client.post(
+        "/projects",
+        data={"name": "payment gateway", "_csrf": csrf_for(owner)},
+        follow_redirects=False,
+    )
+    assert response.status_code == 409
+    assert "payment-gateway" in response.text
+    # Still on the dashboard, not a bare error body -- the existing project
+    # list and the create form both re-render alongside the message.
+    assert "<form" in response.text
+    assert len(client.get("/api/v1/projects").json()) == 1
