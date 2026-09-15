@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.models import WebhookType
+
 
 def _check_password_byte_length(password: str) -> str:
     # Pydantic's max_length counts characters, not bytes. bcrypt hashes UTF-8
@@ -33,3 +35,17 @@ class UserOut(BaseModel):
     name: str
     email: str
     created_at: datetime
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class ProjectOut(BaseModel):
+    id: str
+    name: str
+    slug: str
+    webhook_type: WebhookType
+    webhook_url: str | None
+    created_at: datetime
+    role: str | None = None
