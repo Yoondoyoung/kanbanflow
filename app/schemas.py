@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models import Priority, Role, TicketStatus, TicketType, WebhookType
 
@@ -101,6 +101,8 @@ class TicketCreate(BaseModel):
 
 
 class TicketOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     ticket_number: int
     project_id: str
@@ -116,3 +118,19 @@ class TicketOut(BaseModel):
     completed_at: datetime | None
     meta: dict
     created_at: datetime
+
+
+class TicketUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=20000)
+    type: TicketType | None = None
+    priority: Priority | None = None
+    story_points: STORY_POINTS | None = None
+    assignee_id: str | None = None
+    resolution_notes: str | None = None
+    meta: dict | None = None
+
+
+class TicketPage(BaseModel):
+    items: list[TicketOut]
+    next_cursor: int | None = None
