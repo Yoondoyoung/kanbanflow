@@ -8,6 +8,7 @@ from app.auth import (
     SESSION_COOKIE,
     current_user,
     hash_password,
+    load_project_and_membership,
     make_csrf_token,
     optional_user,
     verify_csrf,
@@ -209,17 +210,10 @@ def board(
 ) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-    project = session.exec(select(Project).where(Project.slug == slug)).first()
-    member = (
-        session.exec(
-            select(ProjectMember).where(
-                ProjectMember.project_id == project.id, ProjectMember.user_id == user.id
-            )
-        ).first()
-        if project
-        else None
-    )
-    if project is None or member is None:
+    # load_project_and_membership already 404s when the project itself is missing; a non-member
+    # must get the same 404 rather than learn the project exists, so check member too.
+    project, member = load_project_and_membership(slug, user, session)
+    if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
     tickets = session.exec(
         select(Ticket).where(Ticket.project_id == project.id).order_by(Ticket.ticket_number.desc())
