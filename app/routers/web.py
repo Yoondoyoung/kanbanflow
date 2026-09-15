@@ -1,13 +1,25 @@
 from fastapi import APIRouter, Depends, Form, Request, Response, status
 from fastapi.responses import RedirectResponse
+from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlmodel import Session, select
 
-from app.auth import SESSION_COOKIE, hash_password, make_csrf_token, optional_user, verify_password
+from app.auth import (
+    DUMMY_HASH,
+    SESSION_COOKIE,
+    hash_password,
+    make_csrf_token,
+    optional_user,
+    verify_password,
+)
 from app.db import get_session
 from app.models import User
 from app.routers.api_auth import _set_session
 
 router = APIRouter(tags=["web"])
+
+# Reused to give the register form the same EmailStr format check RegisterRequest gives the
+# JSON route, without hand-rolling a regex.
+_email_adapter = TypeAdapter(EmailStr)
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> Response:
@@ -43,7 +55,13 @@ def login_submit(
     session: Session = Depends(get_session),
 ) -> Response:
     user = session.exec(select(User).where(User.email == email.lower())).first()
-    if user is None or not verify_password(password, user.password_hash):
+    # Mirror api_auth.login exactly: run verify_password on a real hash even for an unknown
+    # email, so bcrypt's cost lands on both branches. Short-circuiting on `user is None` (as
+    # the earlier version of this route did) kept the message identical but not the timing --
+    # a non-existent account would return in microseconds while a wrong password cost a full
+    # bcrypt round, exactly the gap DUMMY_HASH exists to close.
+    hashed = user.password_hash if user else DUMMY_HASH
+    if not verify_password(password, hashed) or user is None:
         return render(
             request,
             "login.html",
@@ -70,6 +88,15 @@ def register_submit(
     password: str = Form(...),
     session: Session = Depends(get_session),
 ) -> Response:
+    try:
+        email = _email_adapter.validate_python(email)
+    except ValidationError:
+        return render(
+            request,
+            "register.html",
+            {"user": None, "error": "Enter a valid email address"},
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
     if len(password) < 8:
         return render(
             request,

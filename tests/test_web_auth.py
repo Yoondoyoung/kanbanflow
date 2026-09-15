@@ -39,6 +39,43 @@ def test_bad_login_rerenders_with_an_error(client, make_user):
     assert "invalid" in response.text.lower()
 
 
+def test_unknown_email_login_still_runs_verify_password(client, monkeypatch):
+    # Constant-time requirement: api_auth.login runs verify_password against a real hash
+    # (DUMMY_HASH) even when the email doesn't exist, so bcrypt's cost lands on both branches
+    # and a non-existent account isn't distinguishable from a wrong password by timing. This
+    # asserts the behaviour (verify_password is actually invoked, against DUMMY_HASH) rather
+    # than the wall-clock, which HTTP-level timing is too noisy to assert reliably.
+    import app.routers.web as web
+
+    calls = []
+    original_verify_password = web.verify_password
+
+    def spy(password, hashed):
+        calls.append(hashed)
+        return original_verify_password(password, hashed)
+
+    monkeypatch.setattr(web, "verify_password", spy)
+
+    response = client.post(
+        "/login",
+        data={"email": "nobody@example.com", "password": "whatever"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 401
+    assert calls == [web.DUMMY_HASH]
+
+
+def test_register_rejects_a_malformed_email(client):
+    response = client.post(
+        "/register",
+        data={"name": "Ada", "email": "not-an-email", "password": "hunter22"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "valid email" in response.text.lower()
+
+
 def test_overlong_password_rerenders_with_an_error_instead_of_crashing(client):
     # bcrypt (via hash_password) raises ValueError past 72 UTF-8 bytes. The JSON route is
     # protected by RegisterRequest's validator; this form-based route has no schema in front
