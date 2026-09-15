@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.auth import current_user, load_project_and_membership, project_reader
@@ -49,6 +49,7 @@ def load_ticket_for_read(
 @router.post("/tickets", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
 def post_ticket(
     body: TicketCreate,
+    tasks: BackgroundTasks,
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Ticket:
@@ -64,6 +65,7 @@ def post_ticket(
         story_points=body.story_points,
         assignee_id=body.assignee_id,
         meta=body.meta,
+        tasks=tasks,
     )
 
 
@@ -134,11 +136,14 @@ def patch_ticket(
 def patch_status(
     ticket_id: str,
     body: StatusUpdate,
+    tasks: BackgroundTasks,
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Ticket:
-    ticket, _, _ = load_ticket_for_read(ticket_id, user, session)
-    return set_status(session, ticket, body.status, body.resolution_notes)
+    ticket, project, _ = load_ticket_for_read(ticket_id, user, session)
+    return set_status(
+        session, ticket, body.status, body.resolution_notes, project=project, tasks=tasks
+    )
 
 
 @router.delete("/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)

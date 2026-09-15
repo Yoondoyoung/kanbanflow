@@ -1,6 +1,6 @@
 import json
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import text
 from sqlmodel import Session, select
 
@@ -14,6 +14,7 @@ from app.models import (
     User,
     utcnow,
 )
+from app.notifications import EVENT_TICKET_CREATED, EVENT_TICKET_DONE, schedule
 
 META_MAX_BYTES = 8 * 1024
 META_MAX_DEPTH = 3
@@ -86,6 +87,7 @@ def create_ticket(
     story_points: int | None = None,
     assignee_id: str | None = None,
     meta: dict | None = None,
+    tasks: BackgroundTasks | None = None,
 ) -> Ticket:
     clean_title = title.strip()
     if not clean_title:
@@ -125,6 +127,7 @@ def create_ticket(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
+    schedule(tasks, project, EVENT_TICKET_CREATED, ticket)
     return ticket
 
 
@@ -133,6 +136,9 @@ def set_status(
     ticket: Ticket,
     new_status: TicketStatus,
     resolution_notes: str | None = None,
+    *,
+    project: Project | None = None,
+    tasks: BackgroundTasks | None = None,
 ) -> Ticket:
     # Any status may move to any other; there is no transition graph to
     # enforce. completed_at tracks DONE membership: entering DONE stamps it,
@@ -152,4 +158,6 @@ def set_status(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
+    if new_status == TicketStatus.DONE and project is not None:
+        schedule(tasks, project, EVENT_TICKET_DONE, ticket)
     return ticket

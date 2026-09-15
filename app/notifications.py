@@ -3,6 +3,7 @@ import time
 from collections.abc import Callable
 
 import httpx
+from fastapi import BackgroundTasks
 
 from app.models import Project, Ticket, WebhookType
 
@@ -148,3 +149,17 @@ def dispatch(
     finally:
         if owned:
             client.close()
+
+
+def schedule(tasks: BackgroundTasks | None, project: Project, event: str, ticket: Ticket) -> None:
+    """Queue a chat notification for delivery after the response is sent.
+
+    Builds the payload immediately, while the session is still alive, and
+    enqueues only the resulting plain dict -- nothing ORM-shaped crosses
+    into the background closure. `tasks=None` (no FastAPI request in scope,
+    e.g. a direct service-layer call from a script or test) is a no-op.
+    """
+    if tasks is None or project.webhook_type == WebhookType.NONE or not project.webhook_url:
+        return
+    payload = build_payload(project, event, ticket)
+    tasks.add_task(dispatch, project.webhook_type, project.webhook_url, payload)
