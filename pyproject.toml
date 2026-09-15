@@ -1,7 +1,7 @@
 [project]
 name = "kanbanflow"
 version = "0.1.0"
-description = "Add your description here"
+description = "Kanban Flow: a FastAPI + SQLite Kanban tracker (CS 482)"
 readme = "README.md"
 authors = [
     { name = "Yoondoyoung", email = "qkzld13@gmail.com" }
@@ -9,7 +9,6 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.20.0",
-    "anyio<4.15",  # pin: anyio>=4.15 deprecates the BlockingPortal alias that starlette's TestClient still imports, which fails collection under filterwarnings=error::DeprecationWarning
     "bcrypt>=5.0.0",
     "bleach>=6.4.0",
     "fastapi>=0.141.1",
@@ -46,4 +45,13 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # Third-party deprecations we don't control (pytest applies later filters first,
+    # so these narrow, message-matched ignores carve exceptions out of the `error`
+    # rule above without weakening it for our own code):
+    # starlette==1.6.0's TestClient still touches the now-deprecated anyio.abc.BlockingPortal alias.
+    "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated:DeprecationWarning",
+    # starlette's TestClient warns that httpx is deprecated in favor of httpx2; the plan's stack keeps httpx.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
