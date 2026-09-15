@@ -6,3 +6,7 @@ __pycache__/
 *.db-wal
 *.db-shm
 .DS_Store
+
+# SDD workspace (git-ignored scratch)
+.superpowers/
+.serena/
