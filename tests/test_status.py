@@ -37,6 +37,21 @@ def test_resolution_notes_survive_leaving_done(client, ticket_id):
     assert back["resolution_notes"] == "fixed in abc1234"
 
 
+def test_completed_at_restamps_on_reentry_after_leaving_done(client, ticket_id):
+    # R29: the two tests above cover "stamp on first DONE" and "clear on
+    # leaving DONE" separately. Neither would catch a guard that stops
+    # restamping on re-entry (e.g. an edit that stamps only when
+    # ticket.completed_at is falsy-but-persisted, or that forgets to clear
+    # it going the other way). Round-trip through DONE twice and require a
+    # distinct, non-null timestamp both times.
+    first = client.patch(f"/api/v1/tickets/{ticket_id}/status", json={"status": "DONE"}).json()
+    assert first["completed_at"] is not None
+    client.patch(f"/api/v1/tickets/{ticket_id}/status", json={"status": "IN_PROGRESS"})
+    second = client.patch(f"/api/v1/tickets/{ticket_id}/status", json={"status": "DONE"}).json()
+    assert second["completed_at"] is not None
+    assert second["completed_at"] != first["completed_at"]
+
+
 def test_unknown_status_is_422(client, ticket_id):
     assert (
         client.patch(f"/api/v1/tickets/{ticket_id}/status", json={"status": "SHIPPED"}).status_code
