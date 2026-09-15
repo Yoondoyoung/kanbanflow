@@ -64,6 +64,16 @@ def make_project(engine):
 
 
 @pytest.fixture
+def add_member(engine):
+    def _add(project, user, role: Role = Role.MEMBER):
+        with Session(engine) as session:
+            session.add(ProjectMember(project_id=project.id, user_id=user.id, role=role))
+            session.commit()
+
+    return _add
+
+
+@pytest.fixture
 def login_as(client):
     def _login(email: str, password: str = "hunter22"):
         response = client.post("/api/v1/auth/login", json={"email": email, "password": password})

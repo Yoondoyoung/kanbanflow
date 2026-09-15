@@ -1,11 +1,11 @@
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import BadData, URLSafeTimedSerializer
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.config import settings
 from app.db import get_session
-from app.models import User
+from app.models import Project, ProjectMember, Role, User
 
 SESSION_COOKIE = "kf_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 14
@@ -83,3 +83,42 @@ def assert_csrf_matches(raw: str | None, user_id: str) -> None:
 async def verify_csrf(request: Request, user: User = Depends(current_user)) -> None:
     form = await request.form()
     assert_csrf_matches(form.get(CSRF_FIELD), user.id)
+
+
+def _load(slug: str, user: User, session: Session) -> tuple[Project, ProjectMember | None]:
+    project = session.exec(select(Project).where(Project.slug == slug)).first()
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == user.id
+        )
+    ).first()
+    return project, member
+
+
+def project_reader(
+    slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
+) -> tuple[Project, ProjectMember]:
+    project, member = _load(slug, user, session)
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    return project, member
+
+
+def project_writer(
+    slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
+) -> tuple[Project, ProjectMember]:
+    project, member = _load(slug, user, session)
+    if member is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not a project member")
+    return project, member
+
+
+def project_owner(
+    slug: str, user: User = Depends(current_user), session: Session = Depends(get_session)
+) -> tuple[Project, ProjectMember]:
+    project, member = project_writer(slug, user, session)
+    if member.role != Role.OWNER:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner role required")
+    return project, member
