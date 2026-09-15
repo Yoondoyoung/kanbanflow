@@ -39,6 +39,19 @@ def test_bad_login_rerenders_with_an_error(client, make_user):
     assert "invalid" in response.text.lower()
 
 
+def test_overlong_password_rerenders_with_an_error_instead_of_crashing(client):
+    # bcrypt (via hash_password) raises ValueError past 72 UTF-8 bytes. The JSON route is
+    # protected by RegisterRequest's validator; this form-based route has no schema in front
+    # of it, so it needs its own guard or an over-length password would 500 instead of 422.
+    response = client.post(
+        "/register",
+        data={"name": "Ada", "email": "ada@example.com", "password": "a" * 73},
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "72 bytes" in response.text
+
+
 def test_root_redirects_anonymous_to_login(client):
     response = client.get("/", follow_redirects=False)
     assert response.status_code == 303

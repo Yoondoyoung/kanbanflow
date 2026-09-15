@@ -70,12 +70,23 @@ def register_submit(
     password: str = Form(...),
     session: Session = Depends(get_session),
 ) -> Response:
-    if len(password.encode("utf-8")) < 8:
+    if len(password) < 8:
         return render(
             request,
             "register.html",
             {"user": None, "error": "Password must be at least 8 characters"},
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    # hash_password (bcrypt) raises ValueError past 72 UTF-8 bytes; the JSON route catches this
+    # in RegisterRequest's validator (app/schemas.py) before it ever reaches hash_password. This
+    # form-based route bypasses that schema, so the same guard belongs here too -- otherwise an
+    # over-length password crashes with a 500 instead of a normal re-rendered error.
+    if len(password.encode("utf-8")) > 72:
+        return render(
+            request,
+            "register.html",
+            {"user": None, "error": "Password must be at most 72 bytes"},
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
     if session.exec(select(User).where(User.email == email.lower())).first():
         return render(
