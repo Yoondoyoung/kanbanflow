@@ -125,21 +125,37 @@ def test_concurrent_member_add_race_returns_409_not_500(
     client, make_user, make_project, login_as, engine, monkeypatch
 ):
     # Same shape as test_concurrent_project_creation_race_returns_409_not_500
-    # and test_concurrent_registration_race_returns_409_not_500 (Ruling R16):
-    # two concurrent adds of the same user both pass the pre-check, and the
-    # second commit must hit ProjectMember's unique constraint and surface as
-    # 409, not an unhandled 500.
+    # and test_concurrent_registration_race_returns_409_not_500 (Ruling R16),
+    # but the hook position differs from both: neither "hook the first
+    # session.exec()" (Task 8's project-slug race) nor "hook the function
+    # that runs after the pre-check" (Task 6's hash_password race) lands in
+    # the right place here.
+    #
+    # add_member's dependency, project_owner, issues its own two exec() calls
+    # before the route body runs at all (project lookup, then the caller's
+    # own membership lookup via _load). The route body then makes exec() call
+    # #3 (the target user's email lookup) and exec() call #4 (the actual
+    # duplicate-membership pre-check) before session.add()/session.commit().
+    # So the racer has to fire after call #4, not call #1 — verified by
+    # instrumenting every exec() call in this handler and counting them
+    # (5 calls total on the success path: 2 from project_owner, 2 from the
+    # route's own lookups, 1 from _members() building the response).
+    # Firing on call #1 (as in the naive version of this test) lets the
+    # racer's row land before the route's own pre-check ever reads, so the
+    # ordinary pre-check branch rejects the request with its own 409 and the
+    # except IntegrityError handler this test claims to cover never runs.
     owner = make_user(email="ada@example.com")
     bob = make_user(email="bob@example.com")
     project = make_project(owner)
     login_as("ada@example.com")
 
     original_exec = Session.exec
-    state = {"triggered": False}
+    state = {"count": 0, "triggered": False}
 
     def exec_then_insert_racer(self, *args, **kwargs):
         result = original_exec(self, *args, **kwargs)
-        if not state["triggered"]:
+        state["count"] += 1
+        if state["count"] == 4 and not state["triggered"]:
             state["triggered"] = True
             with Session(engine) as racer_session:
                 racer_session.add(
@@ -155,3 +171,23 @@ def test_concurrent_member_add_race_returns_409_not_500(
         json={"email": "bob@example.com", "role": "MEMBER"},
     )
     assert response.status_code == 409
+    assert response.json()["detail"] == "Already a member"
+
+
+def test_non_owner_gets_403_on_patch_and_delete(
+    client, make_user, make_project, add_member, login_as
+):
+    # POST's 403 is covered by test_member_cannot_manage_membership; PATCH
+    # and DELETE share the same project_owner dependency, so cover them too.
+    owner = make_user(email="ada@example.com")
+    bob = make_user(email="bob@example.com")
+    project = make_project(owner)
+    add_member(project, bob)
+    login_as("bob@example.com")
+    assert (
+        client.patch(
+            f"/api/v1/projects/{project.slug}/members/{owner.id}", json={"role": "MEMBER"}
+        ).status_code
+        == 403
+    )
+    assert client.delete(f"/api/v1/projects/{project.slug}/members/{owner.id}").status_code == 403
