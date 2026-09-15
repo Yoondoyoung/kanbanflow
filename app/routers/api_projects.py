@@ -7,9 +7,11 @@ from sqlmodel import Session, select
 from app.auth import current_user, project_owner, project_reader
 from app.db import get_session
 from app.models import Project, ProjectMember, Role, Ticket, User, WebhookType
-from app.schemas import ProjectCreate, ProjectOut, ProjectUpdate
+from app.schemas import MemberAdd, MemberOut, MemberUpdate, ProjectCreate, ProjectOut, ProjectUpdate
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+_ALREADY_MEMBER = "Already a member"
 
 
 def slugify(name: str) -> str:
@@ -128,4 +130,124 @@ def delete_project(
     # database first.
     session.flush()
     session.delete(project)
+    session.commit()
+
+
+def _members(session: Session, project_id: str) -> list[MemberOut]:
+    rows = session.exec(
+        select(ProjectMember, User)
+        .join(User, User.id == ProjectMember.user_id)
+        .where(ProjectMember.project_id == project_id)
+        .order_by(ProjectMember.joined_at)
+    ).all()
+    return [
+        MemberOut(
+            user_id=user.id,
+            name=user.name,
+            email=user.email,
+            role=member.role,
+            joined_at=member.joined_at,
+        )
+        for member, user in rows
+    ]
+
+
+def _owner_count(session: Session, project_id: str) -> int:
+    return len(
+        session.exec(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project_id, ProjectMember.role == Role.OWNER
+            )
+        ).all()
+    )
+
+
+@router.get("/{slug}/members", response_model=list[MemberOut])
+def list_members(access=Depends(project_reader), session: Session = Depends(get_session)):
+    project, _ = access
+    return _members(session, project.id)
+
+
+@router.post("/{slug}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
+def add_member(
+    body: MemberAdd, access=Depends(project_owner), session: Session = Depends(get_session)
+):
+    project, _ = access
+    target = session.exec(select(User).where(User.email == body.email.lower())).first()
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No registered user with that email")
+    existing = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == target.id
+        )
+    ).first()
+    if existing:
+        raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_MEMBER)
+    session.add(ProjectMember(project_id=project.id, user_id=target.id, role=body.role))
+    try:
+        session.commit()
+    except IntegrityError:
+        # Two concurrent adds of the same user both pass the pre-check above
+        # (routes run sync in FastAPI's threadpool, so this is a real race,
+        # not a theoretical one). ProjectMember's unique constraint on
+        # (project_id, user_id) catches the loser here; turn that into the
+        # same 409 the pre-check gives the common case, not an unhandled 500
+        # (Ruling R16).
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_MEMBER) from None
+    return next(m for m in _members(session, project.id) if m.user_id == target.id)
+
+
+@router.patch("/{slug}/members/{user_id}", response_model=MemberOut)
+def update_member(
+    user_id: str,
+    body: MemberUpdate,
+    access=Depends(project_owner),
+    session: Session = Depends(get_session),
+):
+    project, _ = access
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
+        )
+    ).first()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
+    if (
+        member.role == Role.OWNER
+        and body.role != Role.OWNER
+        and _owner_count(session, project.id) == 1
+    ):
+        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
+    member.role = body.role
+    session.add(member)
+    session.commit()
+    return next(m for m in _members(session, project.id) if m.user_id == user_id)
+
+
+@router.delete("/{slug}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_member(
+    user_id: str, access=Depends(project_owner), session: Session = Depends(get_session)
+) -> None:
+    project, _ = access
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
+        )
+    ).first()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
+    if member.role == Role.OWNER and _owner_count(session, project.id) == 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
+    # Null the FK before the member row disappears: Ticket.assignee_id is a
+    # foreign key straight to user.id (not to project_member), so this update
+    # is unrelated to the member delete at the schema level and either order
+    # is safe — but doing it first keeps a removed member's tickets from ever
+    # being observably left assigned to them, even momentarily.
+    for ticket in session.exec(
+        select(Ticket).where(Ticket.project_id == project.id, Ticket.assignee_id == user_id)
+    ).all():
+        ticket.assignee_id = None
+        session.add(ticket)
+    session.delete(member)
     session.commit()

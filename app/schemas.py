@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import WebhookType
+from app.models import Role, WebhookType
 
 
 def _check_password_byte_length(password: str) -> str:
@@ -46,6 +46,18 @@ class ProjectUpdate(BaseModel):
     webhook_type: WebhookType | None = None
     webhook_url: str | None = Field(default=None, max_length=500)
 
+    @field_validator("name")
+    @classmethod
+    def _strip_and_reject_blank(cls, value: str | None) -> str | None:
+        # min_length=1 only counts the raw input, so "   " passes Pydantic but
+        # strips to "". update_project has no slug re-derivation to catch this
+        # the way create_project's empty-slug check does (Ruling R23).
+        if value is not None:
+            value = value.strip()
+            if not value:
+                raise ValueError("name must not be blank")
+        return value
+
 
 class ProjectOut(BaseModel):
     id: str
@@ -55,3 +67,20 @@ class ProjectOut(BaseModel):
     webhook_url: str | None
     created_at: datetime
     role: str | None = None
+
+
+class MemberAdd(BaseModel):
+    email: EmailStr
+    role: Role = Role.MEMBER
+
+
+class MemberUpdate(BaseModel):
+    role: Role
+
+
+class MemberOut(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    role: Role
+    joined_at: datetime

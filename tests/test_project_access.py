@@ -172,3 +172,17 @@ def test_member_cannot_delete_project(client, make_user, make_project, add_membe
     login_as("cat@example.com")
     response = client.delete(f"/api/v1/projects/{project.slug}?confirm={project.slug}")
     assert response.status_code == 403
+
+
+def test_whitespace_only_name_update_is_rejected(client, make_user, make_project, login_as):
+    # Ruling R23: ProjectUpdate.name's min_length=1 only counts the raw input,
+    # so "   " passes Pydantic but strips to "" with nothing to catch it the
+    # way create_project's empty-slug check does — update_project never
+    # touches the slug. A field_validator on ProjectUpdate.name closes this.
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner, name="Payment Gateway")
+    login_as("ada@example.com")
+    response = client.patch(f"/api/v1/projects/{project.slug}", json={"name": "   "})
+    assert response.status_code == 422
+    # The project's name must be untouched by the rejected update.
+    assert client.get(f"/api/v1/projects/{project.slug}").json()["name"] == "Payment Gateway"
