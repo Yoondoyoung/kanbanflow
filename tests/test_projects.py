@@ -63,6 +63,12 @@ def test_project_list_shows_only_projects_you_belong_to(client, make_user, login
     make_user(email="bob@example.com")
     login_as("ada@example.com")
     client.post("/api/v1/projects", json={"name": "Ada Project"})
+
+    own_projects = client.get("/api/v1/projects").json()
+    assert len(own_projects) == 1
+    assert own_projects[0]["slug"] == "ada-project"
+    assert own_projects[0]["role"] == "OWNER"
+
     client.post("/api/v1/auth/logout")
     login_as("bob@example.com")
     assert client.get("/api/v1/projects").json() == []
@@ -99,6 +105,15 @@ def test_concurrent_project_creation_race_returns_409_not_500(
     original_exec = Session.exec
     state = {"triggered": False}
 
+    # Assumes app.auth.optional_user resolves the logged-in user via
+    # session.get(User, user_id) rather than session.exec(select(User)...)
+    # (app/auth.py:53) — so the first exec() call this request makes is the
+    # route's own slug pre-check, not a lookup from login_as's session cookie.
+    # If optional_user ever switches to session.exec(), the racer would fire
+    # before the pre-check instead of after it: the pre-check would then see
+    # the conflict itself and return its ordinary 409, and this test would
+    # keep passing while silently testing the wrong branch (the pre-check,
+    # not the except IntegrityError handler).
     def exec_then_insert_racer(self, *args, **kwargs):
         result = original_exec(self, *args, **kwargs)
         if not state["triggered"]:
