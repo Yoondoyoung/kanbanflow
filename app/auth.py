@@ -1,6 +1,6 @@
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
-from itsdangerous import BadData, BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import BadData, URLSafeTimedSerializer
 from sqlmodel import Session
 
 from app.config import settings
@@ -71,7 +71,7 @@ def make_csrf_token(user_id: str) -> str:
 def read_csrf_token(raw: str) -> str | None:
     try:
         return _csrf_serializer.loads(raw, max_age=CSRF_MAX_AGE)
-    except (BadSignature, SignatureExpired):
+    except BadData:
         return None
 
 

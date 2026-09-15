@@ -7,9 +7,12 @@ from fastapi.testclient import TestClient
 from app.auth import (
     CSRF_FIELD,
     CSRF_MAX_AGE,
+    _csrf_serializer,
     current_user,
     make_csrf_token,
+    make_session_cookie,
     read_csrf_token,
+    read_session_cookie,
     verify_csrf,
 )
 from app.models import User
@@ -31,6 +34,30 @@ def test_tampered_csrf_token_returns_none():
     payload, sep, rest = token.partition(".")
     tampered_payload = ("x" if payload[0] != "x" else "y") + payload[1:]
     assert read_csrf_token(tampered_payload + sep + rest) is None
+
+
+def test_validly_signed_corrupt_csrf_payload_is_rejected():
+    # Mirrors test_auth_primitives.py::test_validly_signed_corrupt_payload_is_rejected.
+    # A payload that is not valid base64/JSON but is signed with the real secret
+    # passes signature verification and fails during deserialization instead
+    # (itsdangerous.BadPayload, a sibling of BadSignature, not a subclass of it,
+    # so a bare `except BadSignature` would let this crash as an unhandled 500).
+    signer = _csrf_serializer.make_signer()
+    signed = signer.sign(b"not-valid-base64!!!")
+    assert read_csrf_token(signed.decode()) is None
+
+
+def test_session_cookie_does_not_validate_as_csrf_token():
+    # The session and CSRF serializers use different salts ("kf-session" vs
+    # "kf-csrf") specifically so a session cookie can't be replayed as a CSRF
+    # token. Prove it rather than just inferring it from the constants.
+    cookie = make_session_cookie("user-1")
+    assert read_csrf_token(cookie) is None
+
+
+def test_csrf_token_does_not_validate_as_session_cookie():
+    token = make_csrf_token("user-1")
+    assert read_session_cookie(token) is None
 
 
 def test_expired_csrf_token_is_rejected(monkeypatch):
