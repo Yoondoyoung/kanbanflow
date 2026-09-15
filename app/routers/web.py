@@ -27,7 +27,7 @@ from app.auth import (
 from app.db import get_session
 from app.models import Priority, Project, ProjectMember, Ticket, TicketStatus, TicketType, User
 from app.routers.api_auth import _set_session
-from app.services import create_project, create_ticket
+from app.services import create_project, create_ticket, set_status
 
 router = APIRouter(tags=["web"])
 
@@ -44,6 +44,7 @@ _email_adapter = TypeAdapter(EmailStr)
 
 # Hoisted so `Form(...)` isn't called in an argument default (ruff B008).
 _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
+_STATUS_FORM_FIELD = Form(..., alias="status")
 
 
 def render(request: Request, name: str, context: dict, status_code: int = 200) -> Response:
@@ -282,4 +283,37 @@ def create_ticket_form(
         "partials/ticket_card.html",
         {"user": user, "project": project, "ticket": ticket, "columns": COLUMNS},
         status_code=status.HTTP_201_CREATED,
+    )
+
+
+@router.post("/projects/{slug}/tickets/{ticket_number}/status", dependencies=[Depends(verify_csrf)])
+def change_status_form(
+    request: Request,
+    ticket_number: int,
+    tasks: BackgroundTasks,
+    status_value: TicketStatus = _STATUS_FORM_FIELD,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    # Board renders human-readable ticket_number, not id -- the one place in the
+    # product a ticket is addressed this way. Numbers are project-scoped, so the
+    # lookup filters on project_id *and* ticket_number together: number alone
+    # would resolve across projects.
+    ticket = session.exec(
+        select(Ticket).where(Ticket.project_id == project.id, Ticket.ticket_number == ticket_number)
+    ).first()
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
+    # set_status (app/services.py) owns the transition rules -- completed_at,
+    # resolution_notes preservation, idempotency, and the TICKET_DONE
+    # notification -- shared with the JSON route (app/routers/api_tickets.py).
+    ticket = set_status(session, ticket, status_value, project=project, tasks=tasks)
+    # Ruling R41: the card needs csrf_token to render its status control with a
+    # working token, or the *next* status change on this page 403s.
+    return render(
+        request,
+        "partials/ticket_card.html",
+        {"user": user, "project": project, "ticket": ticket, "columns": COLUMNS},
     )

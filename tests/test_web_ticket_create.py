@@ -55,6 +55,8 @@ def test_empty_title_is_422(client, make_user, make_project, login_as):
         data={"title": "   ", "type": "TASK", "_csrf": make_csrf_token(owner.id)},
     )
     assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "<html" not in response.text
 
 
 def test_non_member_submission_is_403(client, make_user, make_project, login_as):
