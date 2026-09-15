@@ -1,7 +1,11 @@
 import bcrypt
+from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import BadData, URLSafeTimedSerializer
+from sqlmodel import Session
 
 from app.config import settings
+from app.db import get_session
+from app.models import User
 
 SESSION_COOKIE = "kf_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 14
@@ -37,3 +41,19 @@ def read_session_cookie(raw: str) -> str | None:
         return _serializer.loads(raw, max_age=SESSION_MAX_AGE)
     except BadData:
         return None
+
+
+def optional_user(request: Request, session: Session = Depends(get_session)) -> User | None:
+    raw = request.cookies.get(SESSION_COOKIE)
+    if not raw:
+        return None
+    user_id = read_session_cookie(raw)
+    if user_id is None:
+        return None
+    return session.get(User, user_id)
+
+
+def current_user(user: User | None = Depends(optional_user)) -> User:
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+    return user

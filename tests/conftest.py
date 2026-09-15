@@ -2,8 +2,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel
 
+from app.auth import hash_password
 from app.db import get_session, make_engine
 from app.main import app
+from app.models import User
 
 
 @pytest.fixture
@@ -30,3 +32,26 @@ def client(engine):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def make_user(engine):
+    def _make(email: str = "user@example.com", password: str = "hunter22", name: str = "User"):
+        with Session(engine) as session:
+            user = User(name=name, email=email.lower(), password_hash=hash_password(password))
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            return user
+
+    return _make
+
+
+@pytest.fixture
+def login_as(client):
+    def _login(email: str, password: str = "hunter22"):
+        response = client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        assert response.status_code == 200, response.text
+        return response
+
+    return _login

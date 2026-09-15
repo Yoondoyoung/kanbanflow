@@ -11,6 +11,7 @@ dependencies = [
     "alembic>=1.20.0",
     "bcrypt>=5.0.0",
     "bleach>=6.4.0",
+    "email-validator>=2.3.0",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "itsdangerous>=2.2.0",
@@ -42,6 +43,11 @@ extend-exclude = ["*.md"]  # ruff 0.16 formats fenced code in Markdown by defaul
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom is `param: T = Depends(...)`; the call
+# is resolved once per request by FastAPI, not evaluated as a mutable default.
+extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
