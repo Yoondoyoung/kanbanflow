@@ -3,6 +3,7 @@ import time
 from app.auth import (
     DUMMY_HASH,
     SESSION_MAX_AGE,
+    _serializer,
     hash_password,
     make_session_cookie,
     read_session_cookie,
@@ -36,3 +37,12 @@ def test_expired_cookie_is_rejected(monkeypatch):
     real_time = time.time
     monkeypatch.setattr(time, "time", lambda: real_time() + SESSION_MAX_AGE + 10)
     assert read_session_cookie(raw) is None
+
+
+def test_validly_signed_corrupt_payload_is_rejected():
+    # A payload that is not valid base64/JSON but is signed with the real secret,
+    # so it passes signature verification and fails during deserialization instead
+    # (itsdangerous.BadPayload, a sibling of BadSignature, not a subclass of it).
+    signer = _serializer.make_signer()
+    signed = signer.sign(b"not-valid-base64!!!")
+    assert read_session_cookie(signed.decode()) is None

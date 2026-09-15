@@ -1,5 +1,5 @@
 import bcrypt
-from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+from itsdangerous import BadData, URLSafeTimedSerializer
 
 from app.config import settings
 
@@ -15,6 +15,10 @@ def hash_password(plain: str) -> str:
 
 
 def verify_password(plain: str, hashed: str) -> bool:
+    # bcrypt raises ValueError for a >72-byte plaintext; fail closed here rather
+    # than raise, since login must run to completion even for bad input. Registration
+    # enforces the 72-byte limit up front (Task 6's RegisterRequest), so don't add a
+    # matching guard to hash_password — that would just duplicate the validation.
     try:
         return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
     except ValueError:
@@ -31,5 +35,5 @@ def make_session_cookie(user_id: str) -> str:
 def read_session_cookie(raw: str) -> str | None:
     try:
         return _serializer.loads(raw, max_age=SESSION_MAX_AGE)
-    except (BadSignature, SignatureExpired):
+    except BadData:
         return None
