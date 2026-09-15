@@ -51,6 +51,8 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["benchmark: timing-sensitive; excluded from the default run"]
+addopts = "-m 'not benchmark'"
 filterwarnings = [
     "error::DeprecationWarning",
     # Third-party deprecations we don't control (pytest applies later filters first,
