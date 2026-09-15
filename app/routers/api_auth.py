@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.auth import (
@@ -15,6 +16,8 @@ from app.models import User
 from app.schemas import LoginRequest, RegisterRequest, UserOut
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+_EMAIL_TAKEN = "Email already registered"
 
 
 def _set_session(response: Response, user_id: str) -> None:
@@ -33,10 +36,19 @@ def _set_session(response: Response, user_id: str) -> None:
 def register(body: RegisterRequest, response: Response, session: Session = Depends(get_session)):
     email = body.email.lower()
     if session.exec(select(User).where(User.email == email)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+        raise HTTPException(status.HTTP_409_CONFLICT, _EMAIL_TAKEN)
     user = User(name=body.name, email=email, password_hash=hash_password(body.password))
     session.add(user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Two concurrent registrations for the same email can both pass the
+        # pre-check above (routes run sync in FastAPI's threadpool, so this
+        # is a real race, not a theoretical one). The unique constraint on
+        # User.email catches the loser here; turn that into the same 409
+        # the pre-check gives the common case, not an unhandled 500.
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _EMAIL_TAKEN) from None
     session.refresh(user)
     _set_session(response, user.id)
     return user

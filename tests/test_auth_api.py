@@ -1,9 +1,12 @@
 import pytest
 from fastapi import HTTPException
+from sqlmodel import Session
 from starlette.requests import Request
 
-from app.auth import SESSION_COOKIE, current_user, make_session_cookie, optional_user
+from app.auth import SESSION_COOKIE, current_user, hash_password, make_session_cookie, optional_user
+from app.config import settings
 from app.models import User
+from app.routers import api_auth
 
 
 def test_register_sets_a_session_cookie(client):
@@ -85,3 +88,53 @@ def test_current_user_raises_401_for_cookie_naming_a_deleted_user(make_user, ses
     with pytest.raises(HTTPException) as exc_info:
         current_user(optional_user(request, session))
     assert exc_info.value.status_code == 401
+
+
+def test_concurrent_registration_race_returns_409_not_500(client, engine, monkeypatch):
+    # Simulate two concurrent /register calls racing on the same email: a
+    # "racer" request commits its own row for the email in the gap between
+    # our request's pre-check and its own commit, so our commit hits the
+    # real unique constraint and must surface as 409, not an unhandled 500.
+    def hash_password_and_insert_racer(password: str) -> str:
+        with Session(engine) as racer_session:
+            racer_session.add(
+                User(
+                    name="Racer",
+                    email="ada@example.com",
+                    password_hash=hash_password(password),
+                )
+            )
+            racer_session.commit()
+        return hash_password(password)
+
+    monkeypatch.setattr(api_auth, "hash_password", hash_password_and_insert_racer)
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Ada", "email": "ada@example.com", "password": "hunter22"},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Email already registered"
+
+
+def test_session_cookie_has_expected_attributes(client, monkeypatch):
+    monkeypatch.setattr(settings, "secure_cookies", True)
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Ada", "email": "ada@example.com", "password": "hunter22"},
+    )
+    set_cookie = response.headers["set-cookie"]
+    assert "HttpOnly" in set_cookie
+    assert "samesite=lax" in set_cookie.lower()
+    assert "Secure" in set_cookie
+
+
+def test_login_is_case_insensitive_on_email(client):
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Ada", "email": "ada@example.com", "password": "hunter22"},
+    )
+    response = client.post(
+        "/api/v1/auth/login", json={"email": "ADA@Example.com", "password": "hunter22"}
+    )
+    assert response.status_code == 200
