@@ -67,5 +67,9 @@ def test_build_payload_is_a_flat_orm_free_json_serializable_dict(session, make_u
 
     assert payload["assignee_id"] is None
     for value in payload.values():
-        assert isinstance(value, (str, int)) or value is None
+        # Exact type check, not isinstance: every enum in app.models is a StrEnum,
+        # i.e. a subclass of str, so isinstance(value, str) would also accept a raw
+        # enum member (e.g. ticket.status instead of ticket.status.value) and this
+        # guard would stop catching the regression it exists to catch.
+        assert type(value) is str or type(value) is int or value is None
     json.dumps(payload)
