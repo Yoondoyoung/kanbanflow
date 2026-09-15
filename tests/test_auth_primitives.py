@@ -28,8 +28,16 @@ def test_session_cookie_round_trip():
 
 
 def test_tampered_cookie_is_rejected():
+    # Flip a character in the payload segment (before the first "."), not the
+    # last character of the cookie: the trailing base64 character of the
+    # signature only encodes the tail bits of its last byte, so several
+    # distinct characters can decode to the same signature bytes, making a
+    # last-character flip an intermittent no-op. Tampering the payload always
+    # changes the signed content, which the HMAC deterministically rejects.
     raw = make_session_cookie("user-123")
-    assert read_session_cookie(raw[:-1] + ("x" if raw[-1] != "x" else "y")) is None
+    payload, sep, rest = raw.partition(".")
+    tampered_payload = ("x" if payload[0] != "x" else "y") + payload[1:]
+    assert read_session_cookie(tampered_payload + sep + rest) is None
 
 
 def test_expired_cookie_is_rejected(monkeypatch):
