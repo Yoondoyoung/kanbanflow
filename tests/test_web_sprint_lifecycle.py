@@ -183,6 +183,28 @@ def test_close_requires_a_planning_destination_without_mutation(
         assert session.get(Sprint, lifecycle_world.active.id).status is SprintStatus.ACTIVE
 
 
+def test_htmx_close_error_fragment_swaps_and_restores_submit(client, lifecycle_world, login_as):
+    login_as(lifecycle_world.owner.email)
+
+    response = client.post(
+        f"/projects/{lifecycle_world.project.slug}/sprints/{lifecycle_world.active.id}/close",
+        data={"_csrf": make_csrf_token(lifecycle_world.owner.id)},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 422
+    assert "event.detail.shouldSwap = true" in response.text
+    assert "event.detail.isError = false" in response.text
+    assert (
+        "@htmx:response-error=\"$el.querySelector('[type=submit]').disabled = false\""
+        in response.text
+    )
+    assert (
+        "x-init=\"$nextTick(() => { $el.showModal(); $el.querySelector('h2').focus() })\""
+        in response.text
+    )
+
+
 def test_close_rejects_an_unknown_rollover_destination(client, lifecycle_world, engine, login_as):
     login_as(lifecycle_world.owner.email)
 
