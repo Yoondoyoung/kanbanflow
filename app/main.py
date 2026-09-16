@@ -7,11 +7,12 @@ from fastapi.templating import Jinja2Templates
 from app.auth import SESSION_COOKIE
 from app.config import settings
 from app.rendering import render_markdown
-from app.routers import api_auth, api_projects, api_tickets, web
+from app.routers import api_auth, api_projects, api_sprints, api_tickets, web
 
 app = FastAPI(title="Kanban Flow")
 app.include_router(api_auth.router)
 app.include_router(api_projects.router)
+app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
 
 UNSAFE_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
