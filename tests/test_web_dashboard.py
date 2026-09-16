@@ -9,11 +9,28 @@ def csrf_for(user):
 
 def test_dashboard_lists_projects(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
-    make_project(owner, name="Payment Gateway")
+    project = make_project(owner, name="Payment Gateway")
     login_as("ada@example.com")
     response = client.get("/dashboard")
     assert response.status_code == 200
     assert "Payment Gateway" in response.text
+    assert len(re.findall(r"<h1[^>]*>\s*Projects\s*</h1>", response.text)) == 1
+    assert 'data-testid="project-row"' in response.text
+    assert f'href="/projects/{project.slug}"' in response.text
+    assert "OWNER" in response.text
+
+
+def test_dashboard_has_accessible_project_creation_dialog(client, make_user, login_as):
+    owner = make_user(email="ada@example.com")
+    login_as(owner.email)
+
+    page = client.get("/dashboard")
+
+    assert "New project" in page.text
+    assert 'data-testid="project-dialog"' in page.text
+    assert 'role="dialog"' in page.text
+    assert 'aria-modal="true"' in page.text
+    assert 'aria-labelledby="project-dialog-heading"' in page.text
 
 
 def test_dashboard_requires_login(client):
@@ -96,6 +113,7 @@ def test_overlong_project_name_is_rejected_and_not_persisted(client, make_user, 
     )
     assert response.status_code == 422
     assert "100" in response.text
+    assert 'x-data="{ projectDialog: true }"' in response.text
     assert client.get("/api/v1/projects").json() == []
 
 

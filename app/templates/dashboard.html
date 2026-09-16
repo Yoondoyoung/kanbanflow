@@ -1,40 +1,57 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - Kanban Flow{% endblock %}
 {% block content %}
-<div class="max-w-3xl mx-auto space-y-6">
-  <section class="bg-white border rounded p-4">
-    <h1 class="font-semibold mb-3">Your projects</h1>
+<div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="max-w-3xl mx-auto space-y-6">
+  <div class="flex items-center">
+    <h1 id="projects-heading" class="text-lg font-semibold">Projects</h1>
+    <button class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
+            aria-controls="project-dialog" aria-haspopup="dialog" @click="projectDialog = true">New project</button>
+  </div>
+
+  <section class="surface overflow-hidden" aria-labelledby="projects-heading">
     {% if projects %}
       <ul class="divide-y">
         {% for project in projects %}
-          <li class="py-2 flex items-center">
-            <a class="underline" href="/projects/{{ project.slug }}">{{ project.name }}</a>
+          <li data-testid="project-row" class="app-row flex items-center gap-3 px-4 py-3">
+            <a class="font-medium" href="/projects/{{ project.slug }}">{{ project.name }}</a>
             <span class="ml-auto text-xs uppercase text-slate-500">{{ roles[project.id] }}</span>
+            <a class="text-sm text-slate-600" href="/projects/{{ project.slug }}">Open<span class="sr-only"> {{ project.name }}</span></a>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="text-sm text-slate-500">No projects yet.</p>
+      <p class="px-4 py-3 text-sm text-slate-500">No projects yet.</p>
     {% endif %}
   </section>
-  <section class="bg-white border rounded p-4">
-    <h2 class="font-semibold mb-3">New project</h2>
-    {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
-    <form method="post" action="/projects" class="flex gap-2">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <div class="flex-1">
-        <label for="project-name" class="sr-only">Project name</label>
-        <input
-          id="project-name"
-          class="w-full border rounded px-3 py-2"
-          name="name"
-          placeholder="Project name"
-          required
-          {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
-        >
+
+  <div x-show="projectDialog" x-cloak class="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4"
+       @keydown.escape.window="projectDialog = false">
+    <div id="project-dialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
+         role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading" @click.outside="projectDialog = false">
+      <div class="mb-3 flex items-center">
+        <h2 id="project-dialog-heading" class="font-semibold">New project</h2>
+        <button class="ml-auto text-slate-500" type="button" @click="projectDialog = false" aria-label="Close new project dialog">×</button>
       </div>
-      <button class="bg-slate-900 text-white rounded px-4">Create</button>
-    </form>
-  </section>
+      {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
+      <form method="post" action="/projects" class="space-y-3">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <div>
+          <label for="project-name" class="block text-sm font-medium mb-1">Project name</label>
+          <input
+            id="project-name"
+            class="w-full border rounded px-3 py-2"
+            name="name"
+            placeholder="Project name"
+            required
+            {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
+          >
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="rounded px-3 py-2 text-sm" type="button" @click="projectDialog = false">Cancel</button>
+          <button class="bg-slate-900 text-white rounded px-4 py-2 text-sm">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 {% endblock %}
