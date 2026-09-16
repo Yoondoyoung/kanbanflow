@@ -12,7 +12,6 @@ import sqlmodel
 
 from alembic import op
 
-
 revision: str = "6c25b12d1a91"
 down_revision: str | Sequence[str] | None = "89398913f6cb"
 branch_labels: str | Sequence[str] | None = None
@@ -58,15 +57,15 @@ def upgrade() -> None:
     )
 
     with op.batch_alter_table("ticket", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("sprint_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True))
+        batch_op.add_column(
+            sa.Column("sprint_id", sqlmodel.sql.sqltypes.AutoString(), nullable=True)
+        )
         batch_op.add_column(sa.Column("first_sprint_entered_at", sa.DateTime(), nullable=True))
         batch_op.add_column(sa.Column("delayed_days", sa.Integer(), nullable=True))
         batch_op.add_column(
             sa.Column("rollover_count", sa.Integer(), server_default=sa.text("0"), nullable=False)
         )
-        batch_op.create_foreign_key(
-            "fk_ticket_sprint_id_sprint", "sprint", ["sprint_id"], ["id"]
-        )
+        batch_op.create_foreign_key("fk_ticket_sprint_id_sprint", "sprint", ["sprint_id"], ["id"])
         batch_op.create_index("ix_ticket_sprint_id", ["sprint_id"], unique=False)
 
     op.create_table(
@@ -76,9 +75,7 @@ def upgrade() -> None:
         sa.Column("ticket_id", sqlmodel.sql.sqltypes.AutoString(), nullable=False),
         sa.Column(
             "status_at_close",
-            sa.Enum(
-                "BACKLOG", "SELECTED", "IN_PROGRESS", "DONE", name="ticketstatus"
-            ),
+            sa.Enum("BACKLOG", "SELECTED", "IN_PROGRESS", "DONE", name="ticketstatus"),
             nullable=False,
         ),
         sa.Column("story_points_at_close", sa.Integer(), nullable=True),

@@ -1,15 +1,15 @@
-from datetime import date
 import os
 import subprocess
+from datetime import date
 
 import pytest
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import SQLModel, Session
+from sqlmodel import Session, SQLModel
 
 from app import models  # noqa: F401  — imported for its side effect of registering tables
-from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus, User
 from app.db import make_engine
+from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus, User
 
 
 def test_migration_produces_the_same_tables_as_the_models(tmp_path):
@@ -48,9 +48,9 @@ def test_sprint_migration_creates_constraints(tmp_path):
     assert {"uq_sprint_active_project", "uq_sprint_planning_project"} <= {
         index["name"] for index in inspector.get_indexes("sprint")
     }
-    assert {foreign_key["referred_table"] for foreign_key in inspector.get_foreign_keys("ticket")} >= {
-        "sprint"
-    }
+    assert {
+        foreign_key["referred_table"] for foreign_key in inspector.get_foreign_keys("ticket")
+    } >= {"sprint"}
 
 
 def test_sprint_migration_rejects_invalid_dates(tmp_path):
@@ -65,7 +65,8 @@ def test_sprint_migration_rejects_invalid_dates(tmp_path):
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO project (id, name, slug, webhook_type, next_ticket_number, created_at) "
+                "INSERT INTO project (id, name, slug, webhook_type, next_ticket_number, "
+                "created_at) "
                 "VALUES ('project-1', 'Project', 'project', 'NONE', 1, CURRENT_TIMESTAMP)"
             )
         )

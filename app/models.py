@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, JSON, Column, Index, UniqueConstraint, text
+from sqlalchemy import JSON, CheckConstraint, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
