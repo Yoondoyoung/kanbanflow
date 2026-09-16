@@ -34,7 +34,7 @@ def test_modal_targets_the_backlog_column(client, active_sprint, login_as):
     assert 'hx-target="#column-BACKLOG"' in page
     assert 'hx-swap="afterbegin"' in page
     assert f'hx-post="/projects/{project.slug}/tickets"' in page
-    assert f'name="sprint_id" value="{sprint.id}"' in page
+    assert f'<option value="{sprint.id}" selected>' in page
 
 
 def test_submitting_the_modal_returns_a_card_fragment(client, make_user, make_project, login_as):

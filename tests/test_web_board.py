@@ -52,7 +52,9 @@ def test_board_shows_tickets_in_their_columns(client, active_sprint_world, login
     assert f'id="ticket-{created["id"]}"' in page
 
 
-def test_board_renders_markdown_descriptions_inertly(client, active_sprint_world, login_as):
+def test_board_keeps_markdown_descriptions_out_of_compact_cards(
+    client, active_sprint_world, login_as
+):
     owner = active_sprint_world.owner
     project = active_sprint_world.project
     login_as(owner.email)
@@ -66,15 +68,12 @@ def test_board_renders_markdown_descriptions_inertly(client, active_sprint_world
         },
     )
     page = client.get(f"/projects/{project.slug}").text
-    # V-9's actual pass condition (Ruling 3): no *live* <script> or <img> tag reaches
-    # the page. render_markdown (Task 18) escapes the raw HTML to inert text rather
-    # than deleting it -- so the literal word "onerror" still appears, harmlessly,
-    # inside an entity-escaped string. Asserting that substring's absence would
-    # contradict Task 18's own established behavior (tests/test_rendering.py::
-    # test_img_onerror_in_source_is_neutralized). Check for live tags instead.
-    assert "<script>" not in page
-    assert "<img" not in page
-    assert "alert" in page
+    # The panel owns descriptions. A compact board card must not carry the
+    # rendered body, whether the original markdown is benign or hostile.
+    card = page.split('<article id="ticket-', 1)[1].split("</article>", 1)[0]
+    assert "<script>" not in card
+    assert "<img" not in card
+    assert "alert" not in card
 
 
 def test_non_member_gets_404_for_the_board(client, make_user, make_project, login_as):
@@ -167,7 +166,7 @@ def test_ticket_card_partial_renders_standalone():
     )
     assert f'id="ticket-{ticket.id}"' in html
     assert "Card declines" in html
-    assert "<strong>bold</strong>" in html
+    assert "<strong>bold</strong>" not in html
 
 
 def test_project_opens_active_sprint(client, active_sprint_world, login_as):

@@ -49,8 +49,9 @@
     <button class="app-secondary-button" type="submit">Filter</button>
   </form>
 
-  <div class="board-scroll" aria-label="Board columns" tabindex="0">
-    <div class="board-columns">
+  <div class="board-workspace">
+    <div class="board-scroll" aria-label="Board columns" tabindex="0">
+      <div class="board-columns">
       {% for column in columns %}
       <section class="board-column" aria-labelledby="column-{{ column.value }}-heading">
         <h2 id="column-{{ column.value }}-heading">
@@ -67,7 +68,9 @@
         </div>
       </section>
       {% endfor %}
+      </div>
     </div>
+    <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-live="polite">Select a ticket to view details.</aside>
   </div>
 
   {% include "partials/ticket_modal.html" %}

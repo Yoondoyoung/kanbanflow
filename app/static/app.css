@@ -60,6 +60,8 @@ body { margin: 0; background: var(--canvas); color: var(--text); }
 .board-filters { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; margin-bottom: 16px; padding: 10px; }
 .board-filters select { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--text); padding: 5px; }
 .board-scroll { overflow-x: auto; padding-bottom: 8px; }
+.board-workspace { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); }
+.ticket-detail-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; min-height: 80px; padding: 12px; }
 .board-columns { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(240px, 1fr)); min-width: 1000px; }
 .board-column { background: #efefed; border-radius: 8px; padding: 10px; }
 .board-column h2 { align-items: center; color: var(--muted); display: flex; font-size: 12px; justify-content: space-between; letter-spacing: .03em; margin: 0 0 8px; text-transform: uppercase; }
@@ -69,4 +71,5 @@ body { margin: 0; background: var(--canvas); color: var(--text); }
 @media (max-width: 767px) {
   .project-header { align-items: stretch; flex-direction: column; }
   .project-actions { justify-content: space-between; }
+  .board-workspace { grid-template-columns: 1fr; }
 }

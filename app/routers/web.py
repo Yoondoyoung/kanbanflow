@@ -20,6 +20,7 @@ from app.auth import (
     load_project_and_membership,
     make_csrf_token,
     optional_user,
+    project_reader,
     project_writer,
     verify_csrf,
     verify_password,
@@ -37,7 +38,8 @@ from app.models import (
     User,
 )
 from app.routers.api_auth import _set_session
-from app.services import create_project, create_ticket, register_user, set_status
+from app.schemas import StatusUpdate, TicketUpdate
+from app.services import create_project, create_ticket, register_user, set_status, update_ticket
 
 router = APIRouter(tags=["web"])
 
@@ -201,6 +203,57 @@ def _shell_context(session: Session, user: User) -> dict:
     }
 
 
+def _project_ticket(session: Session, project: Project, ticket_number: int) -> Ticket:
+    ticket = session.exec(
+        select(Ticket).where(Ticket.project_id == project.id, Ticket.ticket_number == ticket_number)
+    ).first()
+    if ticket is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
+    return ticket
+
+
+def _ticket_detail(
+    request: Request,
+    session: Session,
+    user: User,
+    project: Project,
+    ticket: Ticket,
+    *,
+    error: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> Response:
+    members = session.exec(
+        select(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project.id)
+        .order_by(User.name)
+    ).all()
+    sprints = session.exec(
+        select(Sprint)
+        .where(
+            Sprint.project_id == project.id,
+            Sprint.status.in_((SprintStatus.ACTIVE, SprintStatus.PLANNING)),
+        )
+        .order_by(Sprint.start_date)
+    ).all()
+    return render(
+        request,
+        "partials/ticket_detail.html",
+        {
+            "user": user,
+            "project": project,
+            "ticket": ticket,
+            "members": members,
+            "sprints": sprints,
+            "ticket_types": TicketType,
+            "priorities": Priority,
+            "columns": COLUMNS,
+            "error": error,
+        },
+        status_code=status_code,
+    )
+
+
 @router.get("/dashboard")
 def dashboard(
     request: Request,
@@ -322,9 +375,119 @@ def board(
             "priorities": Priority,
             "members": members,
             "assignee_names": {member.id: member.name or member.email for member in members},
+            "destination_sprints": session.exec(
+                select(Sprint)
+                .where(
+                    Sprint.project_id == project.id,
+                    Sprint.status.in_((SprintStatus.ACTIVE, SprintStatus.PLANNING)),
+                )
+                .order_by(Sprint.start_date)
+            ).all(),
         },
         session=session,
     )
+
+
+@router.get("/projects/{slug}/tickets/{ticket_number}")
+def ticket_detail(
+    slug: str,
+    ticket_number: int,
+    request: Request,
+    card: bool = False,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_reader),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    if card:
+        assignee_names = {}
+        if ticket.assignee_id:
+            assignee = session.get(User, ticket.assignee_id)
+            if assignee:
+                assignee_names[assignee.id] = assignee.name or assignee.email
+        return render(
+            request,
+            "partials/ticket_card.html",
+            {
+                "user": user,
+                "project": project,
+                "ticket": ticket,
+                "assignee_names": assignee_names,
+            },
+        )
+    return _ticket_detail(request, session, user, project, ticket)
+
+
+@router.post("/projects/{slug}/tickets/{ticket_number}", dependencies=[Depends(verify_csrf)])
+def update_ticket_form(
+    slug: str,
+    ticket_number: int,
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(""),
+    type: str = Form(...),
+    priority: str = Form(...),
+    story_points: str = Form(""),
+    assignee_id: str = Form(""),
+    status_value: str = Form(..., alias="status"),
+    resolution_notes: str = Form(""),
+    sprint_id: str = Form(""),
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    try:
+        points = int(story_points) if story_points else None
+        changes = TicketUpdate(
+            title=title,
+            description=description,
+            type=type,
+            priority=priority,
+            story_points=points,
+            assignee_id=assignee_id or None,
+            resolution_notes=resolution_notes or None,
+            sprint_id=sprint_id or None,
+        ).model_dump(exclude_unset=True)
+        status_update = StatusUpdate(status=status_value, resolution_notes=resolution_notes or None)
+        update_ticket(session, ticket, project, commit=False, **changes)
+        ticket = set_status(
+            session,
+            ticket,
+            status_update.status,
+            status_update.resolution_notes,
+            project=project,
+        )
+    except (ValidationError, ValueError) as exc:
+        error = (
+            exc.errors()[0]["msg"]
+            if isinstance(exc, ValidationError)
+            else "points must be a number"
+        )
+        return _ticket_detail(
+            request,
+            session,
+            user,
+            project,
+            ticket,
+            error=error,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    except HTTPException as exc:
+        return _ticket_detail(
+            request,
+            session,
+            user,
+            project,
+            ticket,
+            error=exc.detail,
+            status_code=exc.status_code,
+        )
+    response = _ticket_detail(request, session, user, project, ticket)
+    response.headers["HX-Trigger"] = f"refresh-ticket-card-{ticket.id}"
+    return response
 
 
 @router.post("/projects/{slug}/tickets", dependencies=[Depends(verify_csrf)])
@@ -383,11 +546,7 @@ def change_status_form(
     # product a ticket is addressed this way. Numbers are project-scoped, so the
     # lookup filters on project_id *and* ticket_number together: number alone
     # would resolve across projects.
-    ticket = session.exec(
-        select(Ticket).where(Ticket.project_id == project.id, Ticket.ticket_number == ticket_number)
-    ).first()
-    if ticket is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
+    ticket = _project_ticket(session, project, ticket_number)
     # set_status (app/services.py) owns the transition rules -- completed_at,
     # resolution_notes preservation, idempotency, and the TICKET_DONE
     # notification -- shared with the JSON route (app/routers/api_tickets.py).
