@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} Backlog · Kanban Flow{% endblock %}
+{% block content %}
+<div class="project-board" x-data{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% endif %}>
+  <header class="project-header">
+    <div>
+      <h1 class="project-title">{{ project.name }}</h1>
+      <p class="sprint-meta">Backlog</p>
+    </div>
+    {% if role == 'OWNER' %}
+    <div class="project-actions" data-testid="owner-planning-controls">
+      <button class="app-primary-button" type="button" x-ref="sprintFormOpener" @click="$refs.sprintForm.showModal()">Add sprint</button>
+    </div>
+    {% endif %}
+  </header>
+
+  {% include "partials/project_nav.html" %}
+
+  {% if planning_sprint %}
+  <section class="backlog-planning" aria-labelledby="planning-heading">
+    <h2 id="planning-heading">Planning: {{ planning_sprint.name }}</h2>
+    <p>{{ planning_sprint.start_date.strftime('%b %-d') }} – {{ planning_sprint.end_date.strftime('%b %-d, %Y') }}{% if planning_sprint.goal %} · {{ planning_sprint.goal }}{% endif %}</p>
+  </section>
+  {% endif %}
+
+  <section class="backlog-list" aria-labelledby="backlog-heading">
+    <h2 id="backlog-heading">Unassigned tickets</h2>
+    {% if role == 'OWNER' and planning_sprint and tickets %}
+    <form action="/projects/{{ project.slug }}/sprints/{{ planning_sprint.id }}/tickets" method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      {% for ticket in tickets %}
+      <label class="backlog-ticket"><input type="checkbox" name="ticket_ids" value="{{ ticket.id }}"> #{{ ticket.ticket_number }} {{ ticket.title }}</label>
+      {% endfor %}
+      <button class="app-secondary-button" type="submit">Add selected to sprint</button>
+    </form>
+    {% else %}
+      {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% else %}<p class="sprint-meta">No unassigned tickets.</p>{% endfor %}
+    {% endif %}
+  </section>
+
+  {% if role == 'OWNER' %}
+  <dialog x-ref="sprintForm" class="app-dialog" aria-labelledby="sprint-form-heading" @close="$refs.sprintFormOpener.focus()">
+    {% include "partials/sprint_form.html" %}
+  </dialog>
+  {% endif %}
+</div>
+{% endblock %}

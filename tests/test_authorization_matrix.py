@@ -82,6 +82,27 @@ def endpoints(world):
         # -- OWNER_ONLY: sprint lifecycle mutations use separate valid setups --
         (
             OWNER_ONLY,
+            FORM,
+            "post",
+            f"/projects/{world['sprint_web_create_project'].slug}/sprints",
+            {
+                "data": {
+                    "name": "Created Sprint",
+                    "goal": "Ship",
+                    "start_date": "2026-09-21",
+                    "end_date": "2026-09-28",
+                }
+            },
+        ),
+        (
+            OWNER_ONLY,
+            FORM,
+            "post",
+            f"/projects/{world['sprint_start_project'].slug}/sprints/{world['planning_sprint'].id}/tickets",
+            {"data": {"ticket_ids": world["planning_ticket"].id}},
+        ),
+        (
+            OWNER_ONLY,
             JSON,
             "post",
             f"/api/v1/projects/{world['sprint_create_project'].slug}/sprints",
@@ -138,6 +159,7 @@ def world(client, session, make_user, make_project, add_member, login_as):
     outsider = make_user(email="dan@example.com")
     project = make_project(owner)
     sprint_create_project = make_project(owner, name="Sprint Create")
+    sprint_web_create_project = make_project(owner, name="Sprint Web Create")
     sprint_start_project = make_project(owner, name="Sprint Start")
     sprint_close_project = make_project(owner, name="Sprint Close")
     for current_project in [
@@ -180,7 +202,13 @@ def world(client, session, make_user, make_project, add_member, login_as):
         title="Sprint ticket",
         creator_id=owner.id,
     )
-    session.add(sprint_ticket)
+    planning_ticket = Ticket(
+        ticket_number=1,
+        project_id=sprint_start_project.id,
+        title="Planning ticket",
+        creator_id=owner.id,
+    )
+    session.add_all([sprint_ticket, planning_ticket])
     session.commit()
     login_as("ada@example.com")
     ticket_id = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "Seed"}).json()[
@@ -191,12 +219,14 @@ def world(client, session, make_user, make_project, add_member, login_as):
         "project": project,
         "ticket_id": ticket_id,
         "sprint_create_project": sprint_create_project,
+        "sprint_web_create_project": sprint_web_create_project,
         "sprint_start_project": sprint_start_project,
         "sprint_close_project": sprint_close_project,
         "planning_sprint": planning_sprint,
         "active_sprint": active_sprint,
         "next_sprint": next_sprint,
         "sprint_ticket": sprint_ticket,
+        "planning_ticket": planning_ticket,
         "owner": owner,
         "member": member,
         "outsider": outsider,

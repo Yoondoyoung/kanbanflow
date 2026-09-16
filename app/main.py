@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from app.auth import SESSION_COOKIE
 from app.config import settings
 from app.rendering import render_markdown
-from app.routers import api_auth, api_projects, api_sprints, api_tickets, web
+from app.routers import api_auth, api_projects, api_sprints, api_tickets, web, web_sprints
 
 app = FastAPI(title="Kanban Flow")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
@@ -38,6 +38,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["markdown"] = render_markdown
 
 app.include_router(web.router)
+app.include_router(web_sprints.router)
 
 
 @app.get("/health")
