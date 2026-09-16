@@ -183,8 +183,17 @@ def test_close_requires_a_planning_destination_without_mutation(
         assert session.get(Sprint, lifecycle_world.active.id).status is SprintStatus.ACTIVE
 
 
-def test_htmx_close_error_fragment_swaps_and_restores_submit(client, lifecycle_world, login_as):
+def test_htmx_close_error_fragment_swaps_on_the_persistent_dialog_host(
+    client, lifecycle_world, login_as
+):
     login_as(lifecycle_world.owner.email)
+
+    board = client.get(f"/projects/{lifecycle_world.project.slug}")
+    assert "@htmx:before-swap.camel" in board.text
+    assert "$event.detail.xhr.status === 409 || $event.detail.xhr.status === 422" in board.text
+    assert "$event.detail.shouldSwap = true" in board.text
+    assert "$event.detail.target = $el" in board.text
+    assert "$event.detail.swapOverride = 'innerHTML'" in board.text
 
     response = client.post(
         f"/projects/{lifecycle_world.project.slug}/sprints/{lifecycle_world.active.id}/close",
@@ -193,12 +202,8 @@ def test_htmx_close_error_fragment_swaps_and_restores_submit(client, lifecycle_w
     )
 
     assert response.status_code == 422
-    assert "event.detail.shouldSwap = true" in response.text
-    assert "event.detail.isError = false" in response.text
-    assert (
-        "@htmx:response-error=\"$el.querySelector('[type=submit]').disabled = false\""
-        in response.text
-    )
+    assert "@htmx:before-swap" not in response.text
+    assert "@htmx:response-error" not in response.text
     assert (
         "x-init=\"$nextTick(() => { $el.showModal(); $el.querySelector('h2').focus() })\""
         in response.text

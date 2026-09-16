@@ -71,6 +71,6 @@
   </div>
 
   {% include "partials/ticket_modal.html" %}
-  <div id="sprint-dialog-root"></div>
+  <div id="sprint-dialog-root" @htmx:before-swap.camel="if ($event.detail.xhr.status === 409 || $event.detail.xhr.status === 422) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }"></div>
 </div>
 {% endblock %}

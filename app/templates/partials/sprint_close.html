@@ -1,5 +1,5 @@
 <dialog class="app-dialog" aria-labelledby="sprint-close-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('h2').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$refs.closeFormOpener.focus()">
-  <form action="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" method="post" class="sprint-form" hx-post="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" hx-target="#sprint-dialog-root" hx-swap="innerHTML" @htmx:before-swap="if (event.detail.xhr.status >= 400) { event.detail.shouldSwap = true; event.detail.isError = false }" @htmx:response-error="$el.querySelector('[type=submit]').disabled = false" @submit="$el.querySelector('[type=submit]').disabled = true">
+  <form action="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" method="post" class="sprint-form" hx-post="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" hx-target="#sprint-dialog-root" hx-swap="innerHTML" @submit="$el.querySelector('[type=submit]').disabled = true">
     <h2 id="sprint-close-heading" tabindex="-1" autofocus>Close {{ sprint.name }}?</h2>
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
     <p>{{ completed_points }} completed points · {{ unfinished_count }} unfinished tickets</p>
