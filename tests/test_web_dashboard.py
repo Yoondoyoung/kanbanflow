@@ -40,9 +40,10 @@ def test_project_dialog_uses_native_focus_management(client, make_user, login_as
     page = client.get("/dashboard")
 
     assert '<dialog id="project-dialog"' in page.text
-    assert 'x-ref="project-dialog-opener"' in page.text
-    assert 'x-ref="project-dialog"' in page.text
-    assert 'x-ref="project-name"' in page.text
+    assert 'x-ref="projectDialogOpener"' in page.text
+    assert 'x-ref="projectDialog"' in page.text
+    assert 'x-ref="projectName"' in page.text
+    assert 'x-ref="project-' not in page.text
     assert "$refs.projectDialog.showModal()" in page.text
     assert "$refs.projectName.focus()" in page.text
     assert '@close="projectDialog = false; $refs.projectDialogOpener.focus()"' in page.text

@@ -4,7 +4,7 @@
 <div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="max-w-3xl mx-auto space-y-6">
   <div class="flex items-center">
     <h1 id="projects-heading" class="text-lg font-semibold">Projects</h1>
-    <button x-ref="project-dialog-opener" class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
+    <button x-ref="projectDialogOpener" class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
             aria-controls="project-dialog" aria-haspopup="dialog"
             @click="projectDialog = true; $refs.projectDialog.showModal(); $nextTick(() => $refs.projectName.focus())">New project</button>
   </div>
@@ -25,7 +25,7 @@
     {% endif %}
   </section>
 
-  <dialog id="project-dialog" x-ref="project-dialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
+  <dialog id="project-dialog" x-ref="projectDialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
           role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading"
           x-init="if (projectDialog) { $el.showModal(); $nextTick(() => $refs.projectName.focus()) }"
           @close="projectDialog = false; $refs.projectDialogOpener.focus()"
@@ -41,7 +41,7 @@
           <label for="project-name" class="block text-sm font-medium mb-1">Project name</label>
           <input
             id="project-name"
-            x-ref="project-name"
+            x-ref="projectName"
             class="w-full border rounded px-3 py-2"
             name="name"
             placeholder="Project name"
