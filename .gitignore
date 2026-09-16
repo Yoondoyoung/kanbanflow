@@ -11,3 +11,4 @@ __pycache__/
 # SDD workspace (git-ignored scratch)
 .superpowers/
 .serena/
+.worktrees/
