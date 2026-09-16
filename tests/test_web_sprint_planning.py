@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
 from app.models import Sprint, SprintStatus, Ticket
+from app.routers import web_sprints
 
 
 @pytest.fixture
@@ -110,6 +111,28 @@ def test_second_planning_sprint_returns_backlog_conflict(client, backlog_world, 
     assert "A planning sprint already exists" in response.text
 
 
+def test_invalid_sprint_dates_return_a_stable_form_error(client, make_user, make_project, login_as):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    response = client.post(
+        f"/projects/{project.slug}/sprints",
+        data={
+            "name": "Sprint 1",
+            "goal": "Ship it",
+            "start_date": "2026-09-28",
+            "end_date": "2026-09-21",
+            "_csrf": make_csrf_token(owner.id),
+        },
+    )
+
+    assert response.status_code == 422
+    assert "end_date must be after start_date" in response.text
+    for value in ("Sprint 1", "Ship it", "2026-09-28", "2026-09-21"):
+        assert value in response.text
+
+
 def test_owner_assigns_multiple_unassigned_tickets_to_planning_sprint(
     client, backlog_world, engine, login_as
 ):
@@ -140,6 +163,42 @@ def test_owner_assigns_multiple_unassigned_tickets_to_planning_sprint(
             select(Ticket).where(Ticket.id.in_([backlog_world.unassigned.id, another.id]))
         ).all()
     assert {ticket.sprint_id for ticket in tickets} == {backlog_world.sprint.id}
+
+
+def test_assignment_rolls_back_after_a_partial_update(
+    client, backlog_world, engine, login_as, monkeypatch
+):
+    original_update_ticket = web_sprints.update_ticket
+
+    def fail_after_first_update(*args, **kwargs):
+        original_update_ticket(*args, **kwargs)
+        args[0].flush()
+        raise RuntimeError("injected failure")
+
+    monkeypatch.setattr(web_sprints, "update_ticket", fail_after_first_update)
+    login_as(backlog_world.owner.email)
+
+    with pytest.raises(RuntimeError, match="injected failure"):
+        client.post(
+            f"/projects/{backlog_world.project.slug}/sprints/{backlog_world.sprint.id}/tickets",
+            data={
+                "ticket_ids": backlog_world.unassigned.id,
+                "_csrf": make_csrf_token(backlog_world.owner.id),
+            },
+        )
+
+    with Session(engine) as session:
+        ticket = session.get(Ticket, backlog_world.unassigned.id)
+    assert ticket.sprint_id is None
+    assert ticket.first_sprint_entered_at is None
+
+
+def test_backlog_nav_marks_the_backlog_tab_current(client, backlog_world, login_as):
+    login_as(backlog_world.owner.email)
+
+    page = client.get(f"/projects/{backlog_world.project.slug}/backlog")
+
+    assert f'href="/projects/{backlog_world.project.slug}/backlog" aria-current="page"' in page.text
 
 
 def test_member_cannot_create_or_assign_sprints(client, backlog_world, add_member, login_as):

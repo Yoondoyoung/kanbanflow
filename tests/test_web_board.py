@@ -241,6 +241,14 @@ def test_sprint_actions_are_owner_only(
     assert 'data-testid="owner-sprint-actions"' not in member_page
 
 
+def test_board_nav_marks_the_board_tab_current(client, active_sprint_world, login_as):
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{active_sprint_world.project.slug}")
+
+    assert f'href="/projects/{active_sprint_world.project.slug}" aria-current="page"' in page.text
+
+
 def test_board_css_keeps_columns_horizontally_scrollable_on_mobile():
     stylesheet = Path("app/static/app.css").read_text()
 

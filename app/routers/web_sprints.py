@@ -41,6 +41,7 @@ def _backlog(
             "user": user,
             "project": project,
             "role": member.role.value,
+            "active_tab": "backlog",
             "planning_sprint": planning_sprint,
             "tickets": tickets,
             "values": {},
@@ -81,7 +82,9 @@ def create_sprint_form(
         sprint_data = SprintCreate(**values)
         create_sprint(session, project, **sprint_data.model_dump())
     except ValidationError as exc:
-        field_errors = {error["loc"][-1]: error["msg"] for error in exc.errors()}
+        field_errors = {
+            error["loc"][-1] if error["loc"] else "form": error["msg"] for error in exc.errors()
+        }
         return _backlog(
             request,
             session,
@@ -136,8 +139,13 @@ def assign_tickets_to_planning_sprint(
     ).all()
     if len(tickets) != len(set(ticket_ids)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
-    for ticket in tickets:
-        update_ticket(session, ticket, project, sprint_id=sprint.id)
+    try:
+        for ticket in tickets:
+            update_ticket(session, ticket, project, sprint_id=sprint.id, commit=False)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     return RedirectResponse(
         f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
     )

@@ -403,7 +403,9 @@ def create_ticket(
     return ticket
 
 
-def update_ticket(session: Session, ticket: Ticket, project: Project, **changes) -> Ticket:
+def update_ticket(
+    session: Session, ticket: Ticket, project: Project, *, commit: bool = True, **changes
+) -> Ticket:
     for field, value in changes.items():
         if value is None and field not in NULLABLE_TICKET_FIELDS:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{field} may not be null")
@@ -422,8 +424,9 @@ def update_ticket(session: Session, ticket: Ticket, project: Project, **changes)
     for field, value in changes.items():
         setattr(ticket, field, value)
     session.add(ticket)
-    session.commit()
-    session.refresh(ticket)
+    if commit:
+        session.commit()
+        session.refresh(ticket)
     return ticket
 
 

@@ -309,6 +309,7 @@ def board(
             "user": user,
             "project": project,
             "role": member.role.value,
+            "active_tab": "board",
             "sprint": sprint,
             "columns": COLUMNS,
             "tickets_by_status": tickets_by_status,
