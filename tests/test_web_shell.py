@@ -28,3 +28,13 @@ def test_mobile_drawer_is_inert_only_while_closed(client, make_user, login_as):
     assert ':aria-hidden="(isMobile && !navOpen).toString()"' in page.text
     assert '@keydown.escape.window="navOpen = false"' in page.text
     assert '@click="navOpen = !navOpen"' in page.text
+
+
+def test_backdrop_hides_and_drawer_closes_when_resized_to_desktop(client, make_user, login_as):
+    owner = make_user(email="ada@example.com")
+    login_as(owner.email)
+
+    page = client.get("/dashboard")
+
+    assert 'x-show="navOpen && isMobile"' in page.text
+    assert "if (!event.matches) navOpen = false" in page.text
