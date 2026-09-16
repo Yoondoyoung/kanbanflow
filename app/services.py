@@ -3,8 +3,8 @@ import re
 from datetime import date
 
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import text, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
 from app.auth import hash_password
@@ -35,6 +35,7 @@ _EMAIL_TAKEN = "Email already registered"
 _PLANNING_SPRINT_EXISTS = "A planning sprint already exists"
 _ACTIVE_SPRINT_EXISTS = "An active sprint already exists"
 _SPRINT_UPDATE_CONFLICT = "Sprint update conflict"
+_SPRINT_CLOSE_CONFLICT = "Sprint close conflict"
 
 
 def slugify(name: str) -> str:
@@ -201,15 +202,28 @@ def start_sprint(session: Session, sprint: Sprint) -> Sprint:
 
 
 def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprint:
-    if sprint.status is not SprintStatus.ACTIVE:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be active")
-    if next_sprint.project_id != sprint.project_id:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must belong to the same project")
-    if next_sprint.status is not SprintStatus.PLANNING:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must be planning")
-
-    tickets = session.exec(select(Ticket).where(Ticket.sprint_id == sprint.id)).all()
     try:
+        sprint = session.get(Sprint, sprint.id, populate_existing=True)
+        next_sprint = session.get(Sprint, next_sprint.id, populate_existing=True)
+        if sprint is None or sprint.status is not SprintStatus.ACTIVE:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be active")
+        if next_sprint is None or next_sprint.project_id != sprint.project_id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Next sprint must belong to the same project"
+            )
+        if next_sprint.status is not SprintStatus.PLANNING:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must be planning")
+
+        claim = session.exec(
+            update(Sprint)
+            .where(Sprint.id == sprint.id, Sprint.status == SprintStatus.ACTIVE)
+            .values(status=SprintStatus.CLOSED, closed_at=utcnow())
+        )
+        if claim.rowcount != 1:
+            session.rollback()
+            raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be active")
+
+        tickets = session.exec(select(Ticket).where(Ticket.sprint_id == sprint.id)).all()
         completed_points = 0
         for ticket in tickets:
             session.add(
@@ -236,10 +250,12 @@ def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprin
             )
 
         sprint.completed_points = completed_points
-        sprint.status = SprintStatus.CLOSED
-        sprint.closed_at = utcnow()
-        session.add(sprint)
         session.commit()
+    except HTTPException:
+        raise
+    except (IntegrityError, OperationalError):
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _SPRINT_CLOSE_CONFLICT) from None
     except Exception:
         session.rollback()
         raise
