@@ -1,9 +1,9 @@
 # Kanban Flow — Slice 1
 
 Engineering workflow tracker: accounts, projects, membership, tickets, a Kanban
-board, and chat notifications on ticket create/done. Built with FastAPI,
-SQLModel, and SQLite. Sprints, velocity, AI reports, GitHub webhooks, and the
-MCP server are **not** part of this slice — see "Out of scope" below.
+board, chat notifications on ticket create/done, and a JSON sprint API. Built
+with FastAPI, SQLModel, and SQLite. Velocity, AI reports, GitHub webhooks, and
+the MCP server are **not** part of this slice — see "Out of scope" below.
 
 ## Prerequisites
 
@@ -76,8 +76,9 @@ Sprints are available through the JSON API. An `OWNER` creates a dated
 `{"status": "ACTIVE"}`, then closes it with
 `POST /api/v1/sprints/{id}/close` and a required `next_sprint_id` for an
 existing `PLANNING` sprint. Closing snapshots the current sprint's tickets,
-rolls unfinished tickets into that explicit next sprint, and leaves the next
-sprint in `PLANNING` until an owner starts it.
+rolls unfinished tickets into that explicit next sprint, transitions the
+current sprint to `CLOSED`, and leaves the next sprint in `PLANNING` until an
+owner starts it.
 
 The available commands are:
 

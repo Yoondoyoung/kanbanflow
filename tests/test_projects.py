@@ -105,6 +105,7 @@ def test_owner_deletes_project_with_sprint_history(
     owner = make_user(email="ada@example.com")
     member = make_user(email="member@example.com")
     project = make_project(owner)
+    other_project = make_project(owner, name="Other")
     add_member(project, member)
     closed = Sprint(
         project_id=project.id,
@@ -150,6 +151,33 @@ def test_owner_deletes_project_with_sprint_history(
             was_completed=True,
         )
     )
+    other_sprint = Sprint(
+        project_id=other_project.id,
+        name="Other closed",
+        goal="Keep",
+        status=SprintStatus.CLOSED,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 8),
+    )
+    session.add(other_sprint)
+    session.flush()
+    other_ticket = Ticket(
+        ticket_number=1,
+        project_id=other_project.id,
+        sprint_id=other_sprint.id,
+        title="Other ticket",
+        creator_id=owner.id,
+    )
+    session.add(other_ticket)
+    session.flush()
+    other_history = SprintTicketHistory(
+        sprint_id=other_sprint.id,
+        ticket_id=other_ticket.id,
+        status_at_close=TicketStatus.DONE,
+        story_points_at_close=5,
+        was_completed=True,
+    )
+    session.add(other_history)
     session.commit()
     project_id = project.id
     closed_id = closed.id
@@ -175,6 +203,10 @@ def test_owner_deletes_project_with_sprint_history(
             ).all()
             == []
         )
+        assert check.get(Project, other_project.id) is not None
+        assert check.get(Ticket, other_ticket.id) is not None
+        assert check.get(Sprint, other_sprint.id) is not None
+        assert check.get(SprintTicketHistory, other_history.id) is not None
 
 
 def test_concurrent_project_creation_race_returns_409_not_500(

@@ -23,7 +23,15 @@ import pytest
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Project, ProjectMember, Sprint, SprintStatus, Ticket
+from app.models import (
+    Project,
+    ProjectMember,
+    Sprint,
+    SprintStatus,
+    SprintTicketHistory,
+    Ticket,
+    TicketStatus,
+)
 
 OWNER_ONLY = "owner_only"
 ANY_MEMBER = "any_member"
@@ -165,15 +173,14 @@ def world(client, session, make_user, make_project, add_member, login_as):
     )
     session.add_all([planning_sprint, active_sprint, next_sprint])
     session.flush()
-    session.add(
-        Ticket(
-            ticket_number=1,
-            project_id=sprint_close_project.id,
-            sprint_id=active_sprint.id,
-            title="Sprint ticket",
-            creator_id=owner.id,
-        )
+    sprint_ticket = Ticket(
+        ticket_number=1,
+        project_id=sprint_close_project.id,
+        sprint_id=active_sprint.id,
+        title="Sprint ticket",
+        creator_id=owner.id,
     )
+    session.add(sprint_ticket)
     session.commit()
     login_as("ada@example.com")
     ticket_id = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "Seed"}).json()[
@@ -189,6 +196,7 @@ def world(client, session, make_user, make_project, add_member, login_as):
         "planning_sprint": planning_sprint,
         "active_sprint": active_sprint,
         "next_sprint": next_sprint,
+        "sprint_ticket": sprint_ticket,
         "owner": owner,
         "member": member,
         "outsider": outsider,
@@ -221,6 +229,15 @@ def snapshot(engine, project_slug, ticket_id):
             else []
         )
         ticket = session.get(Ticket, ticket_id)
+        histories = (
+            session.exec(
+                select(SprintTicketHistory).where(
+                    SprintTicketHistory.sprint_id.in_([sprint.id for sprint in sprints])
+                )
+            ).all()
+            if sprints
+            else []
+        )
         return {
             "project_exists": project is not None,
             "project_name": project.name if project else None,
@@ -228,9 +245,61 @@ def snapshot(engine, project_slug, ticket_id):
             "ticket_title": ticket.title if ticket else None,
             "ticket_status": ticket.status if ticket else None,
             "ticket_sprints": sorted((t.id, t.sprint_id) for t in tickets),
-            "sprints": sorted((s.id, s.status) for s in sprints),
+            "ticket_lifecycle": sorted(
+                (
+                    t.id,
+                    t.status,
+                    t.story_points,
+                    t.sprint_id,
+                    t.first_sprint_entered_at,
+                    t.delayed_days,
+                    t.rollover_count,
+                )
+                for t in tickets
+            ),
+            "sprints": sorted(
+                (s.id, s.status, s.committed_points, s.completed_points, s.closed_at)
+                for s in sprints
+            ),
+            "history": sorted(
+                (
+                    h.id,
+                    h.sprint_id,
+                    h.ticket_id,
+                    h.status_at_close,
+                    h.story_points_at_close,
+                    h.was_completed,
+                    h.recorded_at,
+                )
+                for h in histories
+            ),
             "members": sorted((m.user_id, m.role) for m in members),
         }
+
+
+def test_snapshot_captures_sprint_lifecycle_state(engine, world):
+    state = snapshot(engine, world["sprint_close_project"].slug, world["ticket_id"])
+
+    assert state["sprints"] == sorted(
+        [
+            (world["active_sprint"].id, SprintStatus.ACTIVE, None, None, None),
+            (world["next_sprint"].id, SprintStatus.PLANNING, None, None, None),
+        ]
+    )
+    assert state["ticket_lifecycle"] == sorted(
+        [
+            (
+                world["sprint_ticket"].id,
+                TicketStatus.BACKLOG,
+                None,
+                world["active_sprint"].id,
+                None,
+                None,
+                0,
+            ),
+        ]
+    )
+    assert state["history"] == []
 
 
 def call(client, transport, method, url, kwargs, actor):
