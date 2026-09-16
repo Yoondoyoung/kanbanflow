@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import Priority, Role, TicketStatus, TicketType, WebhookType
+from app.models import Priority, Role, SprintStatus, TicketStatus, TicketType, WebhookType
 from app.services import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
@@ -140,3 +140,66 @@ class TicketPage(BaseModel):
 class StatusUpdate(BaseModel):
     status: TicketStatus
     resolution_notes: str | None = None
+
+
+def _strip_sprint_text(value: str | None) -> str | None:
+    if value is not None:
+        value = value.strip()
+        if not value:
+            raise ValueError("value must not be blank")
+    return value
+
+
+class SprintCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    goal: str = Field(min_length=1, max_length=2000)
+    start_date: date
+    end_date: date
+
+    _strip_text = field_validator("name", "goal")(_strip_sprint_text)
+
+    @model_validator(mode="after")
+    def dates_are_ordered(self):
+        if self.end_date <= self.start_date:
+            raise ValueError("end_date must be after start_date")
+        return self
+
+
+class SprintUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    goal: str | None = Field(default=None, min_length=1, max_length=2000)
+    start_date: date | None = None
+    end_date: date | None = None
+    status: Literal[SprintStatus.ACTIVE] | None = None
+
+    _strip_text = field_validator("name", "goal")(_strip_sprint_text)
+
+
+class SprintClose(BaseModel):
+    next_sprint_id: str
+
+
+class SprintOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    name: str
+    goal: str
+    status: SprintStatus
+    start_date: date
+    end_date: date
+    committed_points: int | None
+    completed_points: int | None
+    closed_at: datetime | None
+
+
+class SprintHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ticket_id: str
+    ticket_number: int
+    title: str
+    status_at_close: TicketStatus
+    story_points_at_close: int | None
+    was_completed: bool
