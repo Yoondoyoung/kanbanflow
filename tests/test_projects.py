@@ -204,6 +204,12 @@ def test_owner_deletes_project_with_sprint_history(
             == []
         )
         assert check.get(Project, other_project.id) is not None
+        assert [
+            (member.user_id, member.role.value)
+            for member in check.exec(
+                select(ProjectMember).where(ProjectMember.project_id == other_project.id)
+            ).all()
+        ] == [(owner.id, "OWNER")]
         assert check.get(Ticket, other_ticket.id) is not None
         assert check.get(Sprint, other_sprint.id) is not None
         assert check.get(SprintTicketHistory, other_history.id) is not None
