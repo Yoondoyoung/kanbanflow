@@ -5,7 +5,16 @@ from sqlmodel import Session, select
 
 from app.auth import current_user, project_owner, project_reader, verify_csrf
 from app.db import get_session
-from app.models import Project, ProjectMember, Sprint, SprintStatus, Ticket, TicketStatus, User
+from app.models import (
+    Project,
+    ProjectMember,
+    Sprint,
+    SprintStatus,
+    SprintTicketHistory,
+    Ticket,
+    TicketStatus,
+    User,
+)
 from app.routers.web import render
 from app.schemas import SprintCreate
 from app.services import close_sprint, create_sprint, start_sprint, update_ticket
@@ -70,6 +79,25 @@ def _project_sprint(session: Session, project: Project, sprint_id: str) -> Sprin
     return sprint
 
 
+def _history_rows(session: Session, sprint_ids: list[str]):
+    if not sprint_ids:
+        return []
+    return session.exec(
+        select(SprintTicketHistory, Ticket)
+        .join(Ticket, Ticket.id == SprintTicketHistory.ticket_id)
+        .where(SprintTicketHistory.sprint_id.in_(sprint_ids))
+        .order_by(Ticket.ticket_number)
+    ).all()
+
+
+def _history_delay_total(sprint: Sprint, rows: list[tuple[SprintTicketHistory, Ticket]]) -> int:
+    return sum(
+        max(0, (sprint.end_date - ticket.first_sprint_entered_at.date()).days)
+        for history, ticket in rows
+        if not history.was_completed and ticket.first_sprint_entered_at
+    )
+
+
 def _close_preview(
     request: Request,
     session: Session,
@@ -116,6 +144,76 @@ def backlog(
 ) -> Response:
     project, member = access
     return _backlog(request, session, user, project, member)
+
+
+@router.get("/projects/{slug}/sprints")
+def sprint_history(
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_reader),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    sprints = session.exec(
+        select(Sprint)
+        .where(Sprint.project_id == project.id, Sprint.status == SprintStatus.CLOSED)
+        .order_by(Sprint.closed_at.desc(), Sprint.end_date.desc())
+    ).all()
+    rows_by_sprint = {sprint.id: [] for sprint in sprints}
+    for history, ticket in _history_rows(session, [sprint.id for sprint in sprints]):
+        rows_by_sprint[history.sprint_id].append((history, ticket))
+    summaries = [
+        {
+            "sprint": sprint,
+            "rollover_count": sum(
+                not history.was_completed for history, _ in rows_by_sprint[sprint.id]
+            ),
+            "delay_total": _history_delay_total(sprint, rows_by_sprint[sprint.id]),
+        }
+        for sprint in sprints
+    ]
+    return render(
+        request,
+        "sprint_history.html",
+        {
+            "user": user,
+            "project": project,
+            "role": member.role.value,
+            "active_tab": "history",
+            "summaries": summaries,
+        },
+        session=session,
+    )
+
+
+@router.get("/projects/{slug}/sprints/{sprint_id}")
+def sprint_history_detail(
+    sprint_id: str,
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_reader),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    sprint = _project_sprint(session, project, sprint_id)
+    if sprint.status != SprintStatus.CLOSED:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sprint not found")
+    rows = _history_rows(session, [sprint.id])
+    return render(
+        request,
+        "sprint_history_detail.html",
+        {
+            "user": user,
+            "project": project,
+            "role": member.role.value,
+            "active_tab": "history",
+            "sprint": sprint,
+            "history": rows,
+            "rollover_count": sum(not entry.was_completed for entry, _ in rows),
+            "delay_total": _history_delay_total(sprint, rows),
+        },
+        session=session,
+    )
 
 
 @router.post("/projects/{slug}/sprints", dependencies=[Depends(verify_csrf)])

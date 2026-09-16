@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ sprint.name }} · {{ project.name }} · Kanban Flow{% endblock %}
+
+{% block content %}
+<div class="project-board">
+  <header class="project-header">
+    <div>
+      <h1 class="project-title">{{ sprint.name }}</h1>
+      <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
+      <p class="sprint-meta">Committed: {{ sprint.committed_points or 0 }} pts · Completed: {{ sprint.completed_points or 0 }} pts · Rollover: {{ rollover_count }} · Delayed: {{ delay_total }} days</p>
+    </div>
+  </header>
+
+  {% include "partials/project_nav.html" %}
+
+  <section class="backlog-list" aria-labelledby="history-tickets-heading">
+    <h2 id="history-tickets-heading">Tickets at close</h2>
+    {% for entry, ticket in history %}
+    <article class="backlog-ticket">
+      <a href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}">#{{ ticket.ticket_number }} {{ ticket.title }}</a>
+      <p>{{ entry.status_at_close.value|replace('_', ' ')|capitalize }} · {{ entry.story_points_at_close or 0 }} pts at close · {% if entry.was_completed %}Completed{% else %}Rollover{% endif %}</p>
+    </article>
+    {% else %}
+    <p class="sprint-meta">No tickets at close.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

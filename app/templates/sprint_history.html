@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} Sprint History · Kanban Flow{% endblock %}
+
+{% block content %}
+<div class="project-board">
+  <header class="project-header">
+    <div>
+      <h1 class="project-title">{{ project.name }}</h1>
+      <p class="sprint-meta">Sprint History</p>
+    </div>
+  </header>
+
+  {% include "partials/project_nav.html" %}
+
+  <section class="backlog-list" aria-labelledby="history-heading">
+    <h2 id="history-heading">Closed sprints</h2>
+    {% for summary in summaries %}
+    <article class="backlog-ticket">
+      <a href="/projects/{{ project.slug }}/sprints/{{ summary.sprint.id }}">{{ summary.sprint.name }}</a>
+      <p>{{ summary.sprint.start_date.strftime('%b %-d') }} – {{ summary.sprint.end_date.strftime('%b %-d, %Y') }}{% if summary.sprint.goal %} · {{ summary.sprint.goal }}{% endif %}</p>
+      <p>Committed: {{ summary.sprint.committed_points or 0 }} pts · Completed: {{ summary.sprint.completed_points or 0 }} pts · Rollover: {{ summary.rollover_count }} · Delayed: {{ summary.delay_total }} days</p>
+    </article>
+    {% else %}
+    <p class="sprint-meta">No closed sprints.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
