@@ -1,13 +1,40 @@
-from sqlmodel import select
+from datetime import date
+
+import pytest
+from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Ticket, TicketStatus
+from app.models import Sprint, SprintStatus, Ticket, TicketStatus
 
 
-def make_ticket(client, project, owner):
+@pytest.fixture
+def active_sprint(make_user, make_project, engine):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with Session(engine) as session:
+        sprint = Sprint(
+            project_id=project.id,
+            name="Sprint 1",
+            goal="Ship it",
+            status=SprintStatus.ACTIVE,
+            start_date=date(2026, 9, 21),
+            end_date=date(2026, 9, 28),
+        )
+        session.add(sprint)
+        session.commit()
+        session.refresh(sprint)
+    return owner, project, sprint
+
+
+def make_ticket(client, project, owner, sprint_id=None):
     return client.post(
         f"/projects/{project.slug}/tickets",
-        data={"title": "T", "type": "TASK", "_csrf": make_csrf_token(owner.id)},
+        data={
+            "title": "T",
+            "type": "TASK",
+            "sprint_id": sprint_id,
+            "_csrf": make_csrf_token(owner.id),
+        },
     )
 
 
@@ -17,11 +44,10 @@ def ticket_by_number(session, project, ticket_number):
     ).first()
 
 
-def test_dropdown_moves_the_card_and_returns_a_fragment(client, make_user, make_project, login_as):
-    owner = make_user(email="ada@example.com")
-    project = make_project(owner)
+def test_dropdown_moves_the_card_and_returns_a_fragment(client, active_sprint, login_as):
+    owner, project, sprint = active_sprint
     login_as("ada@example.com")
-    make_ticket(client, project, owner)
+    make_ticket(client, project, owner, sprint.id)
     response = client.post(
         f"/projects/{project.slug}/tickets/1/status",
         data={"status": "IN_PROGRESS", "_csrf": make_csrf_token(owner.id)},

@@ -42,3 +42,31 @@ body { margin: 0; background: var(--canvas); color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+
+.project-board { max-width: 1440px; }
+.project-header { align-items: start; display: flex; gap: 20px; justify-content: space-between; margin-bottom: 16px; }
+.project-title, .sprint-title, .sprint-meta { margin: 0; }
+.project-title { font-size: 22px; font-weight: 650; }
+.sprint-title { font-size: 15px; font-weight: 600; margin-top: 6px; }
+.sprint-status { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.sprint-meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.project-actions, .board-filters, .project-tabs { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.app-primary-button, .app-secondary-button { border-radius: 6px; cursor: pointer; font: inherit; font-size: 14px; padding: 7px 10px; text-decoration: none; }
+.app-primary-button { background: var(--text); border: 1px solid var(--text); color: var(--surface); }
+.app-secondary-button { background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+.project-tabs { border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.project-tab { color: var(--muted); font-size: 14px; padding: 8px 10px; text-decoration: none; }
+.project-tab.is-active { border-bottom: 2px solid var(--text); color: var(--text); font-weight: 600; }
+.board-filters { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 14px; margin-bottom: 16px; padding: 10px; }
+.board-filters select { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--text); padding: 5px; }
+.board-scroll { overflow-x: auto; padding-bottom: 8px; }
+.board-columns { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(240px, 1fr)); min-width: 1000px; }
+.board-column { background: #efefed; border-radius: 8px; padding: 10px; }
+.board-column h2 { align-items: center; color: var(--muted); display: flex; font-size: 12px; justify-content: space-between; letter-spacing: .03em; margin: 0 0 8px; text-transform: uppercase; }
+.board-column h2 span { background: var(--surface); border-radius: 99px; color: var(--text); font-size: 11px; padding: 2px 6px; }
+.board-truncated { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+
+@media (max-width: 767px) {
+  .project-header { align-items: stretch; flex-direction: column; }
+  .project-actions { justify-content: space-between; }
+}

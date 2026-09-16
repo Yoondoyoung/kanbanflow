@@ -4,8 +4,8 @@
     <span class="font-medium">{{ ticket.title }}</span>
   </div>
   <div class="mt-1 flex gap-2 text-xs text-slate-500">
-    <span>{{ ticket.type.value }}</span>
-    <span>{{ ticket.priority.value }}</span>
+    <span>{{ ticket.type.value|replace('_', ' ')|capitalize }}</span>
+    <span>{{ ticket.priority.value|capitalize }}</span>
     {% if ticket.story_points %}<span>{{ ticket.story_points }} pts</span>{% endif %}
   </div>
   {% if ticket.description %}
@@ -21,7 +21,7 @@
             onchange="this.form.requestSubmit()">
       {% for column in columns %}
         <option value="{{ column.value }}" {% if column == ticket.status %}selected{% endif %}>
-          {{ column.value }}
+      {{ column.value|replace('_', ' ')|capitalize }}
         </option>
       {% endfor %}
     </select>

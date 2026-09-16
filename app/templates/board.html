@@ -1,27 +1,71 @@
 {% extends "base.html" %}
-{% block title %}{{ project.name }}{% endblock %}
-{% block content %}
-<div x-data="{ modal: false }">
-  <div class="flex items-center mb-4">
-    <h1 class="text-lg font-semibold">{{ project.name }}</h1>
-    <button class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm"
-            @click="modal = true">+ New Ticket</button>
-  </div>
 
-  <div class="grid grid-cols-4 gap-4">
-    {% for column in columns %}
-      <section class="bg-slate-100 rounded p-2" aria-labelledby="column-{{ column.value }}-heading">
-        <h2 id="column-{{ column.value }}-heading" class="text-xs font-semibold uppercase text-slate-600 mb-2">{{ column.value }}</h2>
+{% block title %}{{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="project-board" x-data="{ modal: false }">
+  <header class="project-header">
+    <div>
+      <h1 class="project-title">{{ project.name }}</h1>
+      <p class="sprint-title">{{ sprint.name }} <span class="sprint-status">{{ sprint.status.value|capitalize }}</span></p>
+      <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
+    </div>
+    <div class="project-actions">
+      <button class="app-primary-button" @click="modal = true">New ticket</button>
+      {% if role == 'OWNER' %}
+      <a class="app-secondary-button" data-testid="owner-sprint-actions" href="/projects/{{ project.slug }}/backlog">Plan sprint</a>
+      {% endif %}
+    </div>
+  </header>
+
+  {% set active_tab = 'board' %}
+  {% include "partials/project_nav.html" %}
+
+  <form class="board-filters" method="get" aria-label="Board filters">
+    <label><input type="checkbox" name="mine" value="1"{% if mine %} checked{% endif %}> My tickets</label>
+    <label for="assignee-filter">Assignee</label>
+    <select id="assignee-filter" name="assignee_id">
+      <option value="">Anyone</option>
+      {% for member_user in members %}
+      <option value="{{ member_user.id }}"{% if assignee_id == member_user.id %} selected{% endif %}>{{ member_user.name }}</option>
+      {% endfor %}
+    </select>
+    <label for="type-filter">Type</label>
+    <select id="type-filter" name="type">
+      <option value="">All types</option>
+      {% for ticket_type in ticket_types %}
+      <option value="{{ ticket_type.value }}"{% if type_filter == ticket_type %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <label for="priority-filter">Priority</label>
+    <select id="priority-filter" name="priority">
+      <option value="">All priorities</option>
+      {% for ticket_priority in priorities %}
+      <option value="{{ ticket_priority.value }}"{% if priority_filter == ticket_priority %} selected{% endif %}>{{ ticket_priority.value|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <button class="app-secondary-button" type="submit">Filter</button>
+  </form>
+
+  <div class="board-scroll" aria-label="Board columns" tabindex="0">
+    <div class="board-columns">
+      {% for column in columns %}
+      <section class="board-column" aria-labelledby="column-{{ column.value }}-heading">
+        <h2 id="column-{{ column.value }}-heading">
+          {{ column.value|replace('_', ' ')|capitalize }}
+          <span data-testid="column-count-{{ column.value }}">{{ tickets_by_status[column.value]|length }}{% if column.value in truncated_columns %}+{% endif %}</span>
+        </h2>
         <div id="column-{{ column.value }}">
           {% for ticket in tickets_by_status[column.value] %}
             {% include "partials/ticket_card.html" %}
           {% endfor %}
           {% if column.value in truncated_columns %}
-            <p class="mt-2 text-xs text-slate-600">Showing the first 200 tickets.</p>
+          <p class="board-truncated">Showing the first 200 tickets.</p>
           {% endif %}
         </div>
       </section>
-    {% endfor %}
+      {% endfor %}
+    </div>
   </div>
 
   {% include "partials/ticket_modal.html" %}

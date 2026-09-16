@@ -1,16 +1,40 @@
 import re
+from datetime import date
+
+import pytest
+from sqlmodel import Session
 
 from app.auth import make_csrf_token
+from app.models import Sprint, SprintStatus
 
 
-def test_modal_targets_the_backlog_column(client, make_user, make_project, login_as):
+@pytest.fixture
+def active_sprint(make_user, make_project, engine):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
+    with Session(engine) as session:
+        sprint = Sprint(
+            project_id=project.id,
+            name="Sprint 1",
+            goal="Ship it",
+            status=SprintStatus.ACTIVE,
+            start_date=date(2026, 9, 21),
+            end_date=date(2026, 9, 28),
+        )
+        session.add(sprint)
+        session.commit()
+        session.refresh(sprint)
+    return owner, project, sprint
+
+
+def test_modal_targets_the_backlog_column(client, active_sprint, login_as):
+    owner, project, sprint = active_sprint
     login_as("ada@example.com")
     page = client.get(f"/projects/{project.slug}").text
     assert 'hx-target="#column-BACKLOG"' in page
     assert 'hx-swap="afterbegin"' in page
     assert f'hx-post="/projects/{project.slug}/tickets"' in page
+    assert f'name="sprint_id" value="{sprint.id}"' in page
 
 
 def test_submitting_the_modal_returns_a_card_fragment(client, make_user, make_project, login_as):
@@ -33,13 +57,17 @@ def test_submitting_the_modal_returns_a_card_fragment(client, make_user, make_pr
     assert "#1" in response.text
 
 
-def test_the_created_ticket_appears_on_the_board(client, make_user, make_project, login_as):
-    owner = make_user(email="ada@example.com")
-    project = make_project(owner)
+def test_the_created_ticket_appears_on_the_board(client, active_sprint, login_as):
+    owner, project, sprint = active_sprint
     login_as("ada@example.com")
     client.post(
         f"/projects/{project.slug}/tickets",
-        data={"title": "Visible later", "type": "TASK", "_csrf": make_csrf_token(owner.id)},
+        data={
+            "title": "Visible later",
+            "type": "TASK",
+            "sprint_id": sprint.id,
+            "_csrf": make_csrf_token(owner.id),
+        },
     )
     page = client.get(f"/projects/{project.slug}").text
     backlog = page.split('id="column-BACKLOG"')[1].split("</section>")[0]
@@ -111,10 +139,9 @@ def test_tampered_csrf_is_403_and_creates_nothing(client, make_user, make_projec
     assert "Bad token" not in page
 
 
-def test_five_interactions_or_fewer(client, make_user, make_project, login_as):
+def test_five_interactions_or_fewer(client, active_sprint, login_as):
     """Open modal, title, type, description, submit — the form must ask for nothing else."""
-    owner = make_user(email="ada@example.com")
-    project = make_project(owner)
+    owner, project, _ = active_sprint
     login_as("ada@example.com")
     page = client.get(f"/projects/{project.slug}").text
     modal = page.split('id="ticket-modal"')[1].split("</form>")[0]

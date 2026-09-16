@@ -4,6 +4,7 @@ from fastapi import (
     Depends,
     Form,
     HTTPException,
+    Query,
     Request,
     Response,
     status,
@@ -24,7 +25,17 @@ from app.auth import (
     verify_password,
 )
 from app.db import get_session
-from app.models import Priority, Project, ProjectMember, Ticket, TicketStatus, TicketType, User
+from app.models import (
+    Priority,
+    Project,
+    ProjectMember,
+    Sprint,
+    SprintStatus,
+    Ticket,
+    TicketStatus,
+    TicketType,
+    User,
+)
 from app.routers.api_auth import _set_session
 from app.services import create_project, create_ticket, register_user, set_status
 
@@ -45,6 +56,7 @@ _email_adapter = TypeAdapter(EmailStr)
 # Hoisted so `Form(...)` isn't called in an argument default (ruff B008).
 _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 _STATUS_FORM_FIELD = Form(..., alias="status")
+_TYPE_FILTER_QUERY = Query(None, alias="type")
 
 
 def render(
@@ -231,6 +243,10 @@ def board(
     request: Request,
     user: User | None = Depends(optional_user),
     session: Session = Depends(get_session),
+    mine: bool = False,
+    assignee_id: str | None = None,
+    type_filter: TicketType | None = _TYPE_FILTER_QUERY,
+    priority: Priority | None = None,
 ) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -239,12 +255,41 @@ def board(
     project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+
+    sprint = session.exec(
+        select(Sprint).where(
+            Sprint.project_id == project.id,
+            Sprint.status == SprintStatus.ACTIVE,
+        )
+    ).first()
+    if sprint is None:
+        sprint = session.exec(
+            select(Sprint).where(
+                Sprint.project_id == project.id,
+                Sprint.status == SprintStatus.PLANNING,
+            )
+        ).first()
+    if sprint is None:
+        return RedirectResponse(
+            f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    filters = [Ticket.project_id == project.id, Ticket.sprint_id == sprint.id]
+    if mine:
+        filters.append(Ticket.assignee_id == user.id)
+    if assignee_id:
+        filters.append(Ticket.assignee_id == assignee_id)
+    if type_filter:
+        filters.append(Ticket.type == type_filter)
+    if priority:
+        filters.append(Ticket.priority == priority)
+
     tickets_by_status = {}
     truncated_columns = set()
     for column in COLUMNS:
         tickets = session.exec(
             select(Ticket)
-            .where(Ticket.project_id == project.id, Ticket.status == column)
+            .where(*filters, Ticket.status == column)
             .order_by(Ticket.ticket_number.desc())
             .limit(BOARD_TICKETS_PER_COLUMN + 1)
         ).all()
@@ -258,9 +303,22 @@ def board(
             "user": user,
             "project": project,
             "role": member.role.value,
+            "sprint": sprint,
             "columns": COLUMNS,
             "tickets_by_status": tickets_by_status,
             "truncated_columns": truncated_columns,
+            "mine": mine,
+            "assignee_id": assignee_id,
+            "type_filter": type_filter,
+            "priority_filter": priority,
+            "ticket_types": TicketType,
+            "priorities": Priority,
+            "members": session.exec(
+                select(User)
+                .join(ProjectMember, ProjectMember.user_id == User.id)
+                .where(ProjectMember.project_id == project.id)
+                .order_by(User.name)
+            ).all(),
         },
         session=session,
     )
@@ -273,6 +331,7 @@ def create_ticket_form(
     title: str = Form(...),
     type: TicketType = _DEFAULT_TICKET_TYPE,
     description: str = Form(""),
+    sprint_id: str | None = Form(None),
     project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -291,6 +350,7 @@ def create_ticket_form(
             description=description,
             type=type,
             priority=Priority.MEDIUM,
+            sprint_id=sprint_id,
             tasks=tasks,
         )
     except HTTPException as exc:
