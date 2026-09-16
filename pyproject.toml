@@ -3,9 +3,7 @@ name = "kanbanflow"
 version = "0.1.0"
 description = "Kanban Flow: a FastAPI + SQLite Kanban tracker (CS 482)"
 readme = "README.md"
-authors = [
-    { name = "Yoondoyoung", email = "qkzld13@gmail.com" }
-]
+authors = [{ name = "Yoondoyoung" }]
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.20.0",

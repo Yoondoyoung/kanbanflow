@@ -6,7 +6,6 @@ from starlette.requests import Request
 from app.auth import SESSION_COOKIE, current_user, hash_password, make_session_cookie, optional_user
 from app.config import settings
 from app.models import User
-from app.routers import api_auth
 
 
 def test_register_sets_a_session_cookie(client):
@@ -107,7 +106,7 @@ def test_concurrent_registration_race_returns_409_not_500(client, engine, monkey
             racer_session.commit()
         return hash_password(password)
 
-    monkeypatch.setattr(api_auth, "hash_password", hash_password_and_insert_racer)
+    monkeypatch.setattr("app.services.hash_password", hash_password_and_insert_racer)
 
     response = client.post(
         "/api/v1/auth/register",

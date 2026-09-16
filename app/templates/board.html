@@ -16,6 +16,9 @@
           {% for ticket in tickets_by_status[column.value] %}
             {% include "partials/ticket_card.html" %}
           {% endfor %}
+          {% if column.value in truncated_columns %}
+            <p class="mt-2 text-xs text-slate-600">Showing the first 200 tickets.</p>
+          {% endif %}
         </div>
       </section>
     {% endfor %}

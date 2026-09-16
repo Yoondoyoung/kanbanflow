@@ -1,5 +1,8 @@
-from app.auth import SESSION_COOKIE
+from sqlmodel import select
+
+from app.auth import SESSION_COOKIE, make_csrf_token
 from app.main import templates
+from app.models import User
 
 
 def test_login_page_renders(client):
@@ -76,6 +79,32 @@ def test_register_rejects_a_malformed_email(client):
     assert "valid email" in response.text.lower()
 
 
+def test_register_strips_and_validates_name(client, session):
+    response = client.post(
+        "/register",
+        data={"name": "  Ada  ", "email": "ada@example.com", "password": "hunter22"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert session.exec(select(User).where(User.email == "ada@example.com")).one().name == "Ada"
+
+    response = client.post(
+        "/register",
+        data={"name": "   ", "email": "grace@example.com", "password": "hunter22"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "blank" in response.text.lower()
+
+    response = client.post(
+        "/register",
+        data={"name": "a" * 51, "email": "lin@example.com", "password": "hunter22"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 422
+    assert "50 characters" in response.text
+
+
 def test_overlong_password_rerenders_with_an_error_instead_of_crashing(client):
     # bcrypt (via hash_password) raises ValueError past 72 UTF-8 bytes. The JSON route is
     # protected by RegisterRequest's validator; this form-based route has no schema in front
@@ -112,16 +141,27 @@ def test_logged_in_user_visiting_register_is_redirected_to_dashboard(client, mak
 
 
 def test_logout_clears_the_session_cookie(client, make_user, login_as):
-    make_user(email="ada@example.com")
+    user = make_user(email="ada@example.com")
     login_as("ada@example.com")
     assert client.cookies.get(SESSION_COOKIE) is not None
 
-    response = client.post("/logout", follow_redirects=False)
+    response = client.post(
+        "/logout", data={"_csrf": make_csrf_token(user.id)}, follow_redirects=False
+    )
 
     assert response.status_code == 303
     assert response.headers["location"] == "/login"
     # httpx's cookie jar drops a cookie whose Set-Cookie response has already expired.
     assert client.cookies.get(SESSION_COOKIE) is None
+
+
+def test_logout_rejects_a_missing_csrf_token(client, make_user, login_as):
+    make_user(email="ada@example.com")
+    login_as("ada@example.com")
+
+    response = client.post("/logout", follow_redirects=False)
+
+    assert response.status_code == 403
 
 
 def test_markdown_filter_is_registered_on_the_templates_environment_and_renders():

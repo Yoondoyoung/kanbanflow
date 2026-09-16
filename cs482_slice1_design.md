@@ -191,7 +191,7 @@ Tests run against a **file-backed** SQLite database in `tmp_path`. An in-memory 
 | Description containing `<script>` and `<img onerror=...>`, rendered on the board | V-9, FR-11 | Rendered as inert text; no execution |
 | Duplicate-email registration; successful login | FR-01 | `409`; session cookie issued |
 | `meta` above 8 KB; `meta` nested 4 levels | FR-03 | `422` in both cases |
-| Board query over a seeded 5,000-ticket project | V-2 | Measured p95 0.35 ms (min 0.30 ms, median 0.31 ms, 50 runs) on a MacBook Air (Apple M1, macOS 15.7.3) — well under the 20 ms budget |
+| Board query and render over a seeded 5,000-ticket project | V-2 | Capped board queries (four status queries, 201 rows each) measured p95 4.40 ms (min 4.14 ms, median 4.18 ms, 50 runs), under the 20 ms query budget. The capped board response measured p95 157.97 ms (min 132.81 ms, median 155.91 ms, 20 runs) and 1.24 MB of HTML. |
 
 V-2's figure is recorded rather than assumed, and replaces the unmeasured read-latency claim in `cs482_workflow.md` §2.
 

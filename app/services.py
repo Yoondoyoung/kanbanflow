@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app.auth import hash_password
 from app.models import (
     Priority,
     Project,
@@ -25,6 +26,8 @@ TITLE_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 20_000
 VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
 NAME_MAX_LENGTH = 100
+USER_NAME_MAX_LENGTH = 50
+_EMAIL_TAKEN = "Email already registered"
 
 
 def slugify(name: str) -> str:
@@ -33,6 +36,37 @@ def slugify(name: str) -> str:
 
 def _slug_conflict_detail(slug: str) -> str:
     return f"Slug already taken: {slug}"
+
+
+def register_user(session: Session, *, name: str, email: str, password: str) -> User:
+    # Both registration routes use this service because the HTML form has no
+    # Pydantic model in front of it. Keep the database-facing validation and
+    # duplicate-email race handling in one place.
+    clean_name = name.strip()
+    if not clean_name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "name must not be blank")
+    if len(clean_name) > USER_NAME_MAX_LENGTH:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"name must be at most {USER_NAME_MAX_LENGTH} characters",
+        )
+    normalized_email = email.lower()
+    if session.exec(select(User).where(User.email == normalized_email)).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, _EMAIL_TAKEN)
+    user = User(
+        name=clean_name,
+        email=normalized_email,
+        password_hash=hash_password(password),
+    )
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError:
+        # The unique constraint resolves a concurrent check-then-insert race.
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _EMAIL_TAKEN) from None
+    session.refresh(user)
+    return user
 
 
 def create_project(session: Session, name: str, user: User) -> Project:

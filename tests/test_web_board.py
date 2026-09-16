@@ -1,3 +1,8 @@
+from sqlmodel import Session
+
+from app.models import Ticket, TicketStatus, TicketType
+
+
 def test_board_renders_four_fixed_columns(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
@@ -68,6 +73,34 @@ def test_empty_project_renders_four_empty_columns(client, make_user, make_projec
     assert response.status_code == 200
     for column in ["BACKLOG", "SELECTED", "IN_PROGRESS", "DONE"]:
         assert f'id="column-{column}"' in response.text
+
+
+def test_board_caps_each_column_and_shows_a_truncation_notice(
+    client, engine, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Ticket(
+                    ticket_number=n,
+                    project_id=project.id,
+                    title=f"Ticket {n}",
+                    type=TicketType.TASK,
+                    status=TicketStatus.BACKLOG,
+                    creator_id=owner.id,
+                )
+                for n in range(1, 202)
+            ]
+        )
+        session.commit()
+    login_as("ada@example.com")
+
+    page = client.get(f"/projects/{project.slug}").text
+
+    assert page.count('<article id="ticket-') == 200
+    assert "Showing the first 200 tickets." in page
 
 
 def test_ticket_card_partial_renders_standalone():

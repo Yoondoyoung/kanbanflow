@@ -16,7 +16,6 @@ from app.auth import (
     DUMMY_HASH,
     SESSION_COOKIE,
     current_user,
-    hash_password,
     load_project_and_membership,
     make_csrf_token,
     optional_user,
@@ -27,7 +26,7 @@ from app.auth import (
 from app.db import get_session
 from app.models import Priority, Project, ProjectMember, Ticket, TicketStatus, TicketType, User
 from app.routers.api_auth import _set_session
-from app.services import create_project, create_ticket, set_status
+from app.services import create_project, create_ticket, register_user, set_status
 
 router = APIRouter(tags=["web"])
 
@@ -37,6 +36,7 @@ COLUMNS = (
     TicketStatus.IN_PROGRESS,
     TicketStatus.DONE,
 )
+BOARD_TICKETS_PER_COLUMN = 200
 
 # Reused to give the register form the same EmailStr format check RegisterRequest gives the
 # JSON route, without hand-rolling a regex.
@@ -140,23 +140,26 @@ def register_submit(
             {"user": None, "error": "Password must be at most 72 bytes"},
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    if session.exec(select(User).where(User.email == email.lower())).first():
+    try:
+        user = register_user(session, name=name, email=str(email), password=password)
+    except HTTPException as exc:
+        error = (
+            "That email is already registered"
+            if exc.status_code == status.HTTP_409_CONFLICT
+            else exc.detail
+        )
         return render(
             request,
             "register.html",
-            {"user": None, "error": "That email is already registered"},
-            status_code=status.HTTP_409_CONFLICT,
+            {"user": None, "error": error},
+            status_code=exc.status_code,
         )
-    user = User(name=name, email=email.lower(), password_hash=hash_password(password))
-    session.add(user)
-    session.commit()
-    session.refresh(user)
     response = RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
     _set_session(response, user.id)
     return response
 
 
-@router.post("/logout")
+@router.post("/logout", dependencies=[Depends(verify_csrf)])
 def logout_submit() -> Response:
     response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(SESSION_COOKIE, path="/")
@@ -229,9 +232,18 @@ def board(
     project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
-    tickets = session.exec(
-        select(Ticket).where(Ticket.project_id == project.id).order_by(Ticket.ticket_number.desc())
-    ).all()
+    tickets_by_status = {}
+    truncated_columns = set()
+    for column in COLUMNS:
+        tickets = session.exec(
+            select(Ticket)
+            .where(Ticket.project_id == project.id, Ticket.status == column)
+            .order_by(Ticket.ticket_number.desc())
+            .limit(BOARD_TICKETS_PER_COLUMN + 1)
+        ).all()
+        if len(tickets) > BOARD_TICKETS_PER_COLUMN:
+            truncated_columns.add(column.value)
+        tickets_by_status[column.value] = tickets[:BOARD_TICKETS_PER_COLUMN]
     return render(
         request,
         "board.html",
@@ -240,9 +252,8 @@ def board(
             "project": project,
             "role": member.role.value,
             "columns": COLUMNS,
-            "tickets_by_status": {
-                column.value: [t for t in tickets if t.status == column] for column in COLUMNS
-            },
+            "tickets_by_status": tickets_by_status,
+            "truncated_columns": truncated_columns,
         },
     )
 
