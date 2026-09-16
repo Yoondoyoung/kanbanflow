@@ -36,6 +36,7 @@ def upgrade() -> None:
         sa.Column("committed_points", sa.Integer(), nullable=True),
         sa.Column("completed_points", sa.Integer(), nullable=True),
         sa.Column("closed_at", sa.DateTime(), nullable=True),
+        sa.CheckConstraint("end_date > start_date", name="ck_sprint_end_after_start"),
         sa.ForeignKeyConstraint(["project_id"], ["project.id"]),
         sa.PrimaryKeyConstraint("id"),
     )

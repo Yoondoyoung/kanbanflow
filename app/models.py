@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, Column, Index, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, JSON, Column, Index, UniqueConstraint, text
 from sqlmodel import Field, SQLModel
 
 
@@ -116,6 +116,7 @@ class Ticket(SQLModel, table=True):
 class Sprint(SQLModel, table=True):
     __tablename__ = "sprint"
     __table_args__ = (
+        CheckConstraint("end_date > start_date", name="ck_sprint_end_after_start"),
         Index(
             "uq_sprint_active_project",
             "project_id",

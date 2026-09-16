@@ -1,10 +1,14 @@
+from datetime import date
 import os
 import subprocess
 
-from sqlalchemy import inspect
-from sqlmodel import SQLModel
+import pytest
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import SQLModel, Session
 
 from app import models  # noqa: F401  — imported for its side effect of registering tables
+from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus, User
 from app.db import make_engine
 
 
@@ -47,3 +51,98 @@ def test_sprint_migration_creates_constraints(tmp_path):
     assert {foreign_key["referred_table"] for foreign_key in inspector.get_foreign_keys("ticket")} >= {
         "sprint"
     }
+
+
+def test_sprint_migration_rejects_invalid_dates(tmp_path):
+    db = tmp_path / "migrated.db"
+    subprocess.run(
+        ["uv", "run", "alembic", "upgrade", "head"],
+        check=True,
+        env={"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]},
+    )
+    engine = make_engine(f"sqlite:///{db}")
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project (id, name, slug, webhook_type, next_ticket_number, created_at) "
+                "VALUES ('project-1', 'Project', 'project', 'NONE', 1, CURRENT_TIMESTAMP)"
+            )
+        )
+        with pytest.raises(IntegrityError):
+            connection.execute(
+                text(
+                    "INSERT INTO sprint (id, project_id, name, goal, status, start_date, end_date) "
+                    "VALUES ('sprint-1', 'project-1', 'Sprint 1', 'Impossible', 'PLANNING', "
+                    "'2026-09-28', '2026-09-21')"
+                )
+            )
+
+
+def test_sprint_migration_enforces_status_and_history_constraints(tmp_path):
+    db = tmp_path / "migrated.db"
+    subprocess.run(
+        ["uv", "run", "alembic", "upgrade", "head"],
+        check=True,
+        env={"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]},
+    )
+    engine = make_engine(f"sqlite:///{db}")
+
+    with Session(engine) as session:
+        owner = User(name="Owner", email="owner@example.com", password_hash="x")
+        project = models.Project(name="Project", slug="project")
+        session.add_all([owner, project])
+        session.commit()
+        ticket = Ticket(ticket_number=1, project_id=project.id, title="Ticket", creator_id=owner.id)
+        session.add(ticket)
+        session.commit()
+
+        sprint_kwargs = {
+            "project_id": project.id,
+            "goal": "Goal",
+            "start_date": date(2026, 9, 21),
+            "end_date": date(2026, 9, 28),
+        }
+        planning = Sprint(name="Planning", status=SprintStatus.PLANNING, **sprint_kwargs)
+        session.add(planning)
+        session.commit()
+        session.add(Sprint(name="Planning 2", status=SprintStatus.PLANNING, **sprint_kwargs))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        active = Sprint(name="Active", status=SprintStatus.ACTIVE, **sprint_kwargs)
+        session.add(active)
+        session.commit()
+        session.add(Sprint(name="Active 2", status=SprintStatus.ACTIVE, **sprint_kwargs))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add_all(
+            [
+                Sprint(name="Closed 1", status=SprintStatus.CLOSED, **sprint_kwargs),
+                Sprint(name="Closed 2", status=SprintStatus.CLOSED, **sprint_kwargs),
+            ]
+        )
+        session.commit()
+
+        session.add(
+            SprintTicketHistory(
+                sprint_id=planning.id,
+                ticket_id=ticket.id,
+                status_at_close=TicketStatus.DONE,
+                was_completed=True,
+            )
+        )
+        session.commit()
+        session.add(
+            SprintTicketHistory(
+                sprint_id=planning.id,
+                ticket_id=ticket.id,
+                status_at_close=TicketStatus.BACKLOG,
+                was_completed=False,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()

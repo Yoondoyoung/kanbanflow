@@ -65,6 +65,113 @@ def test_sprint_and_history_models(session, make_user, make_project):
     assert ticket.rollover_count == 0
 
 
+@pytest.mark.parametrize("status", [SprintStatus.PLANNING, SprintStatus.ACTIVE])
+def test_sprint_rejects_duplicate_open_statuses(session, make_user, make_project, status):
+    owner = make_user()
+    project = make_project(owner)
+    session.add_all(
+        [
+            Sprint(
+                project_id=project.id,
+                name="Sprint 1",
+                goal="First",
+                status=status,
+                start_date=date(2026, 9, 21),
+                end_date=date(2026, 9, 28),
+            ),
+            Sprint(
+                project_id=project.id,
+                name="Sprint 2",
+                goal="Second",
+                status=status,
+                start_date=date(2026, 9, 29),
+                end_date=date(2026, 10, 6),
+            ),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_sprint_allows_multiple_closed_statuses(session, make_user, make_project):
+    owner = make_user()
+    project = make_project(owner)
+    session.add_all(
+        [
+            Sprint(
+                project_id=project.id,
+                name="Sprint 1",
+                goal="First",
+                status=SprintStatus.CLOSED,
+                start_date=date(2026, 9, 21),
+                end_date=date(2026, 9, 28),
+            ),
+            Sprint(
+                project_id=project.id,
+                name="Sprint 2",
+                goal="Second",
+                status=SprintStatus.CLOSED,
+                start_date=date(2026, 9, 29),
+                end_date=date(2026, 10, 6),
+            ),
+        ]
+    )
+
+    session.commit()
+
+
+def test_sprint_rejects_end_date_before_start(session, make_user, make_project):
+    owner = make_user()
+    project = make_project(owner)
+    session.add(
+        Sprint(
+            project_id=project.id,
+            name="Sprint 1",
+            goal="Impossible schedule",
+            start_date=date(2026, 9, 28),
+            end_date=date(2026, 9, 21),
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_sprint_history_rejects_duplicate_ticket_snapshot(session, make_user, make_project):
+    owner = make_user()
+    project = make_project(owner)
+    ticket = Ticket(ticket_number=1, project_id=project.id, title="Checkout", creator_id=owner.id)
+    sprint = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    session.add_all([ticket, sprint])
+    session.commit()
+    session.add_all(
+        [
+            SprintTicketHistory(
+                sprint_id=sprint.id,
+                ticket_id=ticket.id,
+                status_at_close=TicketStatus.DONE,
+                was_completed=True,
+            ),
+            SprintTicketHistory(
+                sprint_id=sprint.id,
+                ticket_id=ticket.id,
+                status_at_close=TicketStatus.BACKLOG,
+                was_completed=False,
+            ),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
 def test_foreign_keys_are_enforced(session: Session):
     ticket = Ticket(
         ticket_number=1,
