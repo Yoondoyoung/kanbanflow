@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import date
 
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import text
@@ -12,6 +13,8 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
+    Sprint,
+    SprintStatus,
     Ticket,
     TicketStatus,
     TicketType,
@@ -28,6 +31,8 @@ VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
 NAME_MAX_LENGTH = 100
 USER_NAME_MAX_LENGTH = 50
 _EMAIL_TAKEN = "Email already registered"
+_PLANNING_SPRINT_EXISTS = "A planning sprint already exists"
+_ACTIVE_SPRINT_EXISTS = "An active sprint already exists"
 
 
 def slugify(name: str) -> str:
@@ -104,6 +109,86 @@ def create_project(session: Session, name: str, user: User) -> Project:
         raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
     session.refresh(project)
     return project
+
+
+def create_sprint(
+    session: Session,
+    project: Project,
+    *,
+    name: str,
+    goal: str,
+    start_date: date,
+    end_date: date,
+) -> Sprint:
+    if end_date <= start_date:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "end_date must be after start_date"
+        )
+    if session.exec(
+        select(Sprint).where(
+            Sprint.project_id == project.id,
+            Sprint.status == SprintStatus.PLANNING,
+        )
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, _PLANNING_SPRINT_EXISTS)
+    sprint = Sprint(
+        project_id=project.id,
+        name=name,
+        goal=goal,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    session.add(sprint)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _PLANNING_SPRINT_EXISTS) from None
+    session.refresh(sprint)
+    return sprint
+
+
+def update_sprint(session: Session, sprint: Sprint, **changes) -> Sprint:
+    if sprint.status is not SprintStatus.PLANNING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be planning")
+    start_date = changes.get("start_date", sprint.start_date)
+    end_date = changes.get("end_date", sprint.end_date)
+    if end_date <= start_date:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "end_date must be after start_date"
+        )
+    for field in ("name", "goal", "start_date", "end_date"):
+        if field in changes:
+            setattr(sprint, field, changes[field])
+    session.add(sprint)
+    session.commit()
+    session.refresh(sprint)
+    return sprint
+
+
+def start_sprint(session: Session, sprint: Sprint) -> Sprint:
+    if sprint.status is not SprintStatus.PLANNING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be planning")
+    if session.exec(
+        select(Sprint).where(
+            Sprint.project_id == sprint.project_id,
+            Sprint.status == SprintStatus.ACTIVE,
+        )
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, _ACTIVE_SPRINT_EXISTS)
+    sprint.committed_points = sum(
+        points or 0
+        for points in session.exec(select(Ticket.story_points).where(Ticket.sprint_id == sprint.id))
+    )
+    sprint.status = SprintStatus.ACTIVE
+    session.add(sprint)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _ACTIVE_SPRINT_EXISTS) from None
+    session.refresh(sprint)
+    return sprint
 
 
 def _depth(value, level: int = 1) -> int:
