@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -6,8 +6,8 @@ from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from app.models import Sprint, SprintStatus, Ticket
-from app.services import create_sprint, start_sprint, update_sprint
+from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus
+from app.services import close_sprint, create_sprint, start_sprint, update_sprint
 
 
 def test_create_sprint_creates_a_planning_sprint(session, make_user, make_project):
@@ -341,3 +341,296 @@ def test_start_sprint_rolls_back_an_active_index_race(session, make_user, make_p
     assert exc_info.value.detail == "An active sprint already exists"
     session.refresh(sprint)
     assert sprint.status is SprintStatus.PLANNING
+
+
+def test_close_snapshots_and_rolls_over_unfinished_tickets(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    active = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    planning = Sprint(
+        project_id=project.id,
+        name="Sprint 2",
+        goal="Ship billing",
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    created_at = datetime(2026, 9, 2, 8, 30)
+    done = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete checkout",
+        status=TicketStatus.DONE,
+        story_points=5,
+        creator_id=owner.id,
+    )
+    unfinished = Ticket(
+        ticket_number=2,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete billing",
+        status=TicketStatus.IN_PROGRESS,
+        story_points=3,
+        first_sprint_entered_at=datetime(2026, 9, 20, 9),
+        rollover_count=1,
+        creator_id=owner.id,
+        created_at=created_at,
+    )
+    unestimated = Ticket(
+        ticket_number=3,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Review copy",
+        status=TicketStatus.SELECTED,
+        creator_id=owner.id,
+    )
+    session.add_all([active, planning, done, unfinished, unestimated])
+    session.commit()
+
+    commits = 0
+
+    def count_commit(_session):
+        nonlocal commits
+        commits += 1
+
+    event.listen(session, "before_commit", count_commit)
+    try:
+        closed = close_sprint(session, active, planning)
+    finally:
+        event.remove(session, "before_commit", count_commit)
+
+    session.refresh(done)
+    session.refresh(unfinished)
+    session.refresh(unestimated)
+    session.refresh(planning)
+    histories = {
+        history.ticket_id: history
+        for history in session.exec(
+            select(SprintTicketHistory).where(SprintTicketHistory.sprint_id == active.id)
+        )
+    }
+
+    assert commits == 1
+    assert closed.status is SprintStatus.CLOSED
+    assert closed.completed_points == 5
+    assert closed.closed_at is not None
+    assert planning.status is SprintStatus.PLANNING
+    assert done.sprint_id == active.id
+    assert done.rollover_count == 0
+    assert done.delayed_days is None
+    assert unfinished.sprint_id == planning.id
+    assert unfinished.status is TicketStatus.IN_PROGRESS
+    assert unfinished.created_at == created_at
+    assert unfinished.rollover_count == 2
+    assert unfinished.delayed_days == 8
+    assert unestimated.sprint_id == planning.id
+    assert unestimated.status is TicketStatus.SELECTED
+    assert unestimated.delayed_days is None
+    assert {
+        ticket_id: (
+            history.status_at_close,
+            history.story_points_at_close,
+            history.was_completed,
+        )
+        for ticket_id, history in histories.items()
+    } == {
+        done.id: (TicketStatus.DONE, 5, True),
+        unfinished.id: (TicketStatus.IN_PROGRESS, 3, False),
+        unestimated.id: (TicketStatus.SELECTED, None, False),
+    }
+
+    done.story_points = 8
+    unfinished.status = TicketStatus.BACKLOG
+    unfinished.story_points = 13
+    session.commit()
+    session.refresh(closed)
+    snapshot = session.exec(
+        select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == unfinished.id)
+    ).one()
+
+    assert closed.completed_points == 5
+    assert (snapshot.status_at_close, snapshot.story_points_at_close) == (
+        TicketStatus.IN_PROGRESS,
+        3,
+    )
+
+
+def test_close_rejects_a_destination_in_another_project(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    other_project = make_project(owner, name="Other project")
+    active = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    foreign_planning = Sprint(
+        project_id=other_project.id,
+        name="Sprint 2",
+        goal="Ship billing",
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete checkout",
+        creator_id=owner.id,
+    )
+    session.add_all([active, foreign_planning, ticket])
+    session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        close_sprint(session, active, foreign_planning)
+
+    assert exc_info.value.status_code == 409
+    session.refresh(active)
+    session.refresh(foreign_planning)
+    session.refresh(ticket)
+    assert active.status is SprintStatus.ACTIVE
+    assert foreign_planning.status is SprintStatus.PLANNING
+    assert ticket.sprint_id == active.id
+    assert session.exec(select(SprintTicketHistory)).first() is None
+
+
+def test_close_rejects_a_nonplanning_destination(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    active = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    closed_destination = Sprint(
+        project_id=project.id,
+        name="Sprint 0",
+        goal="Already closed",
+        status=SprintStatus.CLOSED,
+        start_date=date(2026, 9, 14),
+        end_date=date(2026, 9, 20),
+    )
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete checkout",
+        creator_id=owner.id,
+    )
+    session.add_all([active, closed_destination, ticket])
+    session.commit()
+
+    with pytest.raises(HTTPException) as exc_info:
+        close_sprint(session, active, closed_destination)
+
+    assert exc_info.value.status_code == 409
+    session.refresh(active)
+    session.refresh(ticket)
+    assert active.status is SprintStatus.ACTIVE
+    assert ticket.sprint_id == active.id
+    assert session.exec(select(SprintTicketHistory)).first() is None
+
+
+def test_close_rejects_an_already_closed_sprint(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    active = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    planning = Sprint(
+        project_id=project.id,
+        name="Sprint 2",
+        goal="Ship billing",
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete checkout",
+        creator_id=owner.id,
+    )
+    session.add_all([active, planning, ticket])
+    session.commit()
+    close_sprint(session, active, planning)
+
+    with pytest.raises(HTTPException) as exc_info:
+        close_sprint(session, active, planning)
+
+    assert exc_info.value.status_code == 409
+    session.refresh(ticket)
+    assert ticket.sprint_id == planning.id
+    assert ticket.rollover_count == 1
+    assert len(session.exec(select(SprintTicketHistory)).all()) == 1
+
+
+def test_close_rolls_back_all_changes_after_a_flush_failure(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    active = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    planning = Sprint(
+        project_id=project.id,
+        name="Sprint 2",
+        goal="Ship billing",
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Complete checkout",
+        status=TicketStatus.IN_PROGRESS,
+        first_sprint_entered_at=datetime(2026, 9, 20),
+        creator_id=owner.id,
+    )
+    session.add_all([active, planning, ticket])
+    session.commit()
+
+    def fail_flush(*_):
+        raise RuntimeError("simulated flush failure")
+
+    event.listen(session, "before_flush", fail_flush)
+    try:
+        with pytest.raises(RuntimeError, match="simulated flush failure"):
+            close_sprint(session, active, planning)
+    finally:
+        event.remove(session, "before_flush", fail_flush)
+
+    session.refresh(active)
+    session.refresh(planning)
+    session.refresh(ticket)
+    assert active.status is SprintStatus.ACTIVE
+    assert active.completed_points is None
+    assert active.closed_at is None
+    assert planning.status is SprintStatus.PLANNING
+    assert ticket.sprint_id == active.id
+    assert ticket.rollover_count == 0
+    assert ticket.delayed_days is None
+    assert session.exec(select(SprintTicketHistory)).first() is None

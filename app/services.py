@@ -15,6 +15,7 @@ from app.models import (
     Role,
     Sprint,
     SprintStatus,
+    SprintTicketHistory,
     Ticket,
     TicketStatus,
     TicketType,
@@ -195,6 +196,53 @@ def start_sprint(session: Session, sprint: Sprint) -> Sprint:
     except IntegrityError:
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, _ACTIVE_SPRINT_EXISTS) from None
+    session.refresh(sprint)
+    return sprint
+
+
+def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprint:
+    if sprint.status is not SprintStatus.ACTIVE:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be active")
+    if next_sprint.project_id != sprint.project_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must belong to the same project")
+    if next_sprint.status is not SprintStatus.PLANNING:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must be planning")
+
+    tickets = session.exec(select(Ticket).where(Ticket.sprint_id == sprint.id)).all()
+    try:
+        completed_points = 0
+        for ticket in tickets:
+            session.add(
+                SprintTicketHistory(
+                    sprint_id=sprint.id,
+                    ticket_id=ticket.id,
+                    status_at_close=ticket.status,
+                    story_points_at_close=ticket.story_points,
+                    was_completed=ticket.status is TicketStatus.DONE,
+                )
+            )
+            if ticket.status is TicketStatus.DONE:
+                completed_points += ticket.story_points or 0
+
+        for ticket in tickets:
+            if ticket.status is TicketStatus.DONE:
+                continue
+            ticket.sprint_id = next_sprint.id
+            ticket.rollover_count += 1
+            ticket.delayed_days = (
+                max(0, (sprint.end_date - ticket.first_sprint_entered_at.date()).days)
+                if ticket.first_sprint_entered_at is not None
+                else None
+            )
+
+        sprint.completed_points = completed_points
+        sprint.status = SprintStatus.CLOSED
+        sprint.closed_at = utcnow()
+        session.add(sprint)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     session.refresh(sprint)
     return sprint
 
