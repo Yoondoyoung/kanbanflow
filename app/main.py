@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.auth import SESSION_COOKIE
@@ -10,6 +11,7 @@ from app.rendering import render_markdown
 from app.routers import api_auth, api_projects, api_sprints, api_tickets, web
 
 app = FastAPI(title="Kanban Flow")
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 app.include_router(api_auth.router)
 app.include_router(api_projects.router)
 app.include_router(api_sprints.router)

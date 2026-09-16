@@ -47,11 +47,21 @@ _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 _STATUS_FORM_FIELD = Form(..., alias="status")
 
 
-def render(request: Request, name: str, context: dict, status_code: int = 200) -> Response:
+def render(
+    request: Request,
+    name: str,
+    context: dict,
+    status_code: int = 200,
+    session: Session | None = None,
+) -> Response:
     from app.main import templates
 
     user = context.get("user")
+    shell_context = {}
+    if session and user and not name.startswith("partials/"):
+        shell_context = _shell_context(session, user)
     context = {
+        **shell_context,
         "request": request,
         "csrf_token": make_csrf_token(user.id) if user else "",
         **context,
@@ -166,21 +176,17 @@ def logout_submit() -> Response:
     return response
 
 
-def _dashboard_context(session: Session, user: User, error: str | None = None) -> dict:
+def _shell_context(session: Session, user: User) -> dict:
     rows = session.exec(
         select(Project, ProjectMember)
         .join(ProjectMember, ProjectMember.project_id == Project.id)
         .where(ProjectMember.user_id == user.id)
         .order_by(Project.created_at.desc())
     ).all()
-    context = {
-        "user": user,
+    return {
         "projects": [project for project, _ in rows],
         "roles": {project.id: member.role.value for project, member in rows},
     }
-    if error:
-        context["error"] = error
-    return context
 
 
 @router.get("/dashboard")
@@ -191,7 +197,7 @@ def dashboard(
 ) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-    return render(request, "dashboard.html", _dashboard_context(session, user))
+    return render(request, "dashboard.html", {"user": user}, session=session)
 
 
 @router.post("/projects", dependencies=[Depends(verify_csrf)])
@@ -212,8 +218,9 @@ def create_project_form(
         return render(
             request,
             "dashboard.html",
-            _dashboard_context(session, user, error=exc.detail),
+            {"user": user, "error": exc.detail},
             status_code=exc.status_code,
+            session=session,
         )
     return RedirectResponse(f"/projects/{project.slug}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -255,6 +262,7 @@ def board(
             "tickets_by_status": tickets_by_status,
             "truncated_columns": truncated_columns,
         },
+        session=session,
     )
 
 

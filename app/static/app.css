@@ -1,0 +1,44 @@
+:root {
+  --canvas: #f7f7f5;
+  --surface: #ffffff;
+  --text: #37352f;
+  --muted: #787774;
+  --line: #e9e9e7;
+  color: var(--text);
+  background: var(--canvas);
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body { margin: 0; background: var(--canvas); color: var(--text); }
+[x-cloak] { display: none !important; }
+
+.app-shell { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 100vh; }
+.app-sidebar { box-sizing: border-box; display: flex; flex-direction: column; width: 230px; min-height: 100vh; padding: 20px 12px; border-right: 1px solid var(--line); background: var(--surface); }
+.app-brand { color: var(--text); font-weight: 650; text-decoration: none; }
+.app-project-nav { display: grid; gap: 2px; margin-top: 28px; }
+.app-projects-link, .app-project-link, .app-sign-out { border-radius: 6px; color: var(--muted); font-size: 14px; line-height: 1.4; padding: 7px 8px; text-align: left; text-decoration: none; }
+.app-projects-link { color: var(--text); font-weight: 600; }
+.app-project-link:hover, .app-projects-link:hover, .app-sign-out:hover { background: var(--canvas); color: var(--text); }
+.app-user-menu { border-top: 1px solid var(--line); display: grid; gap: 5px; margin-top: auto; padding: 14px 8px 0; }
+.app-user-name { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.app-sign-out { border: 0; background: transparent; cursor: pointer; font-family: inherit; width: 100%; }
+.app-main, .auth-main { box-sizing: border-box; padding: 32px; }
+.auth-header { background: var(--surface); border-bottom: 1px solid var(--line); padding: 14px 24px; }
+.app-mobile-header, .app-drawer-backdrop { display: none; }
+.surface { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.app-row:hover { background: var(--canvas); }
+.app-dialog { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 16px 40px rgb(55 53 47 / 18%); }
+
+@media (max-width: 767px) {
+  .app-shell { display: block; }
+  .app-mobile-header { align-items: center; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; gap: 12px; min-height: 52px; padding: 0 16px; }
+  .app-menu-button { background: transparent; border: 0; color: var(--text); cursor: pointer; font-size: 20px; padding: 4px; }
+  .app-sidebar { bottom: 0; left: 0; position: fixed; top: 0; transform: translateX(-100%); transition: transform 160ms ease; z-index: 20; }
+  .app-sidebar.is-open { box-shadow: 8px 0 24px rgb(55 53 47 / 14%); transform: translateX(0); }
+  .app-drawer-backdrop { background: rgb(55 53 47 / 25%); bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 10; }
+  .app-main, .auth-main { padding: 20px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}

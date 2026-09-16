@@ -4,21 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kanban Flow{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
 </head>
-<body class="bg-slate-50 text-slate-900">
-  <header class="border-b bg-white px-6 py-3 flex items-center gap-4">
-    <a href="/dashboard" class="font-semibold">Kanban Flow</a>
-    {% block nav %}{% endblock %}
-    {% if user %}
-      <form method="post" action="/logout" class="ml-auto">
-        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-        <button class="text-sm text-slate-600 hover:underline">Sign out</button>
-      </form>
-    {% endif %}
-  </header>
-  <main class="p-6">{% block content %}{% endblock %}</main>
+<body>
+  {% if user %}
+    <div class="app-shell" x-data="{ navOpen: false }">
+      <header class="app-mobile-header">
+        <button class="app-menu-button" type="button" aria-controls="app-sidebar"
+                :aria-expanded="navOpen.toString()" @click="navOpen = !navOpen">
+          <span class="sr-only">Toggle navigation</span>☰
+        </button>
+        <a href="/dashboard" class="app-brand">Kanban Flow</a>
+      </header>
+      <div class="app-drawer-backdrop" x-cloak x-show="navOpen" @click="navOpen = false" aria-hidden="true"></div>
+      <aside id="app-sidebar" data-testid="app-sidebar" class="app-sidebar" :class="{ 'is-open': navOpen }" @keydown.escape.window="navOpen = false">
+        <a href="/dashboard" class="app-brand">Kanban Flow</a>
+        <nav aria-label="Projects" class="app-project-nav">
+          <a href="/dashboard" class="app-projects-link">Projects</a>
+          {% for project in projects %}
+            <a href="/projects/{{ project.slug }}" class="app-project-link">{{ project.name }}</a>
+          {% endfor %}
+        </nav>
+        <div class="app-user-menu">
+          <span class="app-user-name">{{ user.name }}</span>
+          <form method="post" action="/logout">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <button class="app-sign-out">Sign out</button>
+          </form>
+        </div>
+      </aside>
+  {% else %}
+    <header class="auth-header"><a href="/login" class="app-brand">Kanban Flow</a></header>
+  {% endif %}
+  <main{% if user %} id="main-content" class="app-main"{% else %} class="auth-main"{% endif %}>{% block content %}{% endblock %}</main>
+  {% if user %}</div>{% endif %}
 </body>
 </html>
