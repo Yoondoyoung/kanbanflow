@@ -1,11 +1,12 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
-from threading import Barrier
+from threading import Barrier, Lock
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import event
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
 from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus
@@ -652,7 +653,10 @@ def test_close_rejects_an_already_closed_sprint(session, make_user, make_project
     assert len(session.exec(select(SprintTicketHistory)).all()) == 1
 
 
-def test_close_allows_only_one_of_two_stale_sessions(engine, make_user, make_project):
+@pytest.mark.parametrize("_attempt", range(5))
+def test_close_allows_only_one_of_two_stale_sessions_at_claim_boundary(
+    engine, make_user, make_project, _attempt
+):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
     with Session(engine) as setup:
@@ -683,7 +687,16 @@ def test_close_allows_only_one_of_two_stale_sessions(engine, make_user, make_pro
         setup.commit()
         active_id, planning_id, ticket_id = active.id, planning.id, ticket.id
 
-    barrier = Barrier(2)
+    claim_barrier = Barrier(2)
+    claim_hits = 0
+    claim_lock = Lock()
+
+    def wait_at_source_claim(_conn, _cursor, statement, _parameters, _context, _executemany):
+        nonlocal claim_hits
+        if statement.startswith("UPDATE sprint SET") and "sprint.status" in statement:
+            with claim_lock:
+                claim_hits += 1
+            claim_barrier.wait(timeout=5)
 
     def close_once(_index: int) -> int:
         with Session(engine) as session:
@@ -691,16 +704,20 @@ def test_close_allows_only_one_of_two_stale_sessions(engine, make_user, make_pro
             destination = session.get(Sprint, planning_id)
             assert source is not None
             assert destination is not None
-            barrier.wait()
             try:
                 close_sprint(session, source, destination)
             except HTTPException as exc:
                 return exc.status_code
             return 200
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        statuses = list(pool.map(close_once, range(2)))
+    event.listen(engine, "before_cursor_execute", wait_at_source_claim)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = list(pool.map(close_once, range(2)))
+    finally:
+        event.remove(engine, "before_cursor_execute", wait_at_source_claim)
 
+    assert claim_hits == 2
     assert sorted(statuses) == [200, 409]
     with Session(engine) as check:
         source = check.get(Sprint, active_id)
@@ -719,7 +736,9 @@ def test_close_allows_only_one_of_two_stale_sessions(engine, make_user, make_pro
         assert len(histories) == 1
 
 
-def test_close_rolls_back_all_changes_after_a_post_dml_failure(engine, make_user, make_project):
+def test_close_maps_a_post_dml_sqlite_lock_to_conflict_and_rolls_back(
+    engine, make_user, make_project
+):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
     with Session(engine) as setup:
@@ -758,7 +777,7 @@ def test_close_rolls_back_all_changes_after_a_post_dml_failure(engine, make_user
         assert planning is not None
 
         def fail_after_flush(*_):
-            raise IntegrityError("INSERT", {}, RuntimeError("simulated post-DML failure"))
+            raise OperationalError("INSERT", {}, sqlite3.OperationalError("database is locked"))
 
         event.listen(session, "after_flush_postexec", fail_after_flush)
         try:
@@ -785,4 +804,69 @@ def test_close_rolls_back_all_changes_after_a_post_dml_failure(engine, make_user
         assert ticket.sprint_id == active_id
         assert ticket.rollover_count == 0
         assert ticket.delayed_days is None
+        assert check.exec(select(SprintTicketHistory)).first() is None
+
+
+def test_close_reraises_unrelated_operational_error_after_rollback(engine, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    with Session(engine) as setup:
+        active = Sprint(
+            project_id=project.id,
+            name="Sprint 1",
+            goal="Ship checkout",
+            status=SprintStatus.ACTIVE,
+            start_date=date(2026, 9, 21),
+            end_date=date(2026, 9, 28),
+        )
+        planning = Sprint(
+            project_id=project.id,
+            name="Sprint 2",
+            goal="Ship billing",
+            start_date=date(2026, 9, 29),
+            end_date=date(2026, 10, 6),
+        )
+        ticket = Ticket(
+            ticket_number=1,
+            project_id=project.id,
+            sprint_id=active.id,
+            title="Complete checkout",
+            status=TicketStatus.IN_PROGRESS,
+            creator_id=owner.id,
+        )
+        setup.add_all([active, planning, ticket])
+        setup.commit()
+        active_id, planning_id, ticket_id = active.id, planning.id, ticket.id
+
+    with Session(engine) as session:
+        active = session.get(Sprint, active_id)
+        planning = session.get(Sprint, planning_id)
+        assert active is not None
+        assert planning is not None
+
+        def fail_after_flush(*_):
+            raise OperationalError(
+                "INSERT", {}, sqlite3.OperationalError("no such table: unrelated")
+            )
+
+        event.listen(session, "after_flush_postexec", fail_after_flush)
+        try:
+            with pytest.raises(OperationalError, match="no such table: unrelated"):
+                close_sprint(session, active, planning)
+        finally:
+            event.remove(session, "after_flush_postexec", fail_after_flush)
+
+        assert not session.in_transaction()
+
+    with Session(engine) as check:
+        active = check.get(Sprint, active_id)
+        planning = check.get(Sprint, planning_id)
+        ticket = check.get(Ticket, ticket_id)
+
+        assert active is not None
+        assert planning is not None
+        assert ticket is not None
+        assert active.status is SprintStatus.ACTIVE
+        assert planning.status is SprintStatus.PLANNING
+        assert ticket.sprint_id == active_id
         assert check.exec(select(SprintTicketHistory)).first() is None

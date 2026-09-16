@@ -36,6 +36,11 @@ _PLANNING_SPRINT_EXISTS = "A planning sprint already exists"
 _ACTIVE_SPRINT_EXISTS = "An active sprint already exists"
 _SPRINT_UPDATE_CONFLICT = "Sprint update conflict"
 _SPRINT_CLOSE_CONFLICT = "Sprint close conflict"
+_SQLITE_LOCK_MESSAGES = (
+    "database is locked",
+    "database table is locked",
+    "database schema is locked",
+)
 
 
 def slugify(name: str) -> str:
@@ -253,9 +258,14 @@ def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprin
         session.commit()
     except HTTPException:
         raise
-    except (IntegrityError, OperationalError):
+    except IntegrityError:
         session.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, _SPRINT_CLOSE_CONFLICT) from None
+    except OperationalError as exc:
+        session.rollback()
+        if str(exc.orig).lower().startswith(_SQLITE_LOCK_MESSAGES):
+            raise HTTPException(status.HTTP_409_CONFLICT, _SPRINT_CLOSE_CONFLICT) from None
+        raise
     except Exception:
         session.rollback()
         raise
