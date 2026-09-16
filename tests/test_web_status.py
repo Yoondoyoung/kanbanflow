@@ -199,3 +199,32 @@ def test_done_round_trip_through_route(client, make_user, make_project, login_as
     assert ticket.status == TicketStatus.SELECTED
     assert ticket.completed_at is None
     assert ticket.resolution_notes == "fixed it"
+
+
+def test_status_fragment_keeps_assignee_name(
+    client, active_sprint, make_user, add_member, engine, login_as
+):
+    owner, project, sprint = active_sprint
+    assignee = make_user(email="grace@example.com", name="Grace Hopper")
+    add_member(project, assignee)
+    with Session(engine) as session:
+        session.add(
+            Ticket(
+                ticket_number=1,
+                project_id=project.id,
+                title="Assigned ticket",
+                sprint_id=sprint.id,
+                creator_id=owner.id,
+                assignee_id=assignee.id,
+            )
+        )
+        session.commit()
+
+    login_as(owner.email)
+    response = client.post(
+        f"/projects/{project.slug}/tickets/1/status",
+        data={"status": "IN_PROGRESS", "_csrf": make_csrf_token(owner.id)},
+    )
+
+    assert response.status_code == 200
+    assert "Grace Hopper" in response.text

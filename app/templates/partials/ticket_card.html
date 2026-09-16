@@ -6,6 +6,7 @@
   <div class="mt-1 flex gap-2 text-xs text-slate-500">
     <span>{{ ticket.type.value|replace('_', ' ')|capitalize }}</span>
     <span>{{ ticket.priority.value|capitalize }}</span>
+    <span>{% if ticket.assignee_id %}{{ (assignee_names|default({})).get(ticket.assignee_id, "Unassigned") }}{% else %}Unassigned{% endif %}</span>
     {% if ticket.story_points %}<span>{{ ticket.story_points }} pts</span>{% endif %}
   </div>
   {% if ticket.description %}

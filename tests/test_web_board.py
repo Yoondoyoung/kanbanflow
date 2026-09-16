@@ -378,3 +378,52 @@ def test_board_filters_by_assignee(
 
     assert "Grace ticket" in page
     assert 'data-testid="column-count-SELECTED">1' in page
+
+
+def test_board_card_shows_assignee_name(
+    client, active_sprint_world, make_user, add_member, engine, login_as
+):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    assignee = make_user(email="grace@example.com", name="Grace Hopper")
+    add_member(project, assignee)
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        title="Assigned ticket",
+        sprint_id=active_sprint_world.sprint.id,
+        creator_id=owner.id,
+        assignee_id=assignee.id,
+    )
+    ticket_id = ticket.id
+    with Session(engine) as session:
+        session.add(ticket)
+        session.commit()
+
+    login_as(owner.email)
+    page = client.get(f"/projects/{project.slug}").text
+    card = page.split(f'id="ticket-{ticket_id}"', 1)[1].split("</article>", 1)[0]
+
+    assert "Grace Hopper" in card
+
+
+def test_board_card_labels_unassigned_ticket(client, active_sprint_world, engine, login_as):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        title="Needs an owner",
+        sprint_id=active_sprint_world.sprint.id,
+        creator_id=owner.id,
+    )
+    ticket_id = ticket.id
+    with Session(engine) as session:
+        session.add(ticket)
+        session.commit()
+
+    login_as(owner.email)
+    page = client.get(f"/projects/{project.slug}").text
+    card = page.split(f'id="ticket-{ticket_id}"', 1)[1].split("</article>", 1)[0]
+
+    assert "Unassigned" in card

@@ -296,6 +296,12 @@ def board(
         if len(tickets) > BOARD_TICKETS_PER_COLUMN:
             truncated_columns.add(column.value)
         tickets_by_status[column.value] = tickets[:BOARD_TICKETS_PER_COLUMN]
+    members = session.exec(
+        select(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project.id)
+        .order_by(User.name)
+    ).all()
     return render(
         request,
         "board.html",
@@ -313,12 +319,8 @@ def board(
             "priority_filter": priority,
             "ticket_types": TicketType,
             "priorities": Priority,
-            "members": session.exec(
-                select(User)
-                .join(ProjectMember, ProjectMember.user_id == User.id)
-                .where(ProjectMember.project_id == project.id)
-                .order_by(User.name)
-            ).all(),
+            "members": members,
+            "assignee_names": {member.id: member.name or member.email for member in members},
         },
         session=session,
     )
@@ -389,10 +391,21 @@ def change_status_form(
     # resolution_notes preservation, idempotency, and the TICKET_DONE
     # notification -- shared with the JSON route (app/routers/api_tickets.py).
     ticket = set_status(session, ticket, status_value, project=project, tasks=tasks)
+    assignee_names = {}
+    if ticket.assignee_id:
+        assignee = session.get(User, ticket.assignee_id)
+        if assignee:
+            assignee_names[assignee.id] = assignee.name or assignee.email
     # Ruling R41: the card needs csrf_token to render its status control with a
     # working token, or the *next* status change on this page 403s.
     return render(
         request,
         "partials/ticket_card.html",
-        {"user": user, "project": project, "ticket": ticket, "columns": COLUMNS},
+        {
+            "user": user,
+            "project": project,
+            "ticket": ticket,
+            "columns": COLUMNS,
+            "assignee_names": assignee_names,
+        },
     )
