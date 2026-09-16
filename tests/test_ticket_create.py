@@ -1,8 +1,10 @@
+from datetime import date
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import event
 
-from app.models import Project, Ticket
+from app.models import Project, Sprint, SprintStatus, Ticket
 from app.services import create_ticket, validate_meta
 
 
@@ -64,6 +66,67 @@ def test_created_ticket_defaults(client, make_user, make_project, login_as):
     assert body["priority"] == "MEDIUM"
     assert body["story_points"] is None
     assert body["meta"] == {}
+
+
+def test_create_ticket_assigns_a_planning_sprint(
+    client, session, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    sprint = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    session.add(sprint)
+    session.commit()
+    login_as(owner.email)
+
+    response = client.post(
+        "/api/v1/tickets",
+        json={"slug": project.slug, "title": "Assigned", "sprint_id": sprint.id},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["sprint_id"] == sprint.id
+    stored = session.get(Ticket, response.json()["id"])
+    assert stored is not None
+    assert stored.first_sprint_entered_at is not None
+
+
+def test_create_ticket_rejects_closed_or_foreign_sprints(
+    client, session, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    foreign_project = make_project(make_user(email="other@example.com"), name="Other Project")
+    closed = Sprint(
+        project_id=project.id,
+        name="Closed",
+        goal="Done",
+        status=SprintStatus.CLOSED,
+        start_date=date(2026, 9, 7),
+        end_date=date(2026, 9, 14),
+    )
+    foreign = Sprint(
+        project_id=foreign_project.id,
+        name="Foreign",
+        goal="Elsewhere",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    session.add_all([closed, foreign])
+    session.commit()
+    login_as(owner.email)
+
+    for sprint in (closed, foreign):
+        response = client.post(
+            "/api/v1/tickets",
+            json={"slug": project.slug, "title": "Invalid", "sprint_id": sprint.id},
+        )
+        assert response.status_code == 422
 
 
 def test_assignee_must_be_a_project_member(client, make_user, make_project, login_as):

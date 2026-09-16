@@ -97,6 +97,7 @@ class TicketCreate(BaseModel):
     type: TicketType = TicketType.TASK
     priority: Priority = Priority.MEDIUM
     story_points: STORY_POINTS | None = None
+    sprint_id: str | None = None
     assignee_id: str | None = None
     meta: dict = Field(default_factory=dict)
 
@@ -113,6 +114,7 @@ class TicketOut(BaseModel):
     status: TicketStatus
     priority: Priority
     story_points: int | None
+    sprint_id: str | None
     creator_id: str
     assignee_id: str | None
     resolution_notes: str | None
@@ -127,6 +129,7 @@ class TicketUpdate(BaseModel):
     type: TicketType | None = None
     priority: Priority | None = None
     story_points: STORY_POINTS | None = None
+    sprint_id: str | None = None
     assignee_id: str | None = None
     resolution_notes: str | None = None
     meta: dict | None = None

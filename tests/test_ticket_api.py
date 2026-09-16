@@ -1,4 +1,8 @@
+from datetime import date
+
 import pytest
+
+from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket
 
 
 @pytest.fixture
@@ -172,3 +176,108 @@ def test_patch_accepts_null_on_the_nullable_fields(client, seeded):
     )
     assert response.status_code == 200
     assert response.json()["story_points"] is None
+
+
+def test_patch_assigns_and_unassigns_a_sprint_without_restamping_first_entry(
+    client, session, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    active = Sprint(
+        project_id=project.id,
+        name="Active",
+        goal="Ship",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    planning = Sprint(
+        project_id=project.id,
+        name="Planning",
+        goal="Next",
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    session.add_all([active, planning])
+    session.commit()
+    login_as(owner.email)
+    ticket = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "T"}).json()
+
+    assigned = client.patch(f"/api/v1/tickets/{ticket['id']}", json={"sprint_id": active.id})
+    stored = session.get(Ticket, ticket["id"])
+    assert stored is not None
+    first_entry = stored.first_sprint_entered_at
+    unassigned = client.patch(f"/api/v1/tickets/{ticket['id']}", json={"sprint_id": None})
+    reassigned = client.patch(f"/api/v1/tickets/{ticket['id']}", json={"sprint_id": planning.id})
+    session.refresh(stored)
+
+    assert assigned.json()["sprint_id"] == active.id
+    assert unassigned.json()["sprint_id"] is None
+    assert reassigned.json()["sprint_id"] == planning.id
+    assert stored.first_sprint_entered_at == first_entry
+
+
+def test_board_query_filters_sprint_and_backlog_tickets(
+    client, session, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    sprint = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    session.add(sprint)
+    session.commit()
+    login_as(owner.email)
+    assigned = client.post(
+        "/api/v1/tickets", json={"slug": project.slug, "title": "Assigned", "sprint_id": sprint.id}
+    ).json()
+    backlog = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "Backlog"}).json()
+
+    in_sprint = client.get(
+        f"/api/v1/projects/{project.slug}/tickets", params={"sprint_id": sprint.id}
+    ).json()["items"]
+    unassigned = client.get(
+        f"/api/v1/projects/{project.slug}/tickets", params={"sprint_id": "null"}
+    ).json()["items"]
+
+    assert [ticket["id"] for ticket in in_sprint] == [assigned["id"]]
+    assert [ticket["id"] for ticket in unassigned] == [backlog["id"]]
+
+
+def test_delete_rejects_a_ticket_in_closed_sprint_history(
+    client, session, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+    ticket = client.post(
+        "/api/v1/tickets", json={"slug": project.slug, "title": "Historical"}
+    ).json()
+    sprint = Sprint(
+        project_id=project.id,
+        name="Closed",
+        goal="Done",
+        status=SprintStatus.CLOSED,
+        start_date=date(2026, 9, 7),
+        end_date=date(2026, 9, 14),
+    )
+    session.add(sprint)
+    session.commit()
+    session.add(
+        SprintTicketHistory(
+            sprint_id=sprint.id,
+            ticket_id=ticket["id"],
+            status_at_close="DONE",
+            was_completed=True,
+        )
+    )
+    session.commit()
+
+    response = client.delete(f"/api/v1/tickets/{ticket['id']}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Ticket belongs to closed sprint history"

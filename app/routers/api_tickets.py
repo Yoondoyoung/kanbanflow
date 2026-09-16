@@ -8,23 +8,20 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
+    SprintTicketHistory,
     Ticket,
     TicketStatus,
     TicketType,
     User,
 )
 from app.schemas import StatusUpdate, TicketCreate, TicketOut, TicketPage, TicketUpdate
-from app.services import create_ticket, set_status, validate_assignee, validate_meta
+from app.services import create_ticket, set_status, update_ticket
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
 
 _STATUS_QUERY = Query(default=None, alias="status")
 _TYPE_QUERY = Query(default=None, alias="type")
 _LIMIT_QUERY = Query(default=50, ge=1, le=200)
-
-# The only Ticket columns a PATCH may set to NULL (app/models.py: the rest are
-# NOT NULL). completed_at is nullable too but is owned by set_status, not PATCH.
-NULLABLE_TICKET_FIELDS = {"story_points", "assignee_id", "resolution_notes"}
 
 
 def _project_for_write(slug: str, user: User, session: Session) -> Project:
@@ -87,6 +84,7 @@ def post_ticket(
         type=body.type,
         priority=body.priority,
         story_points=body.story_points,
+        sprint_id=body.sprint_id,
         assignee_id=body.assignee_id,
         meta=body.meta,
         tasks=tasks,
@@ -99,6 +97,7 @@ def list_tickets(
     assignee_id: str | None = None,
     type_filter: TicketType | None = _TYPE_QUERY,
     priority: Priority | None = None,
+    sprint_id: str | None = None,
     limit: int = _LIMIT_QUERY,
     cursor: int | None = None,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
@@ -114,6 +113,10 @@ def list_tickets(
         query = query.where(Ticket.type == type_filter)
     if priority:
         query = query.where(Ticket.priority == priority)
+    if sprint_id == "null":
+        query = query.where(Ticket.sprint_id.is_(None))
+    elif sprint_id is not None:
+        query = query.where(Ticket.sprint_id == sprint_id)
     if cursor is not None:
         query = query.where(Ticket.ticket_number < cursor)
     rows = session.exec(query.order_by(Ticket.ticket_number.desc()).limit(limit)).all()
@@ -140,31 +143,7 @@ def patch_ticket(
 ) -> Ticket:
     ticket, project, _ = load_ticket_for_write(ticket_id, user, session)
     data = body.model_dump(exclude_unset=True)
-    # Every TicketUpdate field is `| None`, so an explicit JSON null is *set*,
-    # not omitted by exclude_unset. Columns that are NOT NULL then blow up as
-    # an unhandled IntegrityError (500), and `meta` is worse: it is
-    # Column(JSON, nullable=False), so JSON null serialises to the literal
-    # string 'null', satisfies NOT NULL, and every later read of the project's
-    # ticket list fails response validation. Reject nulls for the non-nullable
-    # fields up front -- before any mutation -- the way update_project's
-    # per-field `is not None` checks already do (app/routers/api_projects.py).
-    for field, value in data.items():
-        if value is None and field not in NULLABLE_TICKET_FIELDS:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{field} may not be null")
-    if "meta" in data and data["meta"] is not None:
-        validate_meta(data["meta"])
-    if "assignee_id" in data:
-        validate_assignee(session, project, data["assignee_id"])
-    if "title" in data and data["title"] is not None:
-        data["title"] = data["title"].strip()
-        if not data["title"]:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "title must not be empty")
-    for field, value in data.items():
-        setattr(ticket, field, value)
-    session.add(ticket)
-    session.commit()
-    session.refresh(ticket)
-    return ticket
+    return update_ticket(session, ticket, project, **data)
 
 
 @router.patch("/tickets/{ticket_id}/status", response_model=TicketOut)
@@ -190,5 +169,9 @@ def delete_ticket(
     ticket, _, member = load_ticket_for_write(ticket_id, user, session)
     if member.role != Role.OWNER:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner role required")
+    if session.exec(
+        select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
     session.delete(ticket)
     session.commit()

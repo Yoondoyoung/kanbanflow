@@ -29,6 +29,7 @@ META_MAX_DEPTH = 3
 TITLE_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 20_000
 VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
+NULLABLE_TICKET_FIELDS = {"story_points", "sprint_id", "assignee_id", "resolution_notes"}
 NAME_MAX_LENGTH = 100
 USER_NAME_MAX_LENGTH = 50
 _EMAIL_TAKEN = "Email already registered"
@@ -308,6 +309,23 @@ def validate_assignee(session: Session, project: Project, assignee_id: str | Non
         )
 
 
+def validate_sprint_assignment(
+    session: Session, project: Project, sprint_id: str | None
+) -> Sprint | None:
+    if sprint_id is None:
+        return None
+    sprint = session.get(Sprint, sprint_id)
+    if sprint is None or sprint.project_id != project.id:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "sprint must belong to this project"
+        )
+    if sprint.status not in (SprintStatus.PLANNING, SprintStatus.ACTIVE):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "sprint must be planning or active"
+        )
+    return sprint
+
+
 def allocate_ticket_number(session: Session, project_id: str) -> int:
     # Atomic per-project counter: UPDATE ... RETURNING runs inside the
     # caller's open transaction, alongside the ticket insert that follows.
@@ -335,6 +353,7 @@ def create_ticket(
     type: TicketType = TicketType.TASK,
     priority: Priority = Priority.MEDIUM,
     story_points: int | None = None,
+    sprint_id: str | None = None,
     assignee_id: str | None = None,
     meta: dict | None = None,
     tasks: BackgroundTasks | None = None,
@@ -361,6 +380,7 @@ def create_ticket(
         meta = {}
     validate_meta(meta)
     validate_assignee(session, project, assignee_id)
+    sprint = validate_sprint_assignment(session, project, sprint_id)
     ticket = Ticket(
         ticket_number=allocate_ticket_number(session, project.id),
         project_id=project.id,
@@ -370,6 +390,8 @@ def create_ticket(
         status=TicketStatus.BACKLOG,
         priority=priority,
         story_points=story_points,
+        sprint_id=sprint.id if sprint else None,
+        first_sprint_entered_at=utcnow() if sprint else None,
         creator_id=creator.id,
         assignee_id=assignee_id,
         meta=meta,
@@ -378,6 +400,30 @@ def create_ticket(
     session.commit()
     session.refresh(ticket)
     schedule(tasks, project, EVENT_TICKET_CREATED, ticket)
+    return ticket
+
+
+def update_ticket(session: Session, ticket: Ticket, project: Project, **changes) -> Ticket:
+    for field, value in changes.items():
+        if value is None and field not in NULLABLE_TICKET_FIELDS:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{field} may not be null")
+    if "meta" in changes and changes["meta"] is not None:
+        validate_meta(changes["meta"])
+    if "assignee_id" in changes:
+        validate_assignee(session, project, changes["assignee_id"])
+    if "sprint_id" in changes:
+        validate_sprint_assignment(session, project, changes["sprint_id"])
+    if "title" in changes and changes["title"] is not None:
+        changes["title"] = changes["title"].strip()
+        if not changes["title"]:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "title must not be empty")
+    if changes.get("sprint_id") is not None and ticket.first_sprint_entered_at is None:
+        ticket.first_sprint_entered_at = utcnow()
+    for field, value in changes.items():
+        setattr(ticket, field, value)
+    session.add(ticket)
+    session.commit()
+    session.refresh(ticket)
     return ticket
 
 
