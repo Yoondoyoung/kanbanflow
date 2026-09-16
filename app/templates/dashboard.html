@@ -4,8 +4,9 @@
 <div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="max-w-3xl mx-auto space-y-6">
   <div class="flex items-center">
     <h1 id="projects-heading" class="text-lg font-semibold">Projects</h1>
-    <button class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
-            aria-controls="project-dialog" aria-haspopup="dialog" @click="projectDialog = true">New project</button>
+    <button x-ref="project-dialog-opener" class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
+            aria-controls="project-dialog" aria-haspopup="dialog"
+            @click="projectDialog = true; $refs.projectDialog.showModal(); $nextTick(() => $refs.projectName.focus())">New project</button>
   </div>
 
   <section class="surface overflow-hidden" aria-labelledby="projects-heading">
@@ -24,13 +25,14 @@
     {% endif %}
   </section>
 
-  <div x-show="projectDialog" x-cloak class="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4"
-       @keydown.escape.window="projectDialog = false">
-    <div id="project-dialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
-         role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading" @click.outside="projectDialog = false">
+  <dialog id="project-dialog" x-ref="project-dialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
+          role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading"
+          x-init="if (projectDialog) { $el.showModal(); $nextTick(() => $refs.projectName.focus()) }"
+          @close="projectDialog = false; $refs.projectDialogOpener.focus()"
+          @click="$event.target === $el && $el.close()">
       <div class="mb-3 flex items-center">
         <h2 id="project-dialog-heading" class="font-semibold">New project</h2>
-        <button class="ml-auto text-slate-500" type="button" @click="projectDialog = false" aria-label="Close new project dialog">×</button>
+        <button class="ml-auto text-slate-500" type="button" @click="$refs.projectDialog.close()" aria-label="Close new project dialog">×</button>
       </div>
       {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
       <form method="post" action="/projects" class="space-y-3">
@@ -39,19 +41,20 @@
           <label for="project-name" class="block text-sm font-medium mb-1">Project name</label>
           <input
             id="project-name"
+            x-ref="project-name"
             class="w-full border rounded px-3 py-2"
             name="name"
             placeholder="Project name"
+            value="{{ name|default('') }}"
             required
             {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
           >
         </div>
         <div class="flex justify-end gap-2">
-          <button class="rounded px-3 py-2 text-sm" type="button" @click="projectDialog = false">Cancel</button>
+          <button class="rounded px-3 py-2 text-sm" type="button" @click="$refs.projectDialog.close()">Cancel</button>
           <button class="bg-slate-900 text-white rounded px-4 py-2 text-sm">Create</button>
         </div>
       </form>
-    </div>
-  </div>
+  </dialog>
 </div>
 {% endblock %}

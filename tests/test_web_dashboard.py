@@ -33,6 +33,21 @@ def test_dashboard_has_accessible_project_creation_dialog(client, make_user, log
     assert 'aria-labelledby="project-dialog-heading"' in page.text
 
 
+def test_project_dialog_uses_native_focus_management(client, make_user, login_as):
+    owner = make_user(email="ada@example.com")
+    login_as(owner.email)
+
+    page = client.get("/dashboard")
+
+    assert '<dialog id="project-dialog"' in page.text
+    assert 'x-ref="project-dialog-opener"' in page.text
+    assert 'x-ref="project-dialog"' in page.text
+    assert 'x-ref="project-name"' in page.text
+    assert "$refs.projectDialog.showModal()" in page.text
+    assert "$refs.projectName.focus()" in page.text
+    assert '@close="projectDialog = false; $refs.projectDialogOpener.focus()"' in page.text
+
+
 def test_dashboard_requires_login(client):
     response = client.get("/dashboard", follow_redirects=False)
     assert response.status_code == 303
@@ -115,6 +130,26 @@ def test_overlong_project_name_is_rejected_and_not_persisted(client, make_user, 
     assert "100" in response.text
     assert 'x-data="{ projectDialog: true }"' in response.text
     assert client.get("/api/v1/projects").json() == []
+
+
+def test_invalid_project_name_is_escaped_and_preserved_in_the_reopened_dialog(
+    client, make_user, login_as
+):
+    owner = make_user(email="ada@example.com")
+    submitted_name = "<project>" * 15
+    escaped_name = "&lt;project&gt;" * 15
+    login_as(owner.email)
+
+    response = client.post(
+        "/projects",
+        data={"name": submitted_name, "_csrf": csrf_for(owner)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert f'value="{escaped_name}"' in response.text
+    assert submitted_name not in response.text
+    assert 'x-data="{ projectDialog: true }"' in response.text
 
 
 def test_whitespace_only_project_name_is_rejected_and_not_persisted(client, make_user, login_as):

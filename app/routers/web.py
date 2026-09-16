@@ -218,7 +218,7 @@ def create_project_form(
         return render(
             request,
             "dashboard.html",
-            {"user": user, "error": exc.detail},
+            {"user": user, "error": exc.detail, "name": name},
             status_code=exc.status_code,
             session=session,
         )
