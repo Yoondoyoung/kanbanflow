@@ -11,7 +11,8 @@
 </head>
 <body>
   {% if user %}
-    <div class="app-shell" x-data="{ navOpen: false }">
+    <div class="app-shell" x-data="{ navOpen: false, isMobile: window.matchMedia('(max-width: 767px)').matches }"
+         x-init="window.matchMedia('(max-width: 767px)').addEventListener('change', event => isMobile = event.matches)">
       <header class="app-mobile-header">
         <button class="app-menu-button" type="button" aria-controls="app-sidebar"
                 :aria-expanded="navOpen.toString()" @click="navOpen = !navOpen">
@@ -20,7 +21,9 @@
         <a href="/dashboard" class="app-brand">Kanban Flow</a>
       </header>
       <div class="app-drawer-backdrop" x-cloak x-show="navOpen" @click="navOpen = false" aria-hidden="true"></div>
-      <aside id="app-sidebar" data-testid="app-sidebar" class="app-sidebar" :class="{ 'is-open': navOpen }" @keydown.escape.window="navOpen = false">
+      <aside id="app-sidebar" data-testid="app-sidebar" class="app-sidebar" :class="{ 'is-open': navOpen }"
+             :inert="isMobile && !navOpen" :aria-hidden="(isMobile && !navOpen).toString()"
+             @keydown.escape.window="navOpen = false">
         <a href="/dashboard" class="app-brand">Kanban Flow</a>
         <nav aria-label="Projects" class="app-project-nav">
           <a href="/dashboard" class="app-projects-link">Projects</a>

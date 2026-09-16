@@ -15,3 +15,16 @@ def test_app_stylesheet_is_served(client):
 
     assert response.status_code == 200
     assert "--canvas: #f7f7f5" in response.text
+
+
+def test_mobile_drawer_is_inert_only_while_closed(client, make_user, login_as):
+    owner = make_user(email="ada@example.com")
+    login_as(owner.email)
+
+    page = client.get("/dashboard")
+
+    assert "isMobile: window.matchMedia" in page.text
+    assert ':inert="isMobile && !navOpen"' in page.text
+    assert ':aria-hidden="(isMobile && !navOpen).toString()"' in page.text
+    assert '@keydown.escape.window="navOpen = false"' in page.text
+    assert '@click="navOpen = !navOpen"' in page.text
