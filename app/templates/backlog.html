@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} Backlog · Kanban Flow{% endblock %}
 {% block content %}
-<div class="project-board" x-data{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% endif %}>
+<div class="project-board" x-data{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% elif start_form_open %} x-init="$nextTick(() => $refs.startForm.showModal())"{% endif %}>
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -20,6 +20,7 @@
   <section class="backlog-planning" aria-labelledby="planning-heading">
     <h2 id="planning-heading">Planning: {{ planning_sprint.name }}</h2>
     <p>{{ planning_sprint.start_date.strftime('%b %-d') }} – {{ planning_sprint.end_date.strftime('%b %-d, %Y') }}{% if planning_sprint.goal %} · {{ planning_sprint.goal }}{% endif %}</p>
+    {% if role == 'OWNER' %}<button class="app-primary-button" type="button" x-ref="startFormOpener" @click="$refs.startForm.showModal()">Start sprint</button>{% endif %}
   </section>
   {% endif %}
 
@@ -42,6 +43,11 @@
   <dialog x-ref="sprintForm" class="app-dialog" aria-labelledby="sprint-form-heading" @close="$refs.sprintFormOpener.focus()">
     {% include "partials/sprint_form.html" %}
   </dialog>
+  {% if planning_sprint %}
+  <dialog x-ref="startForm" class="app-dialog" aria-labelledby="sprint-start-heading" @cancel="$event.preventDefault(); $el.close()" @close="$refs.startFormOpener.focus()">
+    {% include "partials/sprint_start.html" %}
+  </dialog>
+  {% endif %}
   {% endif %}
 </div>
 {% endblock %}

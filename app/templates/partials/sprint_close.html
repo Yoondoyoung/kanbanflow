@@ -1,0 +1,15 @@
+<dialog class="app-dialog" aria-labelledby="sprint-close-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('h2').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$refs.closeFormOpener.focus()">
+  <form action="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" method="post" class="sprint-form" hx-post="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" hx-target="#sprint-dialog-root" hx-swap="innerHTML" @submit="$el.querySelector('[type=submit]').disabled = true">
+    <h2 id="sprint-close-heading" tabindex="-1" autofocus>Close {{ sprint.name }}?</h2>
+    {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+    <p>{{ completed_points }} completed points · {{ unfinished_count }} unfinished tickets</p>
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Rollover destination
+      <select name="next_sprint_id" required>
+        <option value="">Select a planning sprint</option>
+        {% for next_sprint in planning_sprints %}<option value="{{ next_sprint.id }}"{% if selected_next_sprint_id == next_sprint.id %} selected{% endif %}>{{ next_sprint.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="project-actions"><button class="app-secondary-button" type="button" @click="$el.closest('dialog').close()">Cancel</button><button class="app-primary-button" type="submit">Close sprint</button></div>
+  </form>
+</dialog>

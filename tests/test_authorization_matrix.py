@@ -103,6 +103,13 @@ def endpoints(world):
         ),
         (
             OWNER_ONLY,
+            FORM,
+            "post",
+            f"/projects/{world['sprint_web_start_project'].slug}/sprints/{world['web_planning_sprint'].id}/start",
+            {"data": {}},
+        ),
+        (
+            OWNER_ONLY,
             JSON,
             "post",
             f"/api/v1/projects/{world['sprint_create_project'].slug}/sprints",
@@ -128,6 +135,13 @@ def endpoints(world):
             "post",
             f"/api/v1/sprints/{world['active_sprint'].id}/close",
             {"json": {"next_sprint_id": world["next_sprint"].id}},
+        ),
+        (
+            OWNER_ONLY,
+            FORM,
+            "post",
+            f"/projects/{world['sprint_web_close_project'].slug}/sprints/{world['web_active_sprint'].id}/close",
+            {"data": {"next_sprint_id": world["web_next_sprint"].id}},
         ),
         # -- OWNER_ONLY: ticket delete, project settings, membership, project delete --
         (OWNER_ONLY, JSON, "delete", f"/api/v1/tickets/{ticket_id}", {}),
@@ -162,11 +176,15 @@ def world(client, session, make_user, make_project, add_member, login_as):
     sprint_web_create_project = make_project(owner, name="Sprint Web Create")
     sprint_start_project = make_project(owner, name="Sprint Start")
     sprint_close_project = make_project(owner, name="Sprint Close")
+    sprint_web_start_project = make_project(owner, name="Sprint Web Start")
+    sprint_web_close_project = make_project(owner, name="Sprint Web Close")
     for current_project in [
         project,
         sprint_create_project,
         sprint_start_project,
         sprint_close_project,
+        sprint_web_start_project,
+        sprint_web_close_project,
     ]:
         add_member(current_project, member)
     planning_sprint = Sprint(
@@ -193,7 +211,40 @@ def world(client, session, make_user, make_project, add_member, login_as):
         start_date=date(2026, 9, 29),
         end_date=date(2026, 10, 6),
     )
-    session.add_all([planning_sprint, active_sprint, next_sprint])
+    web_planning_sprint = Sprint(
+        project_id=sprint_web_start_project.id,
+        name="Web Planning Sprint",
+        goal="Start through web",
+        status=SprintStatus.PLANNING,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    web_active_sprint = Sprint(
+        project_id=sprint_web_close_project.id,
+        name="Web Active Sprint",
+        goal="Close through web",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    web_next_sprint = Sprint(
+        project_id=sprint_web_close_project.id,
+        name="Web Next Sprint",
+        goal="Receive rollover",
+        status=SprintStatus.PLANNING,
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    session.add_all(
+        [
+            planning_sprint,
+            active_sprint,
+            next_sprint,
+            web_planning_sprint,
+            web_active_sprint,
+            web_next_sprint,
+        ]
+    )
     session.flush()
     sprint_ticket = Ticket(
         ticket_number=1,
@@ -222,9 +273,14 @@ def world(client, session, make_user, make_project, add_member, login_as):
         "sprint_web_create_project": sprint_web_create_project,
         "sprint_start_project": sprint_start_project,
         "sprint_close_project": sprint_close_project,
+        "sprint_web_start_project": sprint_web_start_project,
+        "sprint_web_close_project": sprint_web_close_project,
         "planning_sprint": planning_sprint,
+        "web_planning_sprint": web_planning_sprint,
         "active_sprint": active_sprint,
         "next_sprint": next_sprint,
+        "web_active_sprint": web_active_sprint,
+        "web_next_sprint": web_next_sprint,
         "sprint_ticket": sprint_ticket,
         "planning_ticket": planning_ticket,
         "owner": owner,

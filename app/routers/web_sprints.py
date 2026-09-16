@@ -5,10 +5,10 @@ from sqlmodel import Session, select
 
 from app.auth import current_user, project_owner, project_reader, verify_csrf
 from app.db import get_session
-from app.models import Project, ProjectMember, Sprint, SprintStatus, Ticket, User
+from app.models import Project, ProjectMember, Sprint, SprintStatus, Ticket, TicketStatus, User
 from app.routers.web import render
 from app.schemas import SprintCreate
-from app.services import create_sprint, update_ticket
+from app.services import close_sprint, create_sprint, start_sprint, update_ticket
 
 router = APIRouter(tags=["web"])
 _TICKET_IDS_FORM = Form(...)
@@ -34,6 +34,11 @@ def _backlog(
         .where(Ticket.project_id == project.id, Ticket.sprint_id.is_(None))
         .order_by(Ticket.ticket_number.desc())
     ).all()
+    planning_tickets = (
+        session.exec(select(Ticket).where(Ticket.sprint_id == planning_sprint.id)).all()
+        if planning_sprint
+        else []
+    )
     return render(
         request,
         "backlog.html",
@@ -43,6 +48,8 @@ def _backlog(
             "role": member.role.value,
             "active_tab": "backlog",
             "planning_sprint": planning_sprint,
+            "planning_ticket_count": len(planning_tickets),
+            "planning_points": sum(ticket.story_points or 0 for ticket in planning_tickets),
             "tickets": tickets,
             "values": {},
             "field_errors": {},
@@ -51,6 +58,52 @@ def _backlog(
         },
         status_code=status_code,
         session=session,
+    )
+
+
+def _project_sprint(session: Session, project: Project, sprint_id: str) -> Sprint:
+    sprint = session.exec(
+        select(Sprint).where(Sprint.id == sprint_id, Sprint.project_id == project.id)
+    ).first()
+    if sprint is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sprint not found")
+    return sprint
+
+
+def _close_preview(
+    request: Request,
+    session: Session,
+    user: User,
+    project: Project,
+    sprint: Sprint,
+    *,
+    error: str | None = None,
+    selected_next_sprint_id: str = "",
+    status_code: int = status.HTTP_200_OK,
+) -> Response:
+    tickets = session.exec(select(Ticket).where(Ticket.sprint_id == sprint.id)).all()
+    planning_sprints = session.exec(
+        select(Sprint).where(
+            Sprint.project_id == project.id,
+            Sprint.status == SprintStatus.PLANNING,
+        )
+    ).all()
+    return render(
+        request,
+        "partials/sprint_close.html",
+        {
+            "user": user,
+            "project": project,
+            "sprint": sprint,
+            "planning_sprints": planning_sprints,
+            "completed_points": sum(
+                ticket.story_points or 0 for ticket in tickets if ticket.status is TicketStatus.DONE
+            ),
+            "unfinished_count": sum(ticket.status is not TicketStatus.DONE for ticket in tickets),
+            "error": error,
+            "selected_next_sprint_id": selected_next_sprint_id,
+        },
+        status_code=status_code,
     )
 
 
@@ -111,6 +164,97 @@ def create_sprint_form(
     return RedirectResponse(
         f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
     )
+
+
+@router.post("/projects/{slug}/sprints/{sprint_id}/start", dependencies=[Depends(verify_csrf)])
+def start_sprint_form(
+    sprint_id: str,
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    sprint = _project_sprint(session, project, sprint_id)
+    try:
+        start_sprint(session, sprint)
+    except HTTPException as exc:
+        return _backlog(
+            request,
+            session,
+            user,
+            project,
+            member,
+            start_error=exc.detail,
+            start_form_open=True,
+            status_code=exc.status_code,
+        )
+    return RedirectResponse(f"/projects/{project.slug}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/projects/{slug}/sprints/{sprint_id}/close")
+def close_sprint_preview(
+    sprint_id: str,
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    return _close_preview(
+        request, session, user, project, _project_sprint(session, project, sprint_id)
+    )
+
+
+@router.post("/projects/{slug}/sprints/{sprint_id}/close", dependencies=[Depends(verify_csrf)])
+def close_sprint_form(
+    sprint_id: str,
+    request: Request,
+    next_sprint_id: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    sprint = _project_sprint(session, project, sprint_id)
+    if not next_sprint_id:
+        return _close_preview(
+            request,
+            session,
+            user,
+            project,
+            sprint,
+            error="Select a planning sprint",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    next_sprint = session.get(Sprint, next_sprint_id)
+    if next_sprint is None:
+        return _close_preview(
+            request,
+            session,
+            user,
+            project,
+            sprint,
+            error="Select a planning sprint",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    try:
+        close_sprint(session, sprint, next_sprint)
+    except HTTPException as exc:
+        return _close_preview(
+            request,
+            session,
+            user,
+            project,
+            sprint,
+            error=exc.detail,
+            selected_next_sprint_id=next_sprint_id,
+            status_code=exc.status_code,
+        )
+    target = f"/projects/{project.slug}"
+    if request.headers.get("HX-Request") == "true":
+        return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"HX-Redirect": target})
+    return RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/projects/{slug}/sprints/{sprint_id}/tickets", dependencies=[Depends(verify_csrf)])

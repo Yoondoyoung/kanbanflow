@@ -14,6 +14,9 @@
       <button class="app-primary-button" @click="modal = true">New ticket</button>
       {% if role == 'OWNER' %}
       <a class="app-secondary-button" data-testid="owner-sprint-actions" href="/projects/{{ project.slug }}/backlog">Plan sprint</a>
+      {% if sprint.status.value == 'ACTIVE' %}
+      <button class="app-secondary-button" type="button" x-ref="closeFormOpener" hx-get="/projects/{{ project.slug }}/sprints/{{ sprint.id }}/close" hx-target="#sprint-dialog-root" hx-swap="innerHTML">Close sprint</button>
+      {% endif %}
       {% endif %}
     </div>
   </header>
@@ -68,5 +71,6 @@
   </div>
 
   {% include "partials/ticket_modal.html" %}
+  <div id="sprint-dialog-root"></div>
 </div>
 {% endblock %}
