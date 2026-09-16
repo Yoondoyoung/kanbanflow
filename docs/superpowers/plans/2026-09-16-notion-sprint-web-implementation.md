@@ -50,7 +50,7 @@ def test_signed_in_shell_has_project_sidebar(client, make_user, make_project, lo
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_shell.py -v`  
+Run: `uv run pytest tests/test_web_shell.py -v`
 Expected: FAIL because the new shell and stylesheet do not exist.
 
 - [ ] **Step 3: Mount static files and pass projects to the shell**
@@ -63,7 +63,7 @@ Define native CSS variables such as `--canvas: #f7f7f5`, `--surface: #ffffff`, `
 
 - [ ] **Step 5: Run shell and existing auth/dashboard tests**
 
-Run: `uv run pytest tests/test_web_shell.py tests/test_web_auth.py tests/test_web_dashboard.py -v`  
+Run: `uv run pytest tests/test_web_shell.py tests/test_web_auth.py tests/test_web_dashboard.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -88,7 +88,7 @@ Assert the page has one `Projects` heading, a `New project` button, compact proj
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_dashboard.py -v`  
+Run: `uv run pytest tests/test_web_dashboard.py -v`
 Expected: FAIL on the new dialog and row markers.
 
 - [ ] **Step 3: Replace the two-card layout**
@@ -97,7 +97,7 @@ Render project entries as plain rows inside one surface. Move the existing creat
 
 - [ ] **Step 4: Run dashboard tests**
 
-Run: `uv run pytest tests/test_web_dashboard.py -v`  
+Run: `uv run pytest tests/test_web_dashboard.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -154,7 +154,7 @@ Also test planning fallback, Backlog fallback, column counts, `mine=1`, assignee
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_board.py -v`  
+Run: `uv run pytest tests/test_web_board.py -v`
 Expected: FAIL on sprint navigation assertions.
 
 - [ ] **Step 3: Load the correct sprint and filtered tickets**
@@ -171,7 +171,7 @@ Use CSS grid with fixed minimum column widths and horizontal overflow plus label
 
 - [ ] **Step 6: Run board regression tests**
 
-Run: `uv run pytest tests/test_web_board.py tests/test_web_status.py tests/test_rendering.py -v`  
+Run: `uv run pytest tests/test_web_board.py tests/test_web_status.py tests/test_rendering.py -v`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -242,7 +242,7 @@ def test_backlog_only_lists_unassigned_tickets(client, backlog_world, login_as):
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_sprint_planning.py -v`  
+Run: `uv run pytest tests/test_web_sprint_planning.py -v`
 Expected: FAIL with route 404.
 
 - [ ] **Step 3: Add sprint web routes**
@@ -255,7 +255,7 @@ Render unassigned ticket rows, the single planning sprint summary, owner-only cr
 
 - [ ] **Step 5: Run planning and authorization tests**
 
-Run: `uv run pytest tests/test_web_sprint_planning.py tests/test_authorization_matrix.py -v`  
+Run: `uv run pytest tests/test_web_sprint_planning.py tests/test_authorization_matrix.py -v`
 Expected: PASS after adding the new HTML mutations to the authorization matrix.
 
 - [ ] **Step 6: Commit**
@@ -283,7 +283,7 @@ Test owner success, member `403`, CSRF failure, start totals, close preview cont
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_sprint_lifecycle.py -v`  
+Run: `uv run pytest tests/test_web_sprint_lifecycle.py -v`
 Expected: FAIL because lifecycle form routes do not exist.
 
 - [ ] **Step 3: Add start and close routes**
@@ -296,7 +296,7 @@ The start form shows the ticket and point commitment. The close form shows compl
 
 - [ ] **Step 5: Run lifecycle tests**
 
-Run: `uv run pytest tests/test_web_sprint_lifecycle.py tests/test_authorization_matrix.py -v`  
+Run: `uv run pytest tests/test_web_sprint_lifecycle.py tests/test_authorization_matrix.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -323,7 +323,7 @@ Assert newest-first closed sprints, summary totals, close-time status and points
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_sprint_history.py -v`  
+Run: `uv run pytest tests/test_web_sprint_history.py -v`
 Expected: FAIL with route 404.
 
 - [ ] **Step 3: Add history routes and templates**
@@ -332,7 +332,7 @@ Add `GET /projects/{slug}/sprints` and `GET /projects/{slug}/sprints/{id}`. Quer
 
 - [ ] **Step 4: Run history tests**
 
-Run: `uv run pytest tests/test_web_sprint_history.py -v`  
+Run: `uv run pytest tests/test_web_sprint_history.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -360,7 +360,7 @@ Test fragment load, sanitized Markdown, same-project assignees, owner/member edi
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_ticket_detail.py -v`  
+Run: `uv run pytest tests/test_web_ticket_detail.py -v`
 Expected: FAIL because the detail route and template do not exist.
 
 - [ ] **Step 3: Add fragment and update routes**
@@ -373,7 +373,7 @@ Cards become buttons that load the right panel. Keep number, title, type, priori
 
 - [ ] **Step 5: Run ticket web regression tests**
 
-Run: `uv run pytest tests/test_web_ticket_detail.py tests/test_web_ticket_create.py tests/test_web_status.py tests/test_web_board.py -v`  
+Run: `uv run pytest tests/test_web_ticket_detail.py tests/test_web_ticket_create.py tests/test_web_status.py tests/test_web_board.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -402,7 +402,7 @@ Cover owner/member rendering, member read-only state, project rename, webhook va
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_web_project_settings.py -v`  
+Run: `uv run pytest tests/test_web_project_settings.py -v`
 Expected: FAIL because the settings page does not exist.
 
 - [ ] **Step 3: Share the existing settings logic**
@@ -415,7 +415,7 @@ Render project details, chat webhook settings, and member rows. Members see valu
 
 - [ ] **Step 5: Run settings and API regressions**
 
-Run: `uv run pytest tests/test_web_project_settings.py tests/test_projects.py tests/test_membership.py -v`  
+Run: `uv run pytest tests/test_web_project_settings.py tests/test_projects.py tests/test_membership.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -441,7 +441,7 @@ Check dialog roles and labels, input labels, active tab state, keyboard-close bi
 
 - [ ] **Step 2: Run the full test suite**
 
-Run: `uv run pytest`  
+Run: `uv run pytest`
 Expected: all non-benchmark tests PASS.
 
 - [ ] **Step 3: Update README**
@@ -450,7 +450,7 @@ Document dashboard, Board, Backlog, Sprint History, Settings navigation, owner-o
 
 - [ ] **Step 4: Run final quality checks**
 
-Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`  
+Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`
 Expected: all commands exit 0.
 
 - [ ] **Step 5: Commit**

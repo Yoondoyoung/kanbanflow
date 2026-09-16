@@ -39,7 +39,7 @@
 
 - [ ] **Step 1: Add and lock the official SDK**
 
-Run: `uv add 'mcp[cli]>=2,<3'`  
+Run: `uv add 'mcp[cli]>=2,<3'`
 Expected: `pyproject.toml` and `uv.lock` change without unrelated upgrades.
 
 - [ ] **Step 2: Write a failing token model test**
@@ -60,7 +60,7 @@ def test_api_token_stores_hash_and_prefix(session, make_user):
 
 - [ ] **Step 3: Run and verify failure**
 
-Run: `uv run pytest tests/test_models.py::test_api_token_stores_hash_and_prefix -v`  
+Run: `uv run pytest tests/test_models.py::test_api_token_stores_hash_and_prefix -v`
 Expected: FAIL because `ApiToken` does not exist.
 
 - [ ] **Step 4: Add the token model**
@@ -82,7 +82,7 @@ class ApiToken(SQLModel, table=True):
 
 Create `api_token` with `down_revision = "6c25b12d1a91"`, indexes for `user_id` and unique `token_hash`, and a downgrade that drops indexes before the table.
 
-Run: `uv run pytest tests/test_models.py tests/test_migrations.py -v`  
+Run: `uv run pytest tests/test_models.py tests/test_migrations.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -125,7 +125,7 @@ def test_issued_token_authenticates(client, make_user, login_as):
 
 - [ ] **Step 2: Run and verify 404 failure**
 
-Run: `uv run pytest tests/test_api_tokens.py -v`  
+Run: `uv run pytest tests/test_api_tokens.py -v`
 Expected: FAIL because token routes do not exist.
 
 - [ ] **Step 3: Add schemas and token primitives**
@@ -142,7 +142,7 @@ Implement `GET /api/v1/tokens`, `POST /api/v1/tokens`, and idempotent `DELETE /a
 
 - [ ] **Step 6: Run token and auth regressions**
 
-Run: `uv run pytest tests/test_api_tokens.py tests/test_auth_api.py tests/test_web_auth.py tests/test_origin_guard.py -v`  
+Run: `uv run pytest tests/test_api_tokens.py tests/test_auth_api.py tests/test_web_auth.py tests/test_origin_guard.py -v`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -180,7 +180,7 @@ async def test_api_request_sends_bearer_token(monkeypatch):
 
 - [ ] **Step 2: Run and verify import failure**
 
-Run: `uv run pytest tests/test_mcp_server.py -v`  
+Run: `uv run pytest tests/test_mcp_server.py -v`
 Expected: FAIL because `app.mcp_server` does not exist.
 
 - [ ] **Step 3: Add settings and request helper**
@@ -199,7 +199,7 @@ Keep the file importable without making a network call; settings are resolved wh
 
 - [ ] **Step 5: Run client tests**
 
-Run: `uv run pytest tests/test_mcp_server.py -v`  
+Run: `uv run pytest tests/test_mcp_server.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -249,7 +249,7 @@ async def test_create_sprint_tool_calls_api(monkeypatch):
 
 - [ ] **Step 2: Run and verify missing-tool failure**
 
-Run: `uv run pytest tests/test_mcp_server.py -k tool -v`  
+Run: `uv run pytest tests/test_mcp_server.py -k tool -v`
 Expected: FAIL because tools are not registered.
 
 - [ ] **Step 3: Add four typed tools**
@@ -258,7 +258,7 @@ Decorate four async functions with `@mcp.tool()`. Tool signatures use project sl
 
 - [ ] **Step 4: Run MCP tests**
 
-Run: `uv run pytest tests/test_mcp_server.py -v`  
+Run: `uv run pytest tests/test_mcp_server.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -290,16 +290,16 @@ Document issuing a token, configuring the two variables, and running `uv run mcp
 
 - [ ] **Step 2: Run MCP and backend tests**
 
-Run: `uv run pytest tests/test_mcp_server.py tests/test_api_tokens.py tests/test_sprint_api.py -v`  
-Expected: PASS.  
-Run: `uv run pytest`  
+Run: `uv run pytest tests/test_mcp_server.py tests/test_api_tokens.py tests/test_sprint_api.py -v`
+Expected: PASS.
+Run: `uv run pytest`
 Expected: all non-benchmark tests PASS.
 
 - [ ] **Step 3: Run security and quality checks**
 
-Run: `git grep -n -E 'kf_[A-Za-z0-9_-]{32,}' -- .`  
-Expected: no output.  
-Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`  
+Run: `git grep -n -E 'kf_[A-Za-z0-9_-]{32,}' -- .`
+Expected: no output.
+Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`
 Expected: all commands exit 0.
 
 - [ ] **Step 4: Commit**

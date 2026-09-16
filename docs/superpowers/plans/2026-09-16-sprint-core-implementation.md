@@ -57,7 +57,7 @@ def test_sprint_and_history_models(session, make_user, make_project):
 
 - [ ] **Step 2: Run the focused test and verify it fails**
 
-Run: `uv run pytest tests/test_models.py::test_sprint_and_history_models -v`  
+Run: `uv run pytest tests/test_models.py::test_sprint_and_history_models -v`
 Expected: FAIL because `Sprint` and `SprintStatus` do not exist.
 
 - [ ] **Step 3: Add the models**
@@ -111,7 +111,7 @@ Create the sprint and history tables, both partial unique indexes, the four tick
 
 - [ ] **Step 5: Verify models and migration agree**
 
-Run: `uv run pytest tests/test_models.py tests/test_migrations.py -v`  
+Run: `uv run pytest tests/test_models.py tests/test_migrations.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -148,7 +148,7 @@ Also assert names and goals are stripped and blank values fail.
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_sprint_schemas.py -v`  
+Run: `uv run pytest tests/test_sprint_schemas.py -v`
 Expected: FAIL because the schemas do not exist.
 
 - [ ] **Step 3: Add minimal schemas**
@@ -187,7 +187,7 @@ class SprintClose(BaseModel):
 
 - [ ] **Step 4: Run schema tests**
 
-Run: `uv run pytest tests/test_sprint_schemas.py -v`  
+Run: `uv run pytest tests/test_sprint_schemas.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -240,7 +240,7 @@ def test_start_sprint_freezes_committed_points(session, make_user, make_project)
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_sprint_services.py -v`  
+Run: `uv run pytest tests/test_sprint_services.py -v`
 Expected: FAIL because the service functions do not exist.
 
 - [ ] **Step 3: Implement creation**
@@ -253,7 +253,7 @@ Expected: FAIL because the service functions do not exist.
 
 - [ ] **Step 5: Run service tests**
 
-Run: `uv run pytest tests/test_sprint_services.py -v`  
+Run: `uv run pytest tests/test_sprint_services.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -290,7 +290,7 @@ def test_close_rolls_unfinished_ticket_to_planning_sprint(session, active, plann
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_sprint_services.py -k close -v`  
+Run: `uv run pytest tests/test_sprint_services.py -k close -v`
 Expected: FAIL because `close_sprint` does not exist.
 
 - [ ] **Step 3: Implement close without intermediate commits**
@@ -299,7 +299,7 @@ Validate both sprints before mutation. Load all current sprint tickets, add one 
 
 - [ ] **Step 4: Run close and service tests**
 
-Run: `uv run pytest tests/test_sprint_services.py -v`  
+Run: `uv run pytest tests/test_sprint_services.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -340,7 +340,7 @@ def test_owner_can_create_sprint(client, make_user, make_project, login_as):
 
 - [ ] **Step 2: Run and verify 404 failures**
 
-Run: `uv run pytest tests/test_sprint_api.py -v`  
+Run: `uv run pytest tests/test_sprint_api.py -v`
 Expected: FAIL because the router is not registered.
 
 - [ ] **Step 3: Implement the thin router**
@@ -349,7 +349,7 @@ Use `project_reader` for reads and `project_owner` for project-scoped creation. 
 
 - [ ] **Step 4: Register the router and run tests**
 
-Run: `uv run pytest tests/test_sprint_api.py -v`  
+Run: `uv run pytest tests/test_sprint_api.py -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -378,7 +378,7 @@ Assert create/update accepts a same-project planning or active sprint, rejects a
 
 - [ ] **Step 2: Run and verify failure**
 
-Run: `uv run pytest tests/test_ticket_api.py tests/test_ticket_create.py -k sprint -v`  
+Run: `uv run pytest tests/test_ticket_api.py tests/test_ticket_create.py -k sprint -v`
 Expected: FAIL because sprint fields are not exposed.
 
 - [ ] **Step 3: Add shared validation and field handling**
@@ -391,7 +391,7 @@ Accept the string query parameter `sprint_id`; treat the literal `null` as `Tick
 
 - [ ] **Step 5: Run ticket and sprint tests**
 
-Run: `uv run pytest tests/test_ticket_api.py tests/test_ticket_create.py tests/test_sprint_api.py -v`  
+Run: `uv run pytest tests/test_ticket_api.py tests/test_ticket_create.py tests/test_sprint_api.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -422,9 +422,9 @@ Add a regression that creates active, planning, and closed sprint data, deletes 
 
 - [ ] **Step 3: Run authorization and full tests**
 
-Run: `uv run pytest tests/test_authorization_matrix.py -v`  
-Expected: PASS.  
-Run: `uv run pytest`  
+Run: `uv run pytest tests/test_authorization_matrix.py -v`
+Expected: PASS.
+Run: `uv run pytest`
 Expected: all non-benchmark tests PASS.
 
 - [ ] **Step 4: Update README API scope**
@@ -433,7 +433,7 @@ Document sprint status flow, explicit next-sprint requirement, and the commands 
 
 - [ ] **Step 5: Run final quality checks**
 
-Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`  
+Run: `uv run ruff check . && uv run ruff format --check . && git diff --check`
 Expected: all commands exit 0.
 
 - [ ] **Step 6: Commit**
