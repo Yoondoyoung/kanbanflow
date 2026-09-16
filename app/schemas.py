@@ -174,6 +174,16 @@ class SprintUpdate(BaseModel):
 
     _strip_text = field_validator("name", "goal")(_strip_sprint_text)
 
+    @model_validator(mode="after")
+    def dates_are_ordered(self):
+        if (
+            self.start_date is not None
+            and self.end_date is not None
+            and self.end_date <= self.start_date
+        ):
+            raise ValueError("end_date must be after start_date")
+        return self
+
 
 class SprintClose(BaseModel):
     next_sprint_id: str
@@ -195,8 +205,6 @@ class SprintOut(BaseModel):
 
 
 class SprintHistoryOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     ticket_id: str
     ticket_number: int
     title: str

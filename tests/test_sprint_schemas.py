@@ -64,6 +64,15 @@ def test_sprint_update_rejects_blank_text():
         SprintUpdate(name=" ")
 
 
+@pytest.mark.parametrize(
+    ("start_date", "end_date"),
+    [(date(2026, 9, 28), date(2026, 9, 21)), (date(2026, 9, 21), date(2026, 9, 21))],
+)
+def test_sprint_update_rejects_invalid_two_sided_dates(start_date, end_date):
+    with pytest.raises(ValidationError):
+        SprintUpdate(start_date=start_date, end_date=end_date)
+
+
 def test_sprint_out_exposes_public_sprint_fields():
     sprint = SprintOut(
         id="sprint-1",
@@ -101,3 +110,26 @@ def test_sprint_history_out_contains_close_snapshot_fields():
 
     assert history.status_at_close is TicketStatus.IN_PROGRESS
     assert history.was_completed is False
+
+
+def test_sprint_history_out_validates_and_serializes_joined_projection():
+    history = SprintHistoryOut.model_validate(
+        {
+            "ticket_id": "ticket-1",
+            "ticket_number": 7,
+            "title": "Checkout",
+            "status_at_close": "IN_PROGRESS",
+            "story_points_at_close": 3,
+            "was_completed": False,
+        }
+    )
+
+    assert SprintHistoryOut.model_config.get("from_attributes") is not True
+    assert history.model_dump(mode="json") == {
+        "ticket_id": "ticket-1",
+        "ticket_number": 7,
+        "title": "Checkout",
+        "status_at_close": "IN_PROGRESS",
+        "story_points_at_close": 3,
+        "was_completed": False,
+    }
