@@ -1,9 +1,22 @@
+from datetime import date
+
 import pytest
 from sqlalchemy import JSON, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
-from app.models import Project, ProjectMember, Role, Ticket, TicketStatus, TicketType, User
+from app.models import (
+    Project,
+    ProjectMember,
+    Role,
+    Sprint,
+    SprintStatus,
+    SprintTicketHistory,
+    Ticket,
+    TicketStatus,
+    TicketType,
+    User,
+)
 
 
 def make_user(session: Session, email: str = "a@b.com") -> User:
@@ -12,6 +25,44 @@ def make_user(session: Session, email: str = "a@b.com") -> User:
     session.commit()
     session.refresh(user)
     return user
+
+
+def test_sprint_and_history_models(session, make_user, make_project):
+    owner = make_user()
+    project = make_project(owner)
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        title="Checkout",
+        creator_id=owner.id,
+        story_points=3,
+    )
+    sprint = Sprint(
+        project_id=project.id,
+        name="Sprint 1",
+        goal="Ship checkout",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    session.add_all([ticket, sprint])
+    session.commit()
+
+    session.add(
+        SprintTicketHistory(
+            sprint_id=sprint.id,
+            ticket_id=ticket.id,
+            status_at_close=TicketStatus.DONE,
+            story_points_at_close=ticket.story_points,
+            was_completed=True,
+        )
+    )
+    session.commit()
+
+    assert sprint.status == SprintStatus.PLANNING
+    assert ticket.sprint_id is None
+    assert ticket.first_sprint_entered_at is None
+    assert ticket.delayed_days is None
+    assert ticket.rollover_count == 0
 
 
 def test_foreign_keys_are_enforced(session: Session):
