@@ -69,6 +69,11 @@ def patch_sprint(
     sprint = _sprint_access(sprint_id, user, session, owner=True)
     changes = body.model_dump(exclude_unset=True)
     if changes.pop("status", None):
+        if changes:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "status may not be combined with sprint details",
+            )
         return start_sprint(session, sprint)
     return update_sprint(session, sprint, **changes)
 
