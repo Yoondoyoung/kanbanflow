@@ -17,11 +17,13 @@ made this mistake once):
   unchanged.
 """
 
+from datetime import date
+
 import pytest
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Project, ProjectMember, Ticket
+from app.models import Project, ProjectMember, Sprint, SprintStatus, Ticket
 
 OWNER_ONLY = "owner_only"
 ANY_MEMBER = "any_member"
@@ -30,7 +32,7 @@ JSON = "json"
 FORM = "form"
 
 
-def endpoints(project, ticket_id, other_user_id):
+def endpoints(world):
     """(kind, transport, method, url, kwargs) for every mutating route in the app.
 
     kind says who the spec allows: ANY_MEMBER for ticket create/edit/transition,
@@ -45,6 +47,9 @@ def endpoints(project, ticket_id, other_user_id):
     a row here: any authenticated user may create a project, so there is no
     membership dimension for this matrix to check.
     """
+    project = world["project"]
+    ticket_id = world["ticket_id"]
+    other_user_id = world["member"].id
     slug = project.slug
     return [
         # -- JSON API: any project member may create/edit/transition tickets --
@@ -65,6 +70,35 @@ def endpoints(project, ticket_id, other_user_id):
             "post",
             f"/projects/{slug}/tickets/1/status",
             {"data": {"status": "DONE"}},
+        ),
+        # -- OWNER_ONLY: sprint lifecycle mutations use separate valid setups --
+        (
+            OWNER_ONLY,
+            JSON,
+            "post",
+            f"/api/v1/projects/{world['sprint_create_project'].slug}/sprints",
+            {
+                "json": {
+                    "name": "Created Sprint",
+                    "goal": "Ship",
+                    "start_date": "2026-09-21",
+                    "end_date": "2026-09-28",
+                }
+            },
+        ),
+        (
+            OWNER_ONLY,
+            JSON,
+            "patch",
+            f"/api/v1/sprints/{world['planning_sprint'].id}",
+            {"json": {"status": "ACTIVE"}},
+        ),
+        (
+            OWNER_ONLY,
+            JSON,
+            "post",
+            f"/api/v1/sprints/{world['active_sprint'].id}/close",
+            {"json": {"next_sprint_id": world["next_sprint"].id}},
         ),
         # -- OWNER_ONLY: ticket delete, project settings, membership, project delete --
         (OWNER_ONLY, JSON, "delete", f"/api/v1/tickets/{ticket_id}", {}),
@@ -89,13 +123,58 @@ def endpoints(project, ticket_id, other_user_id):
 
 
 @pytest.fixture
-def world(client, make_user, make_project, add_member, login_as):
+def world(client, session, make_user, make_project, add_member, login_as):
     owner = make_user(email="ada@example.com")
     member = make_user(email="bob@example.com")
     make_user(email="carol@example.com")
     outsider = make_user(email="dan@example.com")
     project = make_project(owner)
-    add_member(project, member)
+    sprint_create_project = make_project(owner, name="Sprint Create")
+    sprint_start_project = make_project(owner, name="Sprint Start")
+    sprint_close_project = make_project(owner, name="Sprint Close")
+    for current_project in [
+        project,
+        sprint_create_project,
+        sprint_start_project,
+        sprint_close_project,
+    ]:
+        add_member(current_project, member)
+    planning_sprint = Sprint(
+        project_id=sprint_start_project.id,
+        name="Planning Sprint",
+        goal="Start me",
+        status=SprintStatus.PLANNING,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    active_sprint = Sprint(
+        project_id=sprint_close_project.id,
+        name="Active Sprint",
+        goal="Close me",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+    next_sprint = Sprint(
+        project_id=sprint_close_project.id,
+        name="Next Sprint",
+        goal="Receive tickets",
+        status=SprintStatus.PLANNING,
+        start_date=date(2026, 9, 29),
+        end_date=date(2026, 10, 6),
+    )
+    session.add_all([planning_sprint, active_sprint, next_sprint])
+    session.flush()
+    session.add(
+        Ticket(
+            ticket_number=1,
+            project_id=sprint_close_project.id,
+            sprint_id=active_sprint.id,
+            title="Sprint ticket",
+            creator_id=owner.id,
+        )
+    )
+    session.commit()
     login_as("ada@example.com")
     ticket_id = client.post("/api/v1/tickets", json={"slug": project.slug, "title": "Seed"}).json()[
         "id"
@@ -104,6 +183,12 @@ def world(client, make_user, make_project, add_member, login_as):
     return {
         "project": project,
         "ticket_id": ticket_id,
+        "sprint_create_project": sprint_create_project,
+        "sprint_start_project": sprint_start_project,
+        "sprint_close_project": sprint_close_project,
+        "planning_sprint": planning_sprint,
+        "active_sprint": active_sprint,
+        "next_sprint": next_sprint,
         "owner": owner,
         "member": member,
         "outsider": outsider,
@@ -125,6 +210,11 @@ def snapshot(engine, project_slug, ticket_id):
             if project
             else []
         )
+        sprints = (
+            session.exec(select(Sprint).where(Sprint.project_id == project.id)).all()
+            if project
+            else []
+        )
         members = (
             session.exec(select(ProjectMember).where(ProjectMember.project_id == project.id)).all()
             if project
@@ -137,6 +227,8 @@ def snapshot(engine, project_slug, ticket_id):
             "ticket_ids": sorted(t.id for t in tickets),
             "ticket_title": ticket.title if ticket else None,
             "ticket_status": ticket.status if ticket else None,
+            "ticket_sprints": sorted((t.id, t.sprint_id) for t in tickets),
+            "sprints": sorted((s.id, s.status) for s in sprints),
             "members": sorted((m.user_id, m.role) for m in members),
         }
 
@@ -151,25 +243,32 @@ def call(client, transport, method, url, kwargs, actor):
     return getattr(client, method)(url, **kwargs)
 
 
+def endpoint_project_slug(world, url):
+    if "/projects/" in url:
+        return url.split("/projects/", 1)[1].split("/", 1)[0]
+    if world["planning_sprint"].id in url:
+        return world["sprint_start_project"].slug
+    if world["active_sprint"].id in url:
+        return world["sprint_close_project"].slug
+    return world["project"].slug
+
+
 def test_owner_is_allowed_everywhere(client, world, engine, login_as):
     login_as("ada@example.com")
-    for _, transport, method, url, kwargs in endpoints(
-        world["project"], world["ticket_id"], world["member"].id
-    ):
+    for _, transport, method, url, kwargs in endpoints(world):
         response = call(client, transport, method, url, kwargs, world["owner"])
         assert response.status_code < 400, f"{method} {url} -> {response.status_code}"
 
 
 def test_member_is_blocked_only_on_owner_actions(client, world, engine, login_as):
     login_as("bob@example.com")
-    for kind, transport, method, url, kwargs in endpoints(
-        world["project"], world["ticket_id"], world["owner"].id
-    ):
+    for kind, transport, method, url, kwargs in endpoints(world):
         if kind == OWNER_ONLY:
-            before = snapshot(engine, world["project"].slug, world["ticket_id"])
+            project_slug = endpoint_project_slug(world, url)
+            before = snapshot(engine, project_slug, world["ticket_id"])
             response = call(client, transport, method, url, kwargs, world["member"])
             assert response.status_code == 403, f"{method} {url} -> {response.status_code}"
-            after = snapshot(engine, world["project"].slug, world["ticket_id"])
+            after = snapshot(engine, project_slug, world["ticket_id"])
             assert after == before, f"side effect on denied {method} {url}"
         else:
             response = call(client, transport, method, url, kwargs, world["member"])
@@ -178,10 +277,9 @@ def test_member_is_blocked_only_on_owner_actions(client, world, engine, login_as
 
 def test_outsider_writes_are_403(client, world, engine, login_as):
     login_as("dan@example.com")
-    for _, transport, method, url, kwargs in endpoints(
-        world["project"], world["ticket_id"], world["member"].id
-    ):
-        before = snapshot(engine, world["project"].slug, world["ticket_id"])
+    for _, transport, method, url, kwargs in endpoints(world):
+        project_slug = endpoint_project_slug(world, url)
+        before = snapshot(engine, project_slug, world["ticket_id"])
         response = call(client, transport, method, url, kwargs, world["outsider"])
         # Spec (cs482_slice1_design.md:140): a non-member gets 403 on every write,
         # full stop -- so project/ticket existence never leaks through a 404 vs.
@@ -189,7 +287,7 @@ def test_outsider_writes_are_403(client, world, engine, login_as):
         # tuple) is what makes this cell able to fail when a route's dependency
         # gets this wrong.
         assert response.status_code == 403, f"{method} {url} -> {response.status_code}"
-        after = snapshot(engine, world["project"].slug, world["ticket_id"])
+        after = snapshot(engine, project_slug, world["ticket_id"])
         assert after == before, f"side effect on denied {method} {url}"
 
 

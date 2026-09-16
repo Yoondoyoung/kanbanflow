@@ -52,7 +52,7 @@ uv run uvicorn app.main:app --reload --workers 1
 ## Tests
 
 ```bash
-uv run pytest                      # unit and integration tests (205 passed)
+uv run pytest                      # unit and integration tests
 uv run pytest -m benchmark -s      # V-2 board-query latency benchmark (deselected by default)
 uv run ruff check . && uv run ruff format --check .
 ```
@@ -69,12 +69,28 @@ ticket is created and when one moves to `DONE`. Delivery runs in the
 background: a failed webhook is logged as a `WARNING` and never reverses the
 ticket change.
 
+## Sprint API
+
+Sprints are available through the JSON API. An `OWNER` creates a dated
+`PLANNING` sprint, starts it with `PATCH /api/v1/sprints/{id}` and
+`{"status": "ACTIVE"}`, then closes it with
+`POST /api/v1/sprints/{id}/close` and a required `next_sprint_id` for an
+existing `PLANNING` sprint. Closing snapshots the current sprint's tickets,
+rolls unfinished tickets into that explicit next sprint, and leaves the next
+sprint in `PLANNING` until an owner starts it.
+
+The available commands are:
+
+- `GET`/`POST /api/v1/projects/{slug}/sprints`
+- `GET`/`PATCH /api/v1/sprints/{id}`
+- `POST /api/v1/sprints/{id}/close`
+- `GET /api/v1/sprints/{id}/history`
+
 ## Out of scope for this slice
 
-Sprints, velocity, rollover, AI reports, GitHub webhooks, the `ApiToken` /
-personal-access-token system, the MCP server, and rate limiting are slice-2
-work and are intentionally absent here — their absence is not a defect in
-this slice.
+AI reports, GitHub webhooks, the `ApiToken` / personal-access-token system,
+the MCP server, and rate limiting are slice-2 work and are intentionally
+absent here — their absence is not a defect in this slice.
 
 ## Design documents
 

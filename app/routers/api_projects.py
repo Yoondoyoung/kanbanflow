@@ -1,10 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.auth import current_user, project_owner, project_reader
 from app.db import get_session
-from app.models import Project, ProjectMember, Role, Ticket, User, WebhookType
+from app.models import (
+    Project,
+    ProjectMember,
+    Role,
+    Sprint,
+    SprintTicketHistory,
+    Ticket,
+    User,
+    WebhookType,
+)
 from app.schemas import MemberAdd, MemberOut, MemberUpdate, ProjectCreate, ProjectOut, ProjectUpdate
 
 # slugify moved to app.services (single source of truth, shared with the
@@ -92,12 +102,13 @@ def delete_project(
     project, _ = access
     if confirm != project.slug:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")
-    for ticket in session.exec(select(Ticket).where(Ticket.project_id == project.id)).all():
-        session.delete(ticket)
-    for member in session.exec(
-        select(ProjectMember).where(ProjectMember.project_id == project.id)
-    ).all():
-        session.delete(member)
+    sprint_ids = select(Sprint.id).where(Sprint.project_id == project.id)
+    session.execute(
+        delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
+    )
+    session.execute(delete(Ticket).where(Ticket.project_id == project.id))
+    session.execute(delete(Sprint).where(Sprint.project_id == project.id))
+    session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
     # These models have no ORM relationship() linking them, only FK columns, so
     # SQLAlchemy's unit of work has no dependency info to order the deletes by
     # and will happily try to delete `project` before its children, tripping

@@ -1,7 +1,18 @@
-import pytest
-from sqlmodel import Session
+from datetime import date
 
-from app.models import Project
+import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import Session, select
+
+from app.models import (
+    Project,
+    ProjectMember,
+    Sprint,
+    SprintStatus,
+    SprintTicketHistory,
+    Ticket,
+    TicketStatus,
+)
 from app.routers.api_projects import slugify
 
 
@@ -86,6 +97,84 @@ def test_non_member_gets_404_on_project_detail(client, make_user, login_as):
 
 def test_anonymous_request_is_401(client):
     assert client.post("/api/v1/projects", json={"name": "X"}).status_code == 401
+
+
+def test_owner_deletes_project_with_sprint_history(
+    client, engine, session, make_user, make_project, add_member, login_as
+):
+    owner = make_user(email="ada@example.com")
+    member = make_user(email="member@example.com")
+    project = make_project(owner)
+    add_member(project, member)
+    closed = Sprint(
+        project_id=project.id,
+        name="Closed",
+        goal="Done",
+        status=SprintStatus.CLOSED,
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 8),
+    )
+    active = Sprint(
+        project_id=project.id,
+        name="Active",
+        goal="Now",
+        status=SprintStatus.ACTIVE,
+        start_date=date(2026, 9, 8),
+        end_date=date(2026, 9, 15),
+    )
+    planning = Sprint(
+        project_id=project.id,
+        name="Planning",
+        goal="Next",
+        status=SprintStatus.PLANNING,
+        start_date=date(2026, 9, 15),
+        end_date=date(2026, 9, 22),
+    )
+    session.add_all([closed, active, planning])
+    session.flush()
+    ticket = Ticket(
+        ticket_number=1,
+        project_id=project.id,
+        sprint_id=active.id,
+        title="Sprint ticket",
+        creator_id=owner.id,
+    )
+    session.add(ticket)
+    session.flush()
+    session.add(
+        SprintTicketHistory(
+            sprint_id=closed.id,
+            ticket_id=ticket.id,
+            status_at_close=TicketStatus.DONE,
+            story_points_at_close=3,
+            was_completed=True,
+        )
+    )
+    session.commit()
+    project_id = project.id
+    closed_id = closed.id
+    login_as(owner.email)
+
+    try:
+        response = client.delete(f"/api/v1/projects/{project.slug}?confirm={project.slug}")
+    except IntegrityError as exc:
+        pytest.fail(f"project deletion leaves sprint history behind: {exc}")
+    assert response.status_code == 204
+
+    with Session(engine) as check:
+        assert check.get(Project, project_id) is None
+        assert (
+            check.exec(select(ProjectMember).where(ProjectMember.project_id == project_id)).all()
+            == []
+        )
+        assert check.exec(select(Ticket).where(Ticket.project_id == project_id)).all() == []
+        assert check.exec(select(Sprint).where(Sprint.project_id == project_id)).all() == []
+        assert (
+            check.exec(
+                select(SprintTicketHistory).where(SprintTicketHistory.sprint_id == closed_id)
+            ).all()
+            == []
+        )
 
 
 def test_concurrent_project_creation_race_returns_409_not_500(
