@@ -33,6 +33,7 @@ USER_NAME_MAX_LENGTH = 50
 _EMAIL_TAKEN = "Email already registered"
 _PLANNING_SPRINT_EXISTS = "A planning sprint already exists"
 _ACTIVE_SPRINT_EXISTS = "An active sprint already exists"
+_SPRINT_UPDATE_CONFLICT = "Sprint update conflict"
 
 
 def slugify(name: str) -> str:
@@ -151,6 +152,9 @@ def create_sprint(
 def update_sprint(session: Session, sprint: Sprint, **changes) -> Sprint:
     if sprint.status is not SprintStatus.PLANNING:
         raise HTTPException(status.HTTP_409_CONFLICT, "Sprint must be planning")
+    for field in ("name", "goal", "start_date", "end_date"):
+        if field in changes and changes[field] is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"{field} may not be null")
     start_date = changes.get("start_date", sprint.start_date)
     end_date = changes.get("end_date", sprint.end_date)
     if end_date <= start_date:
@@ -161,7 +165,11 @@ def update_sprint(session: Session, sprint: Sprint, **changes) -> Sprint:
         if field in changes:
             setattr(sprint, field, changes[field])
     session.add(sprint)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, _SPRINT_UPDATE_CONFLICT) from None
     session.refresh(sprint)
     return sprint
 

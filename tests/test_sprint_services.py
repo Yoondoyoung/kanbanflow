@@ -143,6 +143,63 @@ def test_update_sprint_rejects_non_planning_sprints(session, make_user, make_pro
     assert sprint.name == "Sprint 1"
 
 
+@pytest.mark.parametrize(
+    "changes", [{"name": None}, {"goal": None}, {"start_date": None}, {"end_date": None}]
+)
+def test_update_sprint_rejects_null_required_fields(session, make_user, make_project, changes):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    sprint = create_sprint(
+        session,
+        project,
+        name="Sprint 1",
+        goal="Ship checkout",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        update_sprint(session, sprint, **changes)
+
+    assert exc_info.value.status_code == 422
+    session.refresh(sprint)
+    assert (sprint.name, sprint.goal, sprint.start_date, sprint.end_date) == (
+        "Sprint 1",
+        "Ship checkout",
+        date(2026, 9, 21),
+        date(2026, 9, 28),
+    )
+
+
+def test_update_sprint_rolls_back_an_integrity_error(session, make_user, make_project):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    sprint = create_sprint(
+        session,
+        project,
+        name="Sprint 1",
+        goal="Ship checkout",
+        start_date=date(2026, 9, 21),
+        end_date=date(2026, 9, 28),
+    )
+
+    def fail_commit(_session):
+        raise IntegrityError("UPDATE", {}, RuntimeError("simulated update conflict"))
+
+    event.listen(session, "before_commit", fail_commit)
+    try:
+        with pytest.raises(HTTPException) as exc_info:
+            update_sprint(session, sprint, name="Changed")
+    finally:
+        event.remove(session, "before_commit", fail_commit)
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Sprint update conflict"
+    session.refresh(sprint)
+    assert sprint.name == "Sprint 1"
+    assert update_sprint(session, sprint, name="Changed").name == "Changed"
+
+
 def test_start_sprint_freezes_committed_points(session, make_user, make_project):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
