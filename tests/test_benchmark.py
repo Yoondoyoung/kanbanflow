@@ -14,7 +14,7 @@ QUERY_RUNS = 50
 def test_board_query_p95_under_20ms(engine, capsys):
     with Session(engine) as session:
         user = User(name="Ada", email="ada@example.com", password_hash="x")
-        project = Project(name="Payment Gateway", slug="payment-gateway")
+        project = Project(name="Payment Gateway", slug="payment-gateway", key="PAY")
         session.add(user)
         session.add(project)
         session.commit()

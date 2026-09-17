@@ -5,8 +5,8 @@ from sqlmodel import Session, SQLModel
 from app.auth import hash_password
 from app.db import get_session, make_engine
 from app.main import app
-from app.models import Project, ProjectMember, Role, User
-from app.routers.api_projects import slugify
+from app.models import ProjectMember, Role, User
+from app.services import create_project
 
 
 @pytest.fixture
@@ -52,13 +52,7 @@ def make_user(engine):
 def make_project(engine):
     def _make(owner, name: str = "Payment Gateway"):
         with Session(engine) as session:
-            project = Project(name=name, slug=slugify(name))
-            session.add(project)
-            session.flush()
-            session.add(ProjectMember(project_id=project.id, user_id=owner.id, role=Role.OWNER))
-            session.commit()
-            session.refresh(project)
-            return project
+            return create_project(session, name, owner)
 
     return _make
 

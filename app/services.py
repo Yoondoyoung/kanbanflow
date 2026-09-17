@@ -55,6 +55,17 @@ def _slug_conflict_detail(slug: str) -> str:
     return f"Slug already taken: {slug}"
 
 
+def allocate_project_key(session: Session, name: str) -> str:
+    token = next(iter(name.split()), "")
+    base = "".join(c for c in token.upper() if c.isascii() and c.isalnum())[:3] or "PRJ"
+    suffix = 1
+    while True:
+        key = base if suffix == 1 else f"{base[: 10 - len(str(suffix))]}{suffix}"
+        if session.exec(select(Project.id).where(Project.key == key)).first() is None:
+            return key
+        suffix += 1
+
+
 def register_user(session: Session, *, name: str, email: str, password: str) -> User:
     # Both registration routes use this service because the HTML form has no
     # Pydantic model in front of it. Keep the database-facing validation and
@@ -107,20 +118,25 @@ def create_project(session: Session, name: str, user: User) -> Project:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name yields an empty slug")
     if session.exec(select(Project).where(Project.slug == slug)).first():
         raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug))
-    project = Project(name=clean_name, slug=slug)
-    session.add(project)
-    try:
-        session.flush()
-        session.add(ProjectMember(project_id=project.id, user_id=user.id, role=Role.OWNER))
-        session.commit()
-    except IntegrityError:
-        # Two concurrent project creations that derive the same slug can both
-        # pass the pre-check above; the unique constraint on Project.slug
-        # catches the loser here (Ruling R16).
-        session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
-    session.refresh(project)
-    return project
+    key = allocate_project_key(session, clean_name)
+    while True:
+        project = Project(name=clean_name, slug=slug, key=key)
+        session.add(project)
+        try:
+            session.flush()
+            session.add(ProjectMember(project_id=project.id, user_id=user.id, role=Role.OWNER))
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            if "UNIQUE constraint failed: project.key" in str(exc.orig):
+                key = allocate_project_key(session, clean_name)
+                continue
+            # Two concurrent project creations that derive the same slug can both
+            # pass the pre-check above; the unique constraint on Project.slug
+            # catches the loser here (Ruling R16).
+            raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
+        session.refresh(project)
+        return project
 
 
 def update_project(session: Session, project: Project, **changes) -> Project:

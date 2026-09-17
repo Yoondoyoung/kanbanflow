@@ -92,6 +92,7 @@ class ProjectOut(BaseModel):
     id: str
     name: str
     slug: str
+    key: str
     webhook_type: WebhookType
     webhook_url: str | None
     created_at: datetime

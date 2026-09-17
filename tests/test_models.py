@@ -257,7 +257,7 @@ def test_email_is_unique(session: Session):
 
 def test_member_pair_is_unique(session: Session):
     user = make_user(session)
-    project = Project(name="P", slug="p")
+    project = Project(name="P", slug="p", key="P")
     session.add(project)
     session.commit()
     session.refresh(project)
@@ -270,7 +270,7 @@ def test_member_pair_is_unique(session: Session):
 
 def test_ticket_number_is_unique_per_project(session: Session):
     user = make_user(session)
-    project = Project(name="P", slug="p")
+    project = Project(name="P", slug="p", key="P")
     session.add(project)
     session.commit()
     session.refresh(project)
@@ -294,7 +294,7 @@ def test_ticket_meta_is_a_non_null_json_column_defaulting_to_empty(session: Sess
     # from the model (default_factory), the NOT NULL from the column -- assert
     # both, since patch_ticket's null guard depends on the column being NOT NULL.
     user = make_user(session)
-    project = Project(name="P", slug="p")
+    project = Project(name="P", slug="p", key="P")
     session.add(project)
     session.commit()
     session.refresh(project)

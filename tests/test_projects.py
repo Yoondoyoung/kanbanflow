@@ -246,7 +246,7 @@ def test_concurrent_project_creation_race_returns_409_not_500(
         if not state["triggered"]:
             state["triggered"] = True
             with Session(engine) as racer_session:
-                racer_session.add(Project(name="Racer", slug="payment-gateway"))
+                racer_session.add(Project(name="Racer", slug="payment-gateway", key="RAC"))
                 racer_session.commit()
         return result
 

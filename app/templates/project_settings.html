@@ -10,6 +10,7 @@
   {% if saved %}<p class="form-status" role="status">Settings saved.</p>{% endif %}
   <section class="settings-section app-surface" aria-labelledby="project-settings-heading">
     <h2 id="project-settings-heading">Project details</h2>
+    <p>Key: <code>{{ project.key }}</code></p>
     {% if role == 'OWNER' %}
     <form class="app-form" action="/projects/{{ project.slug }}/settings/project" method="post" data-testid="owner-settings-controls">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">

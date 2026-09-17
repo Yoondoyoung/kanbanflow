@@ -82,6 +82,7 @@ class Project(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     name: str = Field(max_length=100)
     slug: str = Field(max_length=50, unique=True, index=True)
+    key: str = Field(max_length=10, unique=True, index=True)
     webhook_type: WebhookType = Field(default=WebhookType.NONE)
     webhook_url: str | None = Field(default=None, max_length=500)
     next_ticket_number: int = Field(default=1)

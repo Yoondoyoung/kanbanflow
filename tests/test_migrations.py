@@ -12,6 +12,37 @@ from app.db import make_engine
 from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus, User
 
 
+def test_key_migration_backfills_existing_projects(tmp_path):
+    db = tmp_path / "legacy.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "c41d8e7f2a10"], check=True, env=env)
+    with make_engine(f"sqlite:///{db}").begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project "
+                "(id,name,slug,webhook_type,next_ticket_number,created_at) VALUES "
+                "('a','Payment Gateway','payment-gateway','NONE',1,'2026-01-01'),"
+                "('b','Payments Admin','payments-admin','NONE',1,'2026-01-02')"
+            )
+        )
+
+    subprocess.run(["uv", "run", "alembic", "upgrade", "d93f7a21c4e8"], check=True, env=env)
+    with make_engine(f"sqlite:///{db}").connect() as connection:
+        assert connection.execute(text("SELECT key FROM project ORDER BY id")).scalars().all() == [
+            "PAY",
+            "PAY2",
+        ]
+
+    subprocess.run(
+        ["uv", "run", "alembic", "downgrade", "c41d8e7f2a10"], check=True, env=env
+    )
+    columns = {
+        column["name"]
+        for column in inspect(make_engine(f"sqlite:///{db}")).get_columns("project")
+    }
+    assert "key" not in columns
+
+
 def test_migration_produces_the_same_tables_as_the_models(tmp_path):
     db = tmp_path / "migrated.db"
     subprocess.run(
@@ -110,9 +141,9 @@ def test_sprint_migration_rejects_invalid_dates(tmp_path):
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO project (id, name, slug, webhook_type, next_ticket_number, "
+                "INSERT INTO project (id, name, slug, key, webhook_type, next_ticket_number, "
                 "created_at) "
-                "VALUES ('project-1', 'Project', 'project', 'NONE', 1, CURRENT_TIMESTAMP)"
+                "VALUES ('project-1', 'Project', 'project', 'PRO', 'NONE', 1, CURRENT_TIMESTAMP)"
             )
         )
         with pytest.raises(IntegrityError):
@@ -136,7 +167,7 @@ def test_sprint_migration_enforces_status_and_history_constraints(tmp_path):
 
     with Session(engine) as session:
         owner = User(name="Owner", email="owner@example.com", password_hash="x")
-        project = models.Project(name="Project", slug="project")
+        project = models.Project(name="Project", slug="project", key="PRO")
         session.add_all([owner, project])
         session.commit()
         ticket = Ticket(ticket_number=1, project_id=project.id, title="Ticket", creator_id=owner.id)

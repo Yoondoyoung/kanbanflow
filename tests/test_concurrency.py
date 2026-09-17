@@ -13,7 +13,7 @@ CONCURRENT_CREATIONS = 50
 def test_fifty_concurrent_creations_yield_fifty_consecutive_numbers(engine, capsys):
     with Session(engine) as setup:
         user = User(name="Ada", email="ada@example.com", password_hash="x")
-        project = Project(name="Payment Gateway", slug="payment-gateway")
+        project = Project(name="Payment Gateway", slug="payment-gateway", key="PAY")
         setup.add(user)
         setup.add(project)
         setup.commit()
