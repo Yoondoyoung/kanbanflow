@@ -1,4 +1,9 @@
 import re
+from datetime import date
+
+from sqlmodel import Session
+
+from app.models import Sprint, SprintStatus
 
 
 def test_project_shell_marks_the_open_project(client, make_user, make_project, login_as):
@@ -32,10 +37,22 @@ def test_project_navigation_keeps_settings_as_a_secondary_utility(
 
 
 def test_sprint_selector_contains_only_sprint_destinations(
-    client, make_user, make_project, login_as
+    client, engine, make_user, make_project, login_as
 ):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
+    with Session(engine) as session:
+        session.add(
+            Sprint(
+                project_id=project.id,
+                name="Sprint 1",
+                goal="Ship it",
+                status=SprintStatus.PLANNING,
+                start_date=date(2026, 9, 21),
+                end_date=date(2026, 9, 28),
+            )
+        )
+        session.commit()
     login_as(owner.email)
 
     page = client.get(f"/projects/{project.slug}/backlog")
@@ -44,6 +61,29 @@ def test_sprint_selector_contains_only_sprint_destinations(
     assert "Backlog" not in selector
     assert "Sprint history" not in selector
     assert "Settings" not in selector
+
+
+def test_sprint_selector_is_absent_without_sprints(client, make_user, make_project, login_as):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/backlog")
+
+    assert 'class="sprint-selector"' not in page.text
+
+
+def test_settings_link_has_current_location_state(client, make_user, make_project, login_as):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/settings")
+
+    assert (
+        f'<a class="project-settings-link is-active" href="/projects/{project.slug}/settings" '
+        'aria-current="page">Settings</a>'
+    ) in page.text
 
 
 def test_backlog_has_one_primary_owner_action_without_a_planning_sprint(
@@ -79,7 +119,13 @@ def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
             "sprint_id": "",
             "resolution_notes": "",
         },
-        ticket_types=[], priorities=[], columns=[], members=[], sprints=[], csrf_token="token", error=None,
+        ticket_types=[],
+        priorities=[],
+        columns=[],
+        members=[],
+        sprints=[],
+        csrf_token="token",
+        error=None,
         detail_drawer=True,
     )
 

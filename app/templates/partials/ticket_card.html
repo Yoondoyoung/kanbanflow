@@ -2,7 +2,7 @@
          hx-get="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}?card=true"
          hx-trigger="refresh-ticket-card-{{ ticket.id }} from:body"
          hx-target="this" hx-swap="outerHTML">
-  <button type="button" class="ticket-card-open" @click="ticketOpener = $el"
+  <button type="button" class="ticket-card-open" @click="ticketOpener = '{{ ticket.id }}'"
           hx-get="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
           hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <span class="ticket-card-title">

@@ -234,6 +234,7 @@ def _ticket_detail(
     status_code: int = status.HTTP_200_OK,
     page: bool = False,
     submitted_values: dict[str, str] | None = None,
+    saved: bool = False,
 ) -> Response:
     members = session.exec(
         select(User)
@@ -275,6 +276,7 @@ def _ticket_detail(
             "priorities": Priority,
             "columns": COLUMNS,
             "error": error,
+            "saved": saved,
             "form_values": form_values,
             "active_tab": "board",
             "selected_sprint_id": ticket.sprint_id,
@@ -555,7 +557,7 @@ def update_ticket_form(
             f"/projects/{project.slug}/tickets/{ticket.ticket_number}",
             status_code=status.HTTP_303_SEE_OTHER,
         )
-    response = _ticket_detail(request, session, user, project, ticket)
+    response = _ticket_detail(request, session, user, project, ticket, saved=True)
     if (ticket.status, ticket.sprint_id) != (old_status, old_sprint_id):
         response.headers["HX-Refresh"] = "true"
     else:

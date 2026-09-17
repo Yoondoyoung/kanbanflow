@@ -1,4 +1,4 @@
-<div class="sprint-selector">
+{% if sprint_options %}<div class="sprint-selector">
   <label for="sprint-selector">Sprint</label>
   <select id="sprint-selector" onchange="window.location.href = this.value">
     {% for selector_sprint in sprint_options %}
@@ -9,4 +9,4 @@
       {% endif %}
     {% endfor %}
   </select>
-</div>
+</div>{% endif %}

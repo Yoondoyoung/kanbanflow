@@ -9,8 +9,6 @@
   --line-strong: #c9c7c0;
   --focus: #9b6b2f;
   --control: #f3f2ef;
-  --success: #2f6b4f;
-  --warning: #8a5b16;
   --danger: #a4433d;
   --space-1: 4px;
   --space-2: 8px;
@@ -20,7 +18,6 @@
   --space-6: 24px;
   --radius-sm: 4px;
   --radius-md: 8px;
-  --radius-lg: 12px;
   color: var(--text);
   background: var(--canvas);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -36,6 +33,7 @@ button, input, select, textarea { font: inherit; }
 
 .skip-link { background: var(--text); color: var(--surface); left: var(--space-3); padding: var(--space-2) var(--space-3); position: fixed; top: -64px; z-index: 100; }
 .skip-link:focus { top: var(--space-3); }
+.sr-only { clip: rect(0, 0, 0, 0); height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; white-space: nowrap; width: 1px; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .app-shell { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
@@ -53,15 +51,20 @@ button, input, select, textarea { font: inherit; }
 .auth-header { background: var(--surface); border-bottom: 1px solid var(--line); padding: var(--space-4) var(--space-6); }
 .app-mobile-header, .app-drawer-backdrop { display: none; }
 
-.app-page { max-width: 768px; }
-.app-page-header { min-height: 40px; }
+.app-page { margin: 0 auto; max-width: 768px; }
+.app-page-header { align-items: center; display: flex; min-height: 40px; }
+.app-page-header .app-primary-button, .app-dialog-header .app-icon-button { margin-left: auto; }
+.app-dashboard { max-width: 768px; }
+.app-dashboard .app-surface { overflow: hidden; }
 .app-page-title, .project-title { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin: 0; text-wrap: balance; }
 .app-surface, .surface { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .app-row-list { list-style: none; margin: 0; padding: 0; }
 .app-row + .app-row { border-top: 1px solid var(--line); }
-.app-row { min-height: 56px; }
+.app-row { align-items: center; display: flex; gap: var(--space-3); min-height: 56px; padding: var(--space-3) var(--space-4); }
 .app-row:hover { background: var(--surface-inset); }
 .app-row > span, .app-empty-state { color: var(--muted); font-size: 12px; }
+.app-row > span { margin-left: auto; }
+.app-empty-state { padding: var(--space-3) var(--space-4); }
 .app-row-link { color: var(--text); font-weight: 650; text-decoration: none; }
 .app-row-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
@@ -78,13 +81,14 @@ button, input, select, textarea { font: inherit; }
 
 .app-dialog { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-md); box-shadow: 0 16px 40px rgb(55 53 47 / 18%); max-width: 448px; padding: var(--space-5); width: calc(100% - 32px); }
 .app-dialog::backdrop { background: rgb(55 53 47 / 25%); }
-.app-dialog-header { margin-bottom: var(--space-3); }
+.app-dialog-header { align-items: center; display: flex; margin-bottom: var(--space-3); }
 .app-dialog-header h2 { font-size: 18px; margin: 0; }
 .app-form { display: grid; gap: var(--space-3); }
 .app-form label { color: var(--text-secondary); display: block; font-size: 12px; font-weight: 650; margin-bottom: var(--space-1); }
 .app-input, .app-form input, .app-form select, .app-form textarea, .board-filters select, .sprint-selector select { background: var(--control); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--text); min-height: 40px; padding: var(--space-2); width: 100%; }
-.app-form-actions { margin-top: var(--space-1); }
+.app-form-actions { display: flex; gap: var(--space-2); justify-content: end; margin-top: var(--space-1); }
 .form-error { color: var(--danger); font-size: 12px; margin: 0 0 var(--space-3); }
+.form-status { color: var(--text-secondary); font-size: 12px; margin: 0 0 var(--space-3); }
 
 .project-board { max-width: 1440px; }
 .project-header { align-items: start; display: flex; gap: var(--space-5); justify-content: space-between; margin-bottom: var(--space-4); }

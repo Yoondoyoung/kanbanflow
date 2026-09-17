@@ -3,7 +3,7 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => ticketOpener && ticketOpener.focus())">
+<div class="project-board" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus())">
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>

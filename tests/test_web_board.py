@@ -119,7 +119,11 @@ def test_board_ticket_detail_fragment_uses_a_native_dialog(client, active_sprint
     login_as(active_sprint_world.owner.email)
     ticket = client.post(
         "/api/v1/tickets",
-        json={"slug": project.slug, "title": "Open in dialog", "sprint_id": active_sprint_world.sprint.id},
+        json={
+            "slug": project.slug,
+            "title": "Open in dialog",
+            "sprint_id": active_sprint_world.sprint.id,
+        },
     ).json()
 
     fragment = client.get(
@@ -128,7 +132,10 @@ def test_board_ticket_detail_fragment_uses_a_native_dialog(client, active_sprint
     )
 
     assert fragment.status_code == 200
-    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"' in fragment.text
+    assert (
+        '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"'
+        in fragment.text
+    )
     assert "$el.showModal()" in fragment.text
 
 
@@ -219,7 +226,8 @@ def test_project_opens_active_sprint(client, active_sprint_world, login_as):
     for tab in ("Board", "Backlog", "History"):
         assert f">{tab}</a>" in page.text
     assert (
-        f'<a class="project-settings-link" href="/projects/{active_sprint_world.project.slug}/settings">Settings</a>'
+        f'<a class="project-settings-link" '
+        f'href="/projects/{active_sprint_world.project.slug}/settings">Settings</a>'
         in page.text
     )
 

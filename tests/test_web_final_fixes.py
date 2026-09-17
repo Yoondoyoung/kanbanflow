@@ -272,7 +272,10 @@ def test_non_htmx_detail_validation_renders_a_full_page_form(client, web_world, 
     assert response.headers["content-type"].startswith("text/html")
     assert "<html" in response.text
     assert "Save changes" in response.text
-    assert f'<form class="app-form ticket-detail-form" method="post" action="{url}"' in response.text
+    assert (
+        f'<form class="app-form ticket-detail-form" method="post" action="{url}"'
+        in response.text
+    )
     assert f'href="/projects/{web_world.project.slug}">Back to board</a>' in response.text
     assert "ticketOpener" not in response.text
 
@@ -465,6 +468,6 @@ def test_web_role_labels_are_human_readable(client, web_world, login_as):
     settings = client.get(f"/projects/{web_world.project.slug}/settings")
 
     assert dashboard.status_code == 200
-    assert 'class="ml-auto text-xs text-slate-500">Owner</span>' in dashboard.text
+    assert '<span>Owner</span>' in dashboard.text
     assert f"{web_world.owner.email} · Owner" in settings.text
     assert f"{web_world.member.email} · Member" in settings.text

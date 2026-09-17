@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -244,6 +245,37 @@ def test_compact_card_opens_the_detail_panel_and_refreshes_itself(client, ticket
     assert f'hx-get="/projects/{ticket_world.project.slug}/tickets/1"' in page.text
     assert 'hx-target="#ticket-detail-root"' in page.text
     assert f"refresh-ticket-card-{ticket_world.ticket_id}" in card.text
+
+
+def test_ticket_save_returns_a_textual_status(client, ticket_world, login_as):
+    login_as(ticket_world.owner.email)
+
+    response = client.post(
+        f"/projects/{ticket_world.project.slug}/tickets/1",
+        data={
+            "title": "Unsafe details",
+            "description": "Text",
+            "type": "BUG",
+            "priority": "HIGH",
+            "status": "SELECTED",
+            "_csrf": make_csrf_token(ticket_world.owner.id),
+        },
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200
+    assert '<p class="form-status" role="status">Ticket saved.</p>' in response.text
+
+
+def test_ticket_drawer_resolves_the_current_card_button_after_a_refresh():
+    board = Path("app/templates/board.html").read_text()
+    card = Path("app/templates/partials/ticket_card.html").read_text()
+
+    assert "ticketOpener = '{{ ticket.id }}'" in card
+    assert (
+        "document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus()"
+        in board
+    )
 
 
 def test_outsider_cannot_read_ticket_detail(client, ticket_world, login_as):

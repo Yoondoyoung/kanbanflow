@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - Kanban Flow{% endblock %}
 {% block content %}
-<div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="app-page app-dashboard max-w-3xl mx-auto space-y-6">
-  <div class="app-page-header flex items-center">
+<div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="app-page app-dashboard">
+  <div class="app-page-header">
     <h1 id="projects-heading" class="app-page-title">Projects</h1>
-    <button x-ref="projectDialogOpener" class="app-primary-button ml-auto" type="button"
+    <button x-ref="projectDialogOpener" class="app-primary-button" type="button"
             aria-controls="project-dialog" aria-haspopup="dialog"
             @click="projectDialog = true; $refs.projectDialog.showModal(); $nextTick(() => $refs.projectName.focus())">New project</button>
   </div>
 
-  <section class="surface app-surface overflow-hidden" aria-labelledby="projects-heading">
+  <section class="surface app-surface" aria-labelledby="projects-heading">
     {% if projects %}
       <ul class="app-row-list">
         {% for project in projects %}
-          <li data-testid="project-row" class="app-row flex items-center gap-3 px-4 py-3">
+        <li data-testid="project-row" class="app-row">
             <a class="app-row-link" href="/projects/{{ project.slug }}">{{ project.name }}</a>
-            <span class="ml-auto text-xs text-slate-500">{{ roles[project.id]|capitalize }}</span>
+          <span>{{ roles[project.id]|capitalize }}</span>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="app-empty-state px-4 py-3">No projects yet.</p>
+      <p class="app-empty-state">No projects yet.</p>
     {% endif %}
   </section>
 
@@ -29,9 +29,9 @@
           x-init="if (projectDialog) { $el.showModal(); $nextTick(() => $refs.projectName.focus()) }"
           @close="projectDialog = false; $refs.projectDialogOpener.focus()"
           @click="$event.target === $el && $el.close()">
-      <div class="app-dialog-header flex items-center">
+    <div class="app-dialog-header">
         <h2 id="project-dialog-heading">New project</h2>
-        <button class="app-icon-button ml-auto" type="button" @click="$refs.projectDialog.close()" aria-label="Close new project dialog">×</button>
+      <button class="app-icon-button" type="button" @click="$refs.projectDialog.close()" aria-label="Close new project dialog">×</button>
       </div>
       {% if error %}<p id="form-error" role="alert" class="form-error">{{ error }}</p>{% endif %}
       <form method="post" action="/projects" class="app-form">
@@ -49,7 +49,7 @@
             {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
           >
         </div>
-        <div class="app-form-actions flex justify-end gap-2">
+      <div class="app-form-actions">
           <button class="app-ghost-button" type="button" @click="$refs.projectDialog.close()">Cancel</button>
           <button class="app-primary-button">Create</button>
         </div>

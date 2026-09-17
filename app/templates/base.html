@@ -5,26 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kanban Flow{% endblock %}</title>
   <link rel="stylesheet" href="/static/app.css">
-  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to main content</a>
   {% if user %}
-    <div class="app-shell" x-data="{ navOpen: false, isMobile: window.matchMedia('(max-width: 767px)').matches }"
+    <div class="app-shell" x-data="{ navOpen: false, isMobile: window.matchMedia('(max-width: 767px)').matches, navOpener: null, closeNav() { this.navOpen = false; this.$nextTick(() => this.navOpener?.focus()) }, trapNav(event) { const focusable = [...this.$refs.mobileNav.querySelectorAll('a, button, input, select, textarea, [tabindex]:not([tabindex=-1])')].filter(element => !element.disabled); const first = focusable[0]; const last = focusable.at(-1); if (!first || !last) return; if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } } }"
          x-init="window.matchMedia('(max-width: 767px)').addEventListener('change', event => { isMobile = event.matches; if (!event.matches) navOpen = false })">
-      <header class="app-mobile-header">
+        <header class="app-mobile-header" :inert="isMobile && navOpen">
         <button class="app-menu-button" type="button" aria-controls="app-sidebar"
-                :aria-expanded="navOpen.toString()" @click="navOpen = !navOpen">
+                :aria-expanded="navOpen.toString()" @click="navOpener = $el; navOpen = !navOpen; if (navOpen) $nextTick(() => $refs.mobileNav.querySelector('a, button')?.focus()); else $nextTick(() => navOpener?.focus())">
           <span class="sr-only">Toggle navigation</span>☰
         </button>
         <a href="/dashboard" class="app-brand">Kanban Flow</a>
       </header>
-      <div class="app-drawer-backdrop" x-cloak x-show="navOpen && isMobile" @click="navOpen = false" aria-hidden="true"></div>
-      <aside id="app-sidebar" data-testid="app-sidebar" class="app-sidebar" :class="{ 'is-open': navOpen }"
+        <div class="app-drawer-backdrop" x-cloak x-show="navOpen && isMobile" @click="closeNav()" aria-hidden="true"></div>
+        <aside id="app-sidebar" x-ref="mobileNav" data-testid="app-sidebar" class="app-sidebar" :class="{ 'is-open': navOpen }"
              :inert="isMobile && !navOpen" :aria-hidden="(isMobile && !navOpen).toString()"
-             @keydown.escape.window="navOpen = false">
+               :role="isMobile ? 'dialog' : null" :aria-modal="isMobile ? 'true' : null" @keydown.escape.window="if (isMobile && navOpen) closeNav()" @keydown.tab="if (isMobile && navOpen) trapNav($event)">
         <a href="/dashboard" class="app-brand">Kanban Flow</a>
         <nav aria-label="Projects" class="app-project-nav">
           <a href="/dashboard" class="app-projects-link">Projects</a>
@@ -43,7 +42,7 @@
   {% else %}
     <header class="auth-header"><a href="/login" class="app-brand">Kanban Flow</a></header>
   {% endif %}
-  <main id="main-content"{% if user %} class="app-main"{% else %} class="auth-main"{% endif %}>{% block content %}{% endblock %}</main>
+  <main id="main-content"{% if user %} class="app-main" :inert="isMobile && navOpen"{% else %} class="auth-main"{% endif %}>{% block content %}{% endblock %}</main>
   {% if user %}</div>{% endif %}
 </body>
 </html>

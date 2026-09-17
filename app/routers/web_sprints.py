@@ -49,6 +49,7 @@ def _settings(
     error: str | None = None,
     values: dict | None = None,
     status_code: int = status.HTTP_200_OK,
+    saved: bool = False,
 ) -> Response:
     return render(
         request,
@@ -60,6 +61,7 @@ def _settings(
             "active_tab": "settings",
             "members": project_members(session, project.id),
             "error": error,
+            "saved": saved,
             "values": values or {},
         },
         status_code=status_code,
@@ -202,12 +204,13 @@ def backlog(
 @router.get("/projects/{slug}/settings")
 def project_settings(
     request: Request,
+    saved: bool = False,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
-    return _settings(request, session, user, project, member)
+    return _settings(request, session, user, project, member, saved=saved)
 
 
 @router.post("/projects/{slug}/settings/project", dependencies=[Depends(verify_csrf)])
@@ -242,7 +245,7 @@ def update_project_settings(
             status_code=exc.status_code,
         )
     return RedirectResponse(
-        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+        f"/projects/{project.slug}/settings?saved=1", status_code=status.HTTP_303_SEE_OTHER
     )
 
 

@@ -30,8 +30,8 @@ def test_mobile_drawer_is_inert_only_while_closed(client, make_user, login_as):
     assert "isMobile: window.matchMedia" in page.text
     assert ':inert="isMobile && !navOpen"' in page.text
     assert ':aria-hidden="(isMobile && !navOpen).toString()"' in page.text
-    assert '@keydown.escape.window="navOpen = false"' in page.text
-    assert '@click="navOpen = !navOpen"' in page.text
+    assert '@keydown.escape.window="if (isMobile && navOpen) closeNav()"' in page.text
+    assert "navOpener = $el" in page.text
 
 
 def test_backdrop_hides_and_drawer_closes_when_resized_to_desktop(client, make_user, login_as):
@@ -42,6 +42,51 @@ def test_backdrop_hides_and_drawer_closes_when_resized_to_desktop(client, make_u
 
     assert 'x-show="navOpen && isMobile"' in page.text
     assert "if (!event.matches) navOpen = false" in page.text
+
+
+def test_mobile_drawer_has_a_complete_focus_lifecycle(client, make_user, login_as):
+    """Removing focus entry, containment, return, or background inerting must fail."""
+    owner = make_user(email="ada@example.com")
+    login_as(owner.email)
+
+    page = client.get("/dashboard")
+
+    assert 'x-ref="mobileNav"' in page.text
+    assert "navOpener = $el" in page.text
+    assert "$refs.mobileNav.querySelector('a, button')?.focus()" in page.text
+    assert '@keydown.tab="if (isMobile && navOpen) trapNav($event)"' in page.text
+    assert "navOpener?.focus()" in page.text
+    assert ':inert="isMobile && navOpen"' in page.text
+
+
+def test_shell_uses_local_semantic_css_without_tailwind_runtime():
+    source = Path("app/templates/base.html").read_text()
+    stylesheet = Path("app/static/app.css").read_text()
+
+    assert "cdn.tailwindcss.com" not in source
+    assert ".sr-only" in stylesheet
+    assert "--success:" not in stylesheet
+    assert "--warning:" not in stylesheet
+    assert "--radius-lg:" not in stylesheet
+
+
+def test_dashboard_has_no_tailwind_utility_contracts():
+    source = Path("app/templates/dashboard.html").read_text()
+
+    for utility in (
+        "max-w-3xl",
+        "mx-auto",
+        "space-y-6",
+        "items-center",
+        "ml-auto",
+        "overflow-hidden",
+        "gap-3",
+        "px-4",
+        "py-3",
+        "text-slate-500",
+        "justify-end",
+    ):
+        assert utility not in source
 
 
 def test_dialogs_have_names_escape_handling_and_focus_targets():

@@ -14,6 +14,7 @@
       {% endif %}
     </div>
     {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    {% if saved %}<p class="form-status" role="status">Ticket saved.</p>{% endif %}
     {% set type_values = ticket_types | map(attribute='value') | list %}
     {% set priority_values = priorities | map(attribute='value') | list %}
     {% set status_values = columns | map(attribute='value') | list %}

@@ -47,8 +47,31 @@ def test_settings_member_controls_name_members_and_use_a_danger_action(
     assert 'aria-label="Role for Bob"' in page.text
     assert 'aria-label="Change role for Bob"' in page.text
     assert 'aria-label="Remove Bob"' in page.text
+    assert '<label class="sr-only" for="add-member-role">Role for new member</label>' in page.text
     assert 'action="/projects/payment-gateway/settings/delete"' in page.text
+    assert (
+        'class="app-danger-button" type="submit" aria-label="Remove Bob">Remove</button>'
+        in page.text
+    )
     assert 'class="app-danger-button" type="submit">Delete project</button>' in page.text
+
+
+def test_project_settings_save_redirects_to_a_textual_status(
+    client, settings_world, login_as
+):
+    login_as(settings_world.owner.email)
+
+    response = client.post(
+        f"/projects/{settings_world.project.slug}/settings/project",
+        data={"name": "Checkout", **_csrf(settings_world.owner)},
+        follow_redirects=False,
+    )
+
+    assert response.headers["location"] == (
+        f"/projects/{settings_world.project.slug}/settings?saved=1"
+    )
+    page = client.get(response.headers["location"])
+    assert '<p class="form-status" role="status">Settings saved.</p>' in page.text
 
 
 def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
@@ -83,7 +106,9 @@ def test_owner_renames_project_without_changing_its_slug(client, settings_world,
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == f"/projects/{settings_world.project.slug}/settings"
+    assert response.headers["location"] == (
+        f"/projects/{settings_world.project.slug}/settings?saved=1"
+    )
     with Session(engine) as session:
         project = session.get(Project, settings_world.project.id)
     assert (project.name, project.slug) == ("Checkout", "payment-gateway")
