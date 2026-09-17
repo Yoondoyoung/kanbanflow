@@ -11,6 +11,18 @@ def test_login_page_renders(client):
     assert "<form" in response.text
 
 
+def test_auth_pages_share_the_application_form_surface(client):
+    """Replacing the shared auth surface with utility classes must make this fail."""
+    for path in ("/login", "/register"):
+        response = client.get(path)
+
+        assert 'class="auth-page"' in response.text
+        assert 'class="auth-card app-surface"' in response.text
+        assert 'class="app-form"' in response.text
+        assert 'class="app-input"' in response.text
+        assert 'class="app-primary-button auth-submit"' in response.text
+
+
 def test_register_form_creates_a_session_and_redirects(client):
     response = client.post(
         "/register",

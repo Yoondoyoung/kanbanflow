@@ -9,8 +9,8 @@ from app.models import Project, ProjectMember, Role, WebhookType
 
 @pytest.fixture
 def settings_world(make_user, make_project, add_member):
-    owner = make_user(email="ada@example.com")
-    member = make_user(email="bob@example.com")
+    owner = make_user(email="ada@example.com", name="Ada")
+    member = make_user(email="bob@example.com", name="Bob")
     candidate = make_user(email="cam@example.com")
     project = make_project(owner, name="Payment Gateway")
     add_member(project, member)
@@ -34,6 +34,21 @@ def test_owner_sees_project_webhook_and_member_controls(client, settings_world, 
     assert 'data-testid="owner-settings-controls"' in page.text
     assert 'name="webhook_url"' in page.text
     assert 'name="confirm"' in page.text
+
+
+def test_settings_member_controls_name_members_and_use_a_danger_action(
+    client, settings_world, login_as
+):
+    """Removing a member name or danger styling must make this fail."""
+    login_as(settings_world.owner.email)
+
+    page = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert 'aria-label="Role for Bob"' in page.text
+    assert 'aria-label="Change role for Bob"' in page.text
+    assert 'aria-label="Remove Bob"' in page.text
+    assert 'action="/projects/payment-gateway/settings/delete"' in page.text
+    assert 'class="app-danger-button" type="submit">Delete project</button>' in page.text
 
 
 def test_member_reads_settings_without_mutation_controls_or_webhook_secret(

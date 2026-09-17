@@ -6,6 +6,7 @@
 <div class="project-board">
   <header class="project-header">
     <div>
+      <p class="section-eyebrow">Project</p>
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-meta">Sprint History</p>
       {% include "partials/sprint_selector.html" %}
@@ -14,16 +15,24 @@
 
   {% include "partials/project_nav.html" %}
 
-  <section class="backlog-list" aria-labelledby="history-heading">
-    <h2 id="history-heading">Closed sprints</h2>
+  <section class="sprint-history app-surface" aria-labelledby="history-heading">
+    <div class="sprint-history-header"><p class="section-eyebrow">Archive</p><h2 id="history-heading">Closed sprints</h2></div>
     {% for summary in summaries %}
-    <article class="backlog-ticket">
-      <a href="/projects/{{ project.slug }}/sprints/{{ summary.sprint.id }}">{{ summary.sprint.name }}</a>
-      <p>{{ summary.sprint.start_date.strftime('%b %-d') }} – {{ summary.sprint.end_date.strftime('%b %-d, %Y') }}{% if summary.sprint.goal %} · {{ summary.sprint.goal }}{% endif %}</p>
-      <p>Committed: {{ summary.sprint.committed_points or 0 }} pts · Completed: {{ summary.sprint.completed_points or 0 }} pts · Completed tickets: {{ summary.completed_count }} · Rollover: {{ summary.rollover_count }} · Delayed: {{ summary.delay_total }} days</p>
+    <article class="sprint-history-row">
+      <div>
+        <a class="app-row-link" href="/projects/{{ project.slug }}/sprints/{{ summary.sprint.id }}">{{ summary.sprint.name }}</a>
+        <p class="sprint-meta">{{ summary.sprint.start_date.strftime('%b %-d') }} – {{ summary.sprint.end_date.strftime('%b %-d, %Y') }}{% if summary.sprint.goal %} · {{ summary.sprint.goal }}{% endif %}</p>
+      </div>
+      <dl class="sprint-history-metrics">
+        <div><dt>Committed</dt><dd>{{ summary.sprint.committed_points or 0 }} pts</dd></div>
+        <div><dt>Completed</dt><dd>{{ summary.sprint.completed_points or 0 }} pts</dd></div>
+        <div><dt>Completed tickets</dt><dd>{{ summary.completed_count }}</dd></div>
+        <div><dt>Rollover</dt><dd>{{ summary.rollover_count }}</dd></div>
+        <div><dt>Delayed</dt><dd>{{ summary.delay_total }} days</dd></div>
+      </dl>
     </article>
     {% else %}
-    <p class="sprint-meta">No closed sprints.</p>
+    <p class="app-empty-state">No closed sprints.</p>
     {% endfor %}
   </section>
 </div>

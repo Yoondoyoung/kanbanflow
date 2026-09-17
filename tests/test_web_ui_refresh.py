@@ -71,3 +71,13 @@ def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
     assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"' in source
     assert "$el.showModal()" in source
     assert "ticket-drawer-closed" in source
+
+
+def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
+    css = client.get("/static/app.css")
+
+    assert css.status_code == 200
+    mobile_css = css.text.split("@media (max-width: 767px)", 1)[1]
+    assert ".sprint-history-row" in mobile_css
+    assert ".settings-member" in mobile_css
+    assert ".auth-card" in mobile_css

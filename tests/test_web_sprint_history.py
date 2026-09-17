@@ -112,13 +112,28 @@ def test_history_lists_closed_sprints_newest_first_with_totals(client, history_w
     page = client.get(f"/projects/{history_world.project.slug}/sprints")
 
     assert page.status_code == 200
-    summaries = page.text.split('<section class="backlog-list"', 1)[1]
+    summaries = page.text.split('<section class="sprint-history app-surface"', 1)[1]
     assert summaries.index("Sprint 2") < summaries.index("Sprint 1")
-    assert "Committed: 8 pts" in page.text
-    assert "Completed: 5 pts" in page.text
-    assert "Rollover: 1" in page.text
-    assert "Delayed: 7 days" in page.text
+    assert "<dt>Committed</dt><dd>8 pts</dd>" in page.text
+    assert "<dt>Completed</dt><dd>5 pts</dd>" in page.text
+    assert "<dt>Rollover</dt><dd>1</dd>" in page.text
+    assert "<dt>Delayed</dt><dd>7 days</dd>" in page.text
     assert f'href="/projects/{history_world.project.slug}/sprints" aria-current="page"' in page.text
+
+
+def test_history_uses_labeled_metric_rows(client, history_world, login_as):
+    """Removing the row metrics must make this fail."""
+    login_as(history_world.owner.email)
+
+    page = client.get(f"/projects/{history_world.project.slug}/sprints")
+
+    assert '<article class="sprint-history-row">' in page.text
+    assert '<dl class="sprint-history-metrics">' in page.text
+    assert '<dt>Committed</dt><dd>8 pts</dd>' in page.text
+    assert '<dt>Completed</dt><dd>5 pts</dd>' in page.text
+    assert '<dt>Completed tickets</dt><dd>0</dd>' in page.text
+    assert '<dt>Rollover</dt><dd>1</dd>' in page.text
+    assert '<dt>Delayed</dt><dd>7 days</dd>' in page.text
 
 
 def test_history_detail_uses_close_time_ticket_snapshot_and_is_read_only(
@@ -131,7 +146,7 @@ def test_history_detail_uses_close_time_ticket_snapshot_and_is_read_only(
     assert page.status_code == 200
     assert "In progress" in page.text
     assert "5 pts at close" in page.text
-    assert "Rollover: 1" in page.text
+    assert "<dt>Rollover</dt><dd>1</dd>" in page.text
     ticket_path = f"/projects/{history_world.project.slug}/tickets/{history_world.rolled_number}"
     ticket_link = f'href="{ticket_path}"'
     assert ticket_link in page.text

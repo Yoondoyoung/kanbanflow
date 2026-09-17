@@ -1,25 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Create account - Kanban Flow{% endblock %}
 {% block content %}
-<div class="max-w-sm mx-auto bg-white p-6 rounded border">
-  <h1 class="text-lg font-semibold mb-4">Create account</h1>
-  {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
-  <form method="post" action="/register" class="space-y-3">
+<div class="auth-page">
+<section class="auth-card app-surface" aria-labelledby="register-heading">
+  <p class="section-eyebrow">Kanban Flow</p>
+  <h1 id="register-heading" class="app-page-title">Create account</h1>
+  {% if error %}<p id="form-error" role="alert" class="form-error">{{ error }}</p>{% endif %}
+  <form method="post" action="/register" class="app-form">
     <div>
-      <label for="register-name" class="block text-sm font-medium mb-1">Name</label>
+      <label for="register-name">Name</label>
       <input
         id="register-name"
-        class="w-full border rounded px-3 py-2"
+        class="app-input"
         type="text"
         name="name"
         required
       >
     </div>
     <div>
-      <label for="register-email" class="block text-sm font-medium mb-1">Email</label>
+      <label for="register-email">Email</label>
       <input
         id="register-email"
-        class="w-full border rounded px-3 py-2"
+        class="app-input"
         type="email"
         name="email"
         required
@@ -27,18 +29,19 @@
       >
     </div>
     <div>
-      <label for="register-password" class="block text-sm font-medium mb-1">Password</label>
+      <label for="register-password">Password</label>
       <input
         id="register-password"
-        class="w-full border rounded px-3 py-2"
+        class="app-input"
         type="password"
         name="password"
         required
         {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
       >
     </div>
-    <button class="w-full bg-slate-900 text-white rounded py-2">Create account</button>
+    <button class="app-primary-button auth-submit">Create account</button>
   </form>
-  <p class="mt-4 text-sm">Already have an account? <a class="underline" href="/login">Sign in</a></p>
+  <p class="auth-prompt">Already have an account? <a href="/login">Sign in</a></p>
+</section>
 </div>
 {% endblock %}
