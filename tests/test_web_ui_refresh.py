@@ -46,6 +46,21 @@ def test_sprint_selector_contains_only_sprint_destinations(
     assert "Settings" not in selector
 
 
+def test_backlog_has_one_primary_owner_action_without_a_planning_sprint(
+    client, make_user, make_project, login_as
+):
+    """Making both top-level backlog actions primary must make this fail."""
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/backlog")
+    header = re.search(r'<header class="project-header">.*?</header>', page.text, re.DOTALL).group()
+
+    assert 'class="app-secondary-button" type="button" x-ref="ticketModalOpener"' in header
+    assert 'class="app-primary-button" type="button" x-ref="sprintFormOpener"' in header
+
+
 def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
     from fastapi.templating import Jinja2Templates
 

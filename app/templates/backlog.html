@@ -9,7 +9,7 @@
       {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
-      <button class="{% if planning_sprint %}app-secondary-button{% else %}app-primary-button{% endif %}" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
+      <button class="app-secondary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
       {% if role == 'OWNER' and not planning_sprint %}
       <button class="app-primary-button" type="button" x-ref="sprintFormOpener" @click="$refs.sprintForm.showModal()">Add sprint</button>
       {% endif %}
