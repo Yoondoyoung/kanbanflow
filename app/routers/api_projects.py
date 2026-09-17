@@ -1,6 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete
-from sqlalchemy.exc import IntegrityError
+from fastapi import APIRouter, Depends, Query, status
 from sqlmodel import Session, select
 
 from app.auth import current_user, project_owner, project_reader
@@ -9,22 +7,25 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
-    Sprint,
-    SprintTicketHistory,
-    Ticket,
     User,
-    WebhookType,
 )
 from app.schemas import MemberAdd, MemberOut, MemberUpdate, ProjectCreate, ProjectOut, ProjectUpdate
 
 # slugify moved to app.services (single source of truth, shared with the
 # dashboard form route) but stays importable from here: tests/conftest.py and
 # tests/test_projects.py import it from this module.
-from app.services import create_project, slugify  # noqa: F401
+from app.services import (  # noqa: F401
+    add_project_member,
+    create_project,
+    project_members,
+    remove_project_member,
+    slugify,
+    update_project_member,
+)
+from app.services import delete_project as delete_project_service
+from app.services import update_project as update_project_service
 
 router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
-
-_ALREADY_MEMBER = "Already a member"
 
 
 def _out(project: Project, role: Role | None) -> ProjectOut:
@@ -75,21 +76,7 @@ def update_project(
     session: Session = Depends(get_session),
 ):
     project, member = access
-    if body.name is not None:
-        project.name = body.name.strip()
-    if body.webhook_type is not None:
-        project.webhook_type = body.webhook_type
-    if body.webhook_url is not None:
-        project.webhook_url = body.webhook_url
-    if project.webhook_type != WebhookType.NONE:
-        if not project.webhook_url or not project.webhook_url.startswith("https://"):
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "webhook_url must be an https URL when webhook_type is set",
-            )
-    session.add(project)
-    session.commit()
-    session.refresh(project)
+    update_project_service(session, project, **body.model_dump(exclude_unset=True))
     return _out(project, member.role)
 
 
@@ -100,32 +87,11 @@ def delete_project(
     session: Session = Depends(get_session),
 ) -> None:
     project, _ = access
-    if confirm != project.slug:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")
-    sprint_ids = select(Sprint.id).where(Sprint.project_id == project.id)
-    session.execute(
-        delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
-    )
-    session.execute(delete(Ticket).where(Ticket.project_id == project.id))
-    session.execute(delete(Sprint).where(Sprint.project_id == project.id))
-    session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
-    # These models have no ORM relationship() linking them, only FK columns, so
-    # SQLAlchemy's unit of work has no dependency info to order the deletes by
-    # and will happily try to delete `project` before its children, tripping
-    # the FK constraint. An explicit flush forces the child deletes to hit the
-    # database first.
-    session.flush()
-    session.delete(project)
-    session.commit()
+    delete_project_service(session, project, confirm)
 
 
 def _members(session: Session, project_id: str) -> list[MemberOut]:
-    rows = session.exec(
-        select(ProjectMember, User)
-        .join(User, User.id == ProjectMember.user_id)
-        .where(ProjectMember.project_id == project_id)
-        .order_by(ProjectMember.joined_at)
-    ).all()
+    rows = project_members(session, project_id)
     return [
         MemberOut(
             user_id=user.id,
@@ -136,16 +102,6 @@ def _members(session: Session, project_id: str) -> list[MemberOut]:
         )
         for member, user in rows
     ]
-
-
-def _owner_count(session: Session, project_id: str) -> int:
-    return len(
-        session.exec(
-            select(ProjectMember).where(
-                ProjectMember.project_id == project_id, ProjectMember.role == Role.OWNER
-            )
-        ).all()
-    )
 
 
 @router.get("/{slug}/members", response_model=list[MemberOut])
@@ -159,29 +115,8 @@ def add_member(
     body: MemberAdd, access=Depends(project_owner), session: Session = Depends(get_session)
 ):
     project, _ = access
-    target = session.exec(select(User).where(User.email == body.email.lower())).first()
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No registered user with that email")
-    existing = session.exec(
-        select(ProjectMember).where(
-            ProjectMember.project_id == project.id, ProjectMember.user_id == target.id
-        )
-    ).first()
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_MEMBER)
-    session.add(ProjectMember(project_id=project.id, user_id=target.id, role=body.role))
-    try:
-        session.commit()
-    except IntegrityError:
-        # Two concurrent adds of the same user both pass the pre-check above
-        # (routes run sync in FastAPI's threadpool, so this is a real race,
-        # not a theoretical one). ProjectMember's unique constraint on
-        # (project_id, user_id) catches the loser here; turn that into the
-        # same 409 the pre-check gives the common case, not an unhandled 500
-        # (Ruling R16).
-        session.rollback()
-        raise HTTPException(status.HTTP_409_CONFLICT, _ALREADY_MEMBER) from None
-    return next(m for m in _members(session, project.id) if m.user_id == target.id)
+    member = add_project_member(session, project, str(body.email), body.role)
+    return next(m for m in _members(session, project.id) if m.user_id == member.user_id)
 
 
 @router.patch("/{slug}/members/{user_id}", response_model=MemberOut)
@@ -192,22 +127,7 @@ def update_member(
     session: Session = Depends(get_session),
 ):
     project, _ = access
-    member = session.exec(
-        select(ProjectMember).where(
-            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
-        )
-    ).first()
-    if member is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
-    if (
-        member.role == Role.OWNER
-        and body.role != Role.OWNER
-        and _owner_count(session, project.id) == 1
-    ):
-        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
-    member.role = body.role
-    session.add(member)
-    session.commit()
+    update_project_member(session, project, user_id, body.role)
     return next(m for m in _members(session, project.id) if m.user_id == user_id)
 
 
@@ -216,24 +136,4 @@ def remove_member(
     user_id: str, access=Depends(project_owner), session: Session = Depends(get_session)
 ) -> None:
     project, _ = access
-    member = session.exec(
-        select(ProjectMember).where(
-            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
-        )
-    ).first()
-    if member is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
-    if member.role == Role.OWNER and _owner_count(session, project.id) == 1:
-        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
-    # Null the FK before the member row disappears: Ticket.assignee_id is a
-    # foreign key straight to user.id (not to project_member), so this update
-    # is unrelated to the member delete at the schema level and either order
-    # is safe — but doing it first keeps a removed member's tickets from ever
-    # being observably left assigned to them, even momentarily.
-    for ticket in session.exec(
-        select(Ticket).where(Ticket.project_id == project.id, Ticket.assignee_id == user_id)
-    ).all():
-        ticket.assignee_id = None
-        session.add(ticket)
-    session.delete(member)
-    session.commit()
+    remove_project_member(session, project, user_id)

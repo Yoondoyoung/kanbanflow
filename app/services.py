@@ -3,7 +3,7 @@ import re
 from datetime import date
 
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import text, update
+from sqlalchemy import delete, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
@@ -20,6 +20,7 @@ from app.models import (
     TicketStatus,
     TicketType,
     User,
+    WebhookType,
     utcnow,
 )
 from app.notifications import EVENT_TICKET_CREATED, EVENT_TICKET_DONE, schedule
@@ -118,6 +119,132 @@ def create_project(session: Session, name: str, user: User) -> Project:
         raise HTTPException(status.HTTP_409_CONFLICT, _slug_conflict_detail(slug)) from None
     session.refresh(project)
     return project
+
+
+def update_project(session: Session, project: Project, **changes) -> Project:
+    if "name" in changes:
+        name = changes["name"]
+        if name is None or not name.strip():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "name must not be blank")
+        if len(name.strip()) > NAME_MAX_LENGTH:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                f"name must be at most {NAME_MAX_LENGTH} characters",
+            )
+    webhook_type = changes.get("webhook_type", project.webhook_type)
+    webhook_url = changes.get("webhook_url", project.webhook_url)
+    if webhook_url is not None and len(webhook_url) > 500:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook_url must be at most 500 characters",
+        )
+    if webhook_type != WebhookType.NONE and (
+        not webhook_url or not webhook_url.startswith("https://")
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook_url must be an https URL when webhook_type is set",
+        )
+    for field, value in changes.items():
+        setattr(project, field, value.strip() if field == "name" else value)
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return project
+
+
+def project_members(session: Session, project_id: str) -> list[tuple[ProjectMember, User]]:
+    return session.exec(
+        select(ProjectMember, User)
+        .join(User, User.id == ProjectMember.user_id)
+        .where(ProjectMember.project_id == project_id)
+        .order_by(ProjectMember.joined_at)
+    ).all()
+
+
+def _owner_count(session: Session, project_id: str) -> int:
+    return len(
+        session.exec(
+            select(ProjectMember).where(
+                ProjectMember.project_id == project_id, ProjectMember.role == Role.OWNER
+            )
+        ).all()
+    )
+
+
+def add_project_member(session: Session, project: Project, email: str, role: Role) -> ProjectMember:
+    target = session.exec(select(User).where(User.email == email.lower())).first()
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No registered user with that email")
+    existing = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == target.id
+        )
+    ).first()
+    if existing:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Already a member")
+    member = ProjectMember(project_id=project.id, user_id=target.id, role=role)
+    session.add(member)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Already a member") from None
+    session.refresh(member)
+    return member
+
+
+def update_project_member(
+    session: Session, project: Project, user_id: str, role: Role
+) -> ProjectMember:
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
+        )
+    ).first()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
+    if member.role == Role.OWNER and role != Role.OWNER and _owner_count(session, project.id) == 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
+    member.role = role
+    session.add(member)
+    session.commit()
+    session.refresh(member)
+    return member
+
+
+def remove_project_member(session: Session, project: Project, user_id: str) -> None:
+    member = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == user_id
+        )
+    ).first()
+    if member is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not a member")
+    if member.role == Role.OWNER and _owner_count(session, project.id) == 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A project must keep at least one OWNER")
+    for ticket in session.exec(
+        select(Ticket).where(Ticket.project_id == project.id, Ticket.assignee_id == user_id)
+    ).all():
+        ticket.assignee_id = None
+        session.add(ticket)
+    session.delete(member)
+    session.commit()
+
+
+def delete_project(session: Session, project: Project, confirm: str) -> None:
+    if confirm != project.slug:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")
+    sprint_ids = select(Sprint.id).where(Sprint.project_id == project.id)
+    session.execute(
+        delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
+    )
+    session.execute(delete(Ticket).where(Ticket.project_id == project.id))
+    session.execute(delete(Sprint).where(Sprint.project_id == project.id))
+    session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
+    session.flush()
+    session.delete(project)
+    session.commit()
 
 
 def create_sprint(

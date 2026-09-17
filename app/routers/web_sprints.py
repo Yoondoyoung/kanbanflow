@@ -8,19 +8,61 @@ from app.db import get_session
 from app.models import (
     Project,
     ProjectMember,
+    Role,
     Sprint,
     SprintStatus,
     SprintTicketHistory,
     Ticket,
     TicketStatus,
     User,
+    WebhookType,
 )
 from app.routers.web import render
 from app.schemas import SprintCreate
-from app.services import close_sprint, create_sprint, start_sprint, update_ticket
+from app.services import (
+    add_project_member,
+    close_sprint,
+    create_sprint,
+    delete_project,
+    project_members,
+    remove_project_member,
+    start_sprint,
+    update_project,
+    update_project_member,
+    update_ticket,
+)
 
 router = APIRouter(tags=["web"])
 _TICKET_IDS_FORM = Form(...)
+_WEBHOOK_TYPE_FORM = Form(WebhookType.NONE)
+_MEMBER_ROLE_FORM = Form(Role.MEMBER)
+_REQUIRED_ROLE_FORM = Form(...)
+
+
+def _settings(
+    request: Request,
+    session: Session,
+    user: User,
+    project: Project,
+    member: ProjectMember,
+    *,
+    error: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> Response:
+    return render(
+        request,
+        "project_settings.html",
+        {
+            "user": user,
+            "project": project,
+            "role": member.role.value,
+            "active_tab": "settings",
+            "members": project_members(session, project.id),
+            "error": error,
+        },
+        status_code=status_code,
+        session=session,
+    )
 
 
 def _backlog(
@@ -146,6 +188,127 @@ def backlog(
 ) -> Response:
     project, member = access
     return _backlog(request, session, user, project, member)
+
+
+@router.get("/projects/{slug}/settings")
+def project_settings(
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_reader),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    return _settings(request, session, user, project, member)
+
+
+@router.post("/projects/{slug}/settings/project", dependencies=[Depends(verify_csrf)])
+def update_project_settings(
+    request: Request,
+    name: str = Form(""),
+    webhook_type: WebhookType = _WEBHOOK_TYPE_FORM,
+    webhook_url: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        update_project(
+            session,
+            project,
+            name=name,
+            webhook_type=webhook_type,
+            webhook_url=webhook_url or None,
+        )
+    except HTTPException as exc:
+        return _settings(
+            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+        )
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/projects/{slug}/settings/members", dependencies=[Depends(verify_csrf)])
+def add_project_member_settings(
+    request: Request,
+    email: str = Form(""),
+    role: Role = _MEMBER_ROLE_FORM,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        add_project_member(session, project, email, role)
+    except HTTPException as exc:
+        return _settings(
+            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+        )
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/projects/{slug}/settings/members/{user_id}", dependencies=[Depends(verify_csrf)])
+def update_project_member_settings(
+    user_id: str,
+    request: Request,
+    role: Role = _REQUIRED_ROLE_FORM,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        update_project_member(session, project, user_id, role)
+    except HTTPException as exc:
+        return _settings(
+            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+        )
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post(
+    "/projects/{slug}/settings/members/{user_id}/remove", dependencies=[Depends(verify_csrf)]
+)
+def remove_project_member_settings(
+    user_id: str,
+    request: Request,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        remove_project_member(session, project, user_id)
+    except HTTPException as exc:
+        return _settings(
+            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+        )
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post("/projects/{slug}/settings/delete", dependencies=[Depends(verify_csrf)])
+def delete_project_settings(
+    request: Request,
+    confirm: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        delete_project(session, project, confirm)
+    except HTTPException as exc:
+        return _settings(
+            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+        )
+    return RedirectResponse("/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/projects/{slug}/sprints")

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} Settings · Kanban Flow{% endblock %}
+{% block content %}
+<div class="project-board">
+  <header class="project-header">
+    <div><h1 class="project-title">Project settings</h1><p class="sprint-meta">{{ project.name }}</p></div>
+  </header>
+  {% include "partials/project_nav.html" %}
+  {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+  <section class="backlog-planning" aria-labelledby="project-settings-heading">
+    <h2 id="project-settings-heading">Project details</h2>
+    {% if role == 'OWNER' %}
+    <form action="/projects/{{ project.slug }}/settings/project" method="post" data-testid="owner-settings-controls">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label>Name <input name="name" value="{{ project.name }}" maxlength="100" required></label>
+      <label>Webhook type
+        <select name="webhook_type">
+          {% for type in ['NONE', 'SLACK', 'TEAMS', 'DISCORD'] %}<option value="{{ type }}"{% if project.webhook_type.value == type %} selected{% endif %}>{{ type.title() }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Webhook URL <input type="url" name="webhook_url" value="{{ project.webhook_url or '' }}" maxlength="500"></label>
+      <button class="app-primary-button" type="submit">Save settings</button>
+    </form>
+    {% else %}
+    <p>Name: {{ project.name }}</p><p>Webhook type: {{ project.webhook_type.value.title() }}</p><p>Webhook URL: {{ project.webhook_url or 'Not configured' }}</p>
+    {% endif %}
+  </section>
+  <section class="backlog-list" aria-labelledby="members-heading">
+    <h2 id="members-heading">Members</h2>
+    {% for project_member, member_user in members %}
+    <div class="backlog-ticket"><strong>{{ member_user.name }}</strong> · {{ member_user.email }} · {{ project_member.role.value }}
+      {% if role == 'OWNER' %}
+      <form action="/projects/{{ project.slug }}/settings/members/{{ member_user.id }}" method="post">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <select name="role">{% for value in ['OWNER', 'MEMBER'] %}<option value="{{ value }}"{% if project_member.role.value == value %} selected{% endif %}>{{ value.title() }}</option>{% endfor %}</select>
+        <button class="app-secondary-button" type="submit">Change role</button>
+      </form>
+      <form action="/projects/{{ project.slug }}/settings/members/{{ member_user.id }}/remove" method="post">
+        <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="app-secondary-button" type="submit">Remove</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if role == 'OWNER' %}
+    <form action="/projects/{{ project.slug }}/settings/members" method="post" data-testid="owner-settings-controls">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label>Email <input type="email" name="email" required></label>
+      <select name="role"><option value="MEMBER">Member</option><option value="OWNER">Owner</option></select>
+      <button class="app-secondary-button" type="submit">Add member</button>
+    </form>
+    {% endif %}
+  </section>
+  {% if role == 'OWNER' %}
+  <section class="backlog-planning" aria-labelledby="danger-heading" data-testid="owner-settings-controls">
+    <h2 id="danger-heading">Danger zone</h2>
+    <p>Type the immutable project slug <code>{{ project.slug }}</code> to delete this project.</p>
+    <form action="/projects/{{ project.slug }}/settings/delete" method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <label>Confirm slug <input name="confirm" required></label>
+      <button class="app-secondary-button" type="submit">Delete project</button>
+    </form>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
