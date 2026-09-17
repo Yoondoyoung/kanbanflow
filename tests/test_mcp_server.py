@@ -1,6 +1,8 @@
 import httpx
 import pytest
+from mcp.client import Client
 
+from app import mcp_server
 from app.mcp_server import MCPSettings, api_request, mcp
 
 
@@ -143,3 +145,140 @@ def test_mcp_settings_defaults_and_server_are_importable(monkeypatch):
     assert settings.base_url == "http://localhost:8000"
     assert settings.timeout == 10
     assert mcp is not None
+
+
+@pytest.mark.anyio
+async def test_sprint_tools_expose_typed_input_schemas():
+    async with Client(mcp) as client:
+        tools = {tool.name: tool for tool in (await client.list_tools()).tools}
+
+    assert set(tools) == {"list_sprints", "create_sprint", "start_sprint", "close_sprint"}
+    assert tools["list_sprints"].input_schema["required"] == ["slug"]
+    assert tools["create_sprint"].input_schema["required"] == [
+        "slug",
+        "name",
+        "goal",
+        "start_date",
+        "end_date",
+    ]
+    assert tools["create_sprint"].input_schema["properties"]["start_date"]["format"] == "date"
+    assert tools["create_sprint"].input_schema["properties"]["end_date"]["format"] == "date"
+    assert tools["start_sprint"].input_schema["required"] == ["sprint_id"]
+    assert tools["close_sprint"].input_schema["required"] == ["sprint_id", "next_sprint_id"]
+
+
+@pytest.mark.anyio
+async def test_sprint_tools_delegate_to_the_api_and_limit_list_fields(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        if method == "GET":
+            return [
+                {
+                    "id": "sprint-1",
+                    "project_id": "project-1",
+                    "name": "Sprint 1",
+                    "goal": "Ship reports",
+                    "status": "PLANNING",
+                    "start_date": "2026-09-28",
+                    "end_date": "2026-10-05",
+                    "committed_points": 8,
+                    "completed_points": None,
+                    "closed_at": None,
+                }
+            ]
+        return {"id": "sprint-1", "status": "PLANNING"}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        listed = await client.call_tool("list_sprints", {"slug": "demo"})
+        await client.call_tool(
+            "create_sprint",
+            {
+                "slug": "demo",
+                "name": "Sprint 2",
+                "goal": "Ship reports",
+                "start_date": "2026-09-28",
+                "end_date": "2026-10-05",
+            },
+        )
+        await client.call_tool("start_sprint", {"sprint_id": "sprint-1"})
+        await client.call_tool(
+            "close_sprint", {"sprint_id": "sprint-1", "next_sprint_id": "sprint-2"}
+        )
+
+    assert calls == [
+        ("GET", "/api/v1/projects/demo/sprints", None),
+        (
+            "POST",
+            "/api/v1/projects/demo/sprints",
+            {
+                "name": "Sprint 2",
+                "goal": "Ship reports",
+                "start_date": "2026-09-28",
+                "end_date": "2026-10-05",
+            },
+        ),
+        ("PATCH", "/api/v1/sprints/sprint-1", {"status": "ACTIVE"}),
+        ("POST", "/api/v1/sprints/sprint-1/close", {"next_sprint_id": "sprint-2"}),
+    ]
+    assert listed.is_error is False
+    assert listed.structured_content == {
+        "result": [
+            {
+                "id": "sprint-1",
+                "name": "Sprint 1",
+                "status": "PLANNING",
+                "start_date": "2026-09-28",
+                "end_date": "2026-10-05",
+                "goal": "Ship reports",
+                "committed_points": 8,
+                "completed_points": None,
+            }
+        ]
+    }
+
+
+@pytest.mark.anyio
+async def test_create_sprint_rejects_non_iso_dates_without_api_call(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        result = await client.call_tool(
+            "create_sprint",
+            {
+                "slug": "demo",
+                "name": "Sprint 2",
+                "goal": "Ship reports",
+                "start_date": "not-a-date",
+                "end_date": "2026-10-05",
+            },
+        )
+
+    assert result.is_error is True
+    assert calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("status", "message"), [(403, "Forbidden"), (409, "Conflict"), (422, "Validation failed")]
+)
+async def test_sprint_tool_propagates_safe_api_errors(monkeypatch, status, message):
+    async def fake_request(method, path, json=None):
+        raise ValueError(f"Kanban Flow API {status}: {message}")
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("start_sprint", {"sprint_id": "sprint-1"})
+
+    assert result.is_error is True
+    assert result.content[0].text == f"Kanban Flow API {status}: {message}"
+    assert "test-token" not in result.content[0].text
