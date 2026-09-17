@@ -113,6 +113,10 @@ issue a personal API token with `POST /api/v1/tokens` and a JSON body such as
 copy it into a local `.env.mcp` file (start from `.env.mcp.example`) and never
 commit the plaintext token.
 
+Session-cookie token issue or revoke JSON requests must come from the app's
+same or an allowed Origin. MCP calls use bearer authentication instead: an
+invalid bearer token returns `401` and never falls back to a session cookie.
+
 ```dotenv
 KANBANFLOW_BASE_URL=http://localhost:8000
 KANBANFLOW_API_TOKEN=paste-the-token-shown-once
@@ -124,7 +128,7 @@ two values in its environment:
 ```json
 {
   "command": "uv",
-  "args": ["run", "mcp", "run", "app/mcp_server.py"],
+  "args": ["run", "mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
   "env": {
     "KANBANFLOW_BASE_URL": "http://localhost:8000",
     "KANBANFLOW_API_TOKEN": "paste-the-token-shown-once"
@@ -135,7 +139,7 @@ two values in its environment:
 Equivalently, after loading those variables in your shell, run:
 
 ```bash
-uv run mcp run app/mcp_server.py
+uv run mcp run app/mcp_server.py:mcp --transport stdio
 ```
 
 The tools list sprints available to the token's user and let project **OWNER**s
