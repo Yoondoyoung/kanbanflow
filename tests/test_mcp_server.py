@@ -282,3 +282,58 @@ async def test_sprint_tool_propagates_safe_api_errors(monkeypatch, status, messa
     assert result.is_error is True
     assert result.content[0].text == f"Kanban Flow API {status}: {message}"
     assert "test-token" not in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_sprint_tools_quote_user_supplied_path_segments(monkeypatch):
+    calls = []
+    slug = "demo?next=/api/v1/tokens#\\%"
+    sprint_id = "sprint?next=/api/v1/tokens#\\%"
+    next_sprint_id = "next?kept/raw#in%body\\"
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return [] if method == "GET" else {"id": "sprint-1"}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        await client.call_tool("list_sprints", {"slug": slug})
+        await client.call_tool(
+            "create_sprint",
+            {
+                "slug": slug,
+                "name": "Sprint 2",
+                "goal": "Ship reports",
+                "start_date": "2026-09-28",
+                "end_date": "2026-10-05",
+            },
+        )
+        await client.call_tool("start_sprint", {"sprint_id": sprint_id})
+        await client.call_tool(
+            "close_sprint", {"sprint_id": sprint_id, "next_sprint_id": next_sprint_id}
+        )
+
+    assert calls == [
+        ("GET", "/api/v1/projects/demo%3Fnext%3D%2Fapi%2Fv1%2Ftokens%23%5C%25/sprints", None),
+        (
+            "POST",
+            "/api/v1/projects/demo%3Fnext%3D%2Fapi%2Fv1%2Ftokens%23%5C%25/sprints",
+            {
+                "name": "Sprint 2",
+                "goal": "Ship reports",
+                "start_date": "2026-09-28",
+                "end_date": "2026-10-05",
+            },
+        ),
+        (
+            "PATCH",
+            "/api/v1/sprints/sprint%3Fnext%3D%2Fapi%2Fv1%2Ftokens%23%5C%25",
+            {"status": "ACTIVE"},
+        ),
+        (
+            "POST",
+            "/api/v1/sprints/sprint%3Fnext%3D%2Fapi%2Fv1%2Ftokens%23%5C%25/close",
+            {"next_sprint_id": next_sprint_id},
+        ),
+    ]

@@ -1,5 +1,5 @@
 from datetime import date
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import httpx
 from mcp.server import MCPServer
@@ -42,6 +42,10 @@ def _api_path(path: str) -> str:
     raise ValueError("Kanban Flow API request path must be a relative /api/v1/ path")
 
 
+def _path_segment(value: str) -> str:
+    return quote(value, safe="")
+
+
 def _status_detail(status: int) -> str:
     return {
         401: "Unauthorized",
@@ -82,7 +86,7 @@ async def _tool_request(method: str, path: str, json=None):
 @mcp.tool()
 async def list_sprints(slug: str) -> list[dict[str, object]]:
     """List a project's sprints; sprint changes are owner-only."""
-    sprints = await _tool_request("GET", f"/api/v1/projects/{slug}/sprints")
+    sprints = await _tool_request("GET", f"/api/v1/projects/{_path_segment(slug)}/sprints")
     if isinstance(sprints, CallToolResult):
         return sprints
     fields = (
@@ -105,7 +109,7 @@ async def create_sprint(
     """Create a planning sprint. Owner-only."""
     return await _tool_request(
         "POST",
-        f"/api/v1/projects/{slug}/sprints",
+        f"/api/v1/projects/{_path_segment(slug)}/sprints",
         {
             "name": name,
             "goal": goal,
@@ -118,12 +122,16 @@ async def create_sprint(
 @mcp.tool()
 async def start_sprint(sprint_id: str) -> dict[str, object]:
     """Start a planning sprint. Owner-only."""
-    return await _tool_request("PATCH", f"/api/v1/sprints/{sprint_id}", {"status": "ACTIVE"})
+    return await _tool_request(
+        "PATCH", f"/api/v1/sprints/{_path_segment(sprint_id)}", {"status": "ACTIVE"}
+    )
 
 
 @mcp.tool()
 async def close_sprint(sprint_id: str, next_sprint_id: str) -> dict[str, object]:
     """Close an active sprint and roll work over. Owner-only."""
     return await _tool_request(
-        "POST", f"/api/v1/sprints/{sprint_id}/close", {"next_sprint_id": next_sprint_id}
+        "POST",
+        f"/api/v1/sprints/{_path_segment(sprint_id)}/close",
+        {"next_sprint_id": next_sprint_id},
     )
