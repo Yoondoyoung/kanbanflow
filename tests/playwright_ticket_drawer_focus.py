@@ -43,7 +43,10 @@ def main() -> None:
             [
                 str(VENV / "python"),
                 "-c",
-                "from app.models import SQLModel; from app.db import get_engine; SQLModel.metadata.create_all(get_engine())",
+                (
+                    "from app.models import SQLModel; from app.db import get_engine; "
+                    "SQLModel.metadata.create_all(get_engine())"
+                ),
             ],
             check=True,
             cwd=ROOT,
@@ -89,7 +92,9 @@ def main() -> None:
                                 start_date: '2026-09-21', end_date: '2026-09-28'
                             })
                         });
-                        if (!response.ok) throw new Error(`sprint setup failed: ${response.status}`);
+                        if (!response.ok) {
+                            throw new Error(`sprint setup failed: ${response.status}`);
+                        }
                     }""",
                     csrf_token,
                 )
@@ -102,12 +107,15 @@ def main() -> None:
                 page.locator("#ticket-modal .app-primary-button").click()
                 card = page.locator(".ticket-card-open").first
                 card.wait_for()
+                old_card = page.locator(".ticket-card").first.element_handle()
+                assert old_card is not None
                 _step("opening drawer")
                 card.click()
                 page.locator("#ticket-detail-panel").wait_for()
                 _step("saving drawer")
                 page.locator("#ticket-detail-panel button", has_text="Save changes").click()
                 page.locator("#ticket-detail-panel [role=status]").wait_for()
+                page.wait_for_function("card => !card.isConnected", arg=old_card)
                 _step("closing drawer and checking focus")
                 page.get_by_role("button", name="Close").click()
                 page.locator("#ticket-detail-panel").wait_for(state="detached")

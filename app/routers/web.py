@@ -439,6 +439,7 @@ def ticket_detail(
     ticket_number: int,
     request: Request,
     card: bool = False,
+    saved: bool = False,
     project_and_member: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -462,7 +463,13 @@ def ticket_detail(
             },
         )
     return _ticket_detail(
-        request, session, user, project, ticket, page=not request.headers.get("HX-Request")
+        request,
+        session,
+        user,
+        project,
+        ticket,
+        page=not request.headers.get("HX-Request"),
+        saved=saved,
     )
 
 
@@ -554,7 +561,7 @@ def update_ticket_form(
         )
     if not is_hx:
         return RedirectResponse(
-            f"/projects/{project.slug}/tickets/{ticket.ticket_number}",
+            f"/projects/{project.slug}/tickets/{ticket.ticket_number}?saved=true",
             status_code=status.HTTP_303_SEE_OTHER,
         )
     response = _ticket_detail(request, session, user, project, ticket, saved=True)

@@ -84,6 +84,12 @@ def test_settings_link_has_current_location_state(client, make_user, make_projec
         f'<a class="project-settings-link is-active" href="/projects/{project.slug}/settings" '
         'aria-current="page">Settings</a>'
     ) in page.text
+    css = client.get("/static/app.css").text
+    assert ".project-settings-link.is-active {" in css
+    active_style = css.split(".project-settings-link.is-active {", 1)[1].split("}", 1)[0]
+
+    assert "border-bottom: 2px solid var(--text)" in active_style
+    assert "color: var(--text)" in active_style
 
 
 def test_backlog_has_one_primary_owner_action_without_a_planning_sprint(

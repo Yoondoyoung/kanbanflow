@@ -241,7 +241,7 @@ def test_non_htmx_ticket_detail_is_a_full_member_page_and_hx_is_a_fragment(
     assert missing.status_code == 404
 
 
-def test_non_htmx_detail_post_redirects_to_its_full_page(client, web_world, login_as):
+def test_non_htmx_detail_post_redirects_to_a_saved_full_page(client, web_world, login_as):
     login_as(web_world.owner.email)
     url = f"/projects/{web_world.project.slug}/tickets/1"
 
@@ -250,13 +250,14 @@ def test_non_htmx_detail_post_redirects_to_its_full_page(client, web_world, logi
         data=_detail_data(web_world, title="Native update"),
         follow_redirects=False,
     )
-    page = client.get(url)
+    page = client.get(f"{url}?saved=true")
 
     assert response.status_code == 303
-    assert response.headers["location"] == url
+    assert response.headers["location"] == f"{url}?saved=true"
     assert page.status_code == 200
     assert "<html" in page.text
     assert "Native update" in page.text
+    assert '<p class="form-status" role="status">Ticket saved.</p>' in page.text
     assert f'<form class="app-form ticket-detail-form" method="post" action="{url}"' in page.text
     assert f'href="/projects/{web_world.project.slug}">Back to board</a>' in page.text
     assert "ticketOpener" not in page.text
