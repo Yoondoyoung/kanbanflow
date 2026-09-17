@@ -126,6 +126,7 @@ def test_owner_updates_every_ticket_detail_field_and_requests_card_refresh(
             "sprint_id": ticket_world.planning_id,
             "_csrf": make_csrf_token(ticket_world.owner.id),
         },
+        headers={"HX-Request": "true"},
     )
 
     assert response.status_code == 200, response.text
@@ -169,6 +170,7 @@ def test_member_can_update_ticket_details(client, ticket_world, login_as, sessio
             "status": "IN_PROGRESS",
             "_csrf": make_csrf_token(ticket_world.member.id),
         },
+        headers={"HX-Request": "true"},
     )
 
     assert response.status_code == 200
@@ -194,6 +196,7 @@ def test_detail_rejects_foreign_assignee_and_closed_sprint(
             field: value,
             "_csrf": make_csrf_token(ticket_world.owner.id),
         },
+        headers={"HX-Request": "true"},
     )
 
     assert response.status_code == 422
@@ -217,6 +220,7 @@ def test_detail_validation_errors_and_csrf_do_not_mutate_ticket(
             "status": "SELECTED",
             "_csrf": make_csrf_token(ticket_world.owner.id),
         },
+        headers={"HX-Request": "true"},
     )
     missing_csrf = client.post(
         f"/projects/{ticket_world.project.slug}/tickets/1",
@@ -273,6 +277,7 @@ def test_detail_done_update_queues_one_done_notification_and_failed_update_queue
             "status": "DONE",
             "_csrf": make_csrf_token(ticket_world.owner.id),
         },
+        headers={"HX-Request": "true"},
     )
     failed = client.post(
         f"/projects/{ticket_world.project.slug}/tickets/1",
@@ -285,6 +290,7 @@ def test_detail_done_update_queues_one_done_notification_and_failed_update_queue
             "assignee_id": ticket_world.outsider.id,
             "_csrf": make_csrf_token(ticket_world.owner.id),
         },
+        headers={"HX-Request": "true"},
     )
 
     assert done.status_code == 200

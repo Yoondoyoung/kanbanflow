@@ -469,6 +469,7 @@ def update_ticket_form(
 ) -> Response:
     project, _ = project_and_member
     ticket = _project_ticket(session, project, ticket_number)
+    is_hx = bool(request.headers.get("HX-Request"))
     old_status = ticket.status
     old_sprint_id = ticket.sprint_id
     try:
@@ -507,6 +508,7 @@ def update_ticket_form(
             ticket,
             error=error,
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            page=not is_hx,
         )
     except HTTPException as exc:
         return _ticket_detail(
@@ -517,6 +519,12 @@ def update_ticket_form(
             ticket,
             error=exc.detail,
             status_code=exc.status_code,
+            page=not is_hx,
+        )
+    if not is_hx:
+        return RedirectResponse(
+            f"/projects/{project.slug}/tickets/{ticket.ticket_number}",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
     response = _ticket_detail(request, session, user, project, ticket)
     if (ticket.status, ticket.sprint_id) != (old_status, old_sprint_id):

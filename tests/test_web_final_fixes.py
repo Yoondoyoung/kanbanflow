@@ -139,7 +139,7 @@ def test_mobile_backdrop_is_visible_when_alpine_shows_it(client):
     assert "display: block" in mobile_css.split(".app-drawer-backdrop", 1)[1].split("}", 1)[0]
 
 
-def test_detail_422_swaps_a_usable_fragment_into_a_persistent_target(client, web_world, login_as):
+def test_detail_422_html_swaps_but_csrf_403_does_not(client, web_world, login_as):
     login_as(web_world.owner.email)
     board = client.get(f"/projects/{web_world.project.slug}")
     invalid = client.post(
@@ -147,14 +147,27 @@ def test_detail_422_swaps_a_usable_fragment_into_a_persistent_target(client, web
         data=_detail_data(web_world, story_points="4"),
         headers={"HX-Request": "true"},
     )
+    csrf_error = client.post(
+        f"/projects/{web_world.project.slug}/tickets/1",
+        data={**_detail_data(web_world), "_csrf": ""},
+        headers={"HX-Request": "true"},
+    )
 
     assert board.status_code == 200
     assert 'id="ticket-detail-root"' in board.text
     assert "@htmx:before-swap.camel" in board.text
+    assert "$event.detail.xhr.status === 422" in board.text
+    assert "$event.detail.xhr.getResponseHeader('Content-Type')" in board.text
+    assert ".startsWith('text/html')" in board.text
+    assert "$event.detail.xhr.status >= 400" not in board.text
     assert 'hx-target="#ticket-detail-root"' in board.text
     assert invalid.status_code == 422
+    assert invalid.headers["content-type"].startswith("text/html")
     assert 'id="ticket-detail-panel"' in invalid.text
     assert "Save changes" in invalid.text
+    assert csrf_error.status_code == 403
+    assert csrf_error.headers["content-type"].startswith("application/json")
+    assert 'id="ticket-detail-panel"' not in csrf_error.text
 
 
 def test_detail_move_requests_a_board_refresh(client, web_world, engine, login_as):
@@ -189,14 +202,17 @@ def test_reaffirming_done_does_not_queue_another_done_notification(
     first = client.post(
         f"/projects/{web_world.project.slug}/tickets/1",
         data=_detail_data(web_world, status="DONE"),
+        headers={"HX-Request": "true"},
     )
     second = client.post(
         f"/projects/{web_world.project.slug}/tickets/1",
         data=_detail_data(web_world, status="DONE"),
+        headers={"HX-Request": "true"},
     )
     failed = client.post(
         f"/projects/{web_world.project.slug}/tickets/1",
         data=_detail_data(web_world, status="DONE", assignee_id="not-a-member"),
+        headers={"HX-Request": "true"},
     )
 
     assert (first.status_code, second.status_code, failed.status_code) == (200, 200, 422)
@@ -223,6 +239,38 @@ def test_non_htmx_ticket_detail_is_a_full_member_page_and_hx_is_a_fragment(
     assert "<html" not in fragment.text
     assert member_page.status_code == 200
     assert missing.status_code == 404
+
+
+def test_non_htmx_detail_post_redirects_to_its_full_page(client, web_world, login_as):
+    login_as(web_world.owner.email)
+    url = f"/projects/{web_world.project.slug}/tickets/1"
+
+    response = client.post(
+        url,
+        data=_detail_data(web_world, title="Native update"),
+        follow_redirects=False,
+    )
+    page = client.get(url)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == url
+    assert page.status_code == 200
+    assert "<html" in page.text
+    assert "Native update" in page.text
+    assert f'<form class="space-y-3" method="post" action="{url}"' in page.text
+
+
+def test_non_htmx_detail_validation_renders_a_full_page_form(client, web_world, login_as):
+    login_as(web_world.owner.email)
+    url = f"/projects/{web_world.project.slug}/tickets/1"
+
+    response = client.post(url, data=_detail_data(web_world, story_points="4"))
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<html" in response.text
+    assert "Save changes" in response.text
+    assert f'<form class="space-y-3" method="post" action="{url}"' in response.text
 
 
 def test_allowed_owner_self_removal_redirects_to_dashboard(

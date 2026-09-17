@@ -71,7 +71,7 @@
       {% endfor %}
       </div>
     </div>
-    <div id="ticket-detail-root" @htmx:before-swap.camel="if ($event.detail.xhr.status >= 400 && $event.detail.xhr.status < 500) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }">
+    <div id="ticket-detail-root" @htmx:before-swap.camel="if ($event.detail.xhr.status === 422 && ($event.detail.xhr.getResponseHeader('Content-Type') || '').startsWith('text/html')) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }">
       <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-live="polite">Select a ticket to view details.</aside>
     </div>
   </div>
