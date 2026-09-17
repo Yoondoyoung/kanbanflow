@@ -76,6 +76,52 @@ def test_webhook_url_must_have_http_or_https_host(client, make_user, make_projec
         )
 
 
+@pytest.mark.parametrize(
+    "webhook_url",
+    [
+        "https://example.com\\bad",
+        "https://example.com/a path",
+        "https://example.com/\x00hook",
+    ],
+)
+def test_webhook_url_rejects_raw_unsafe_characters(
+    client, make_user, make_project, login_as, webhook_url
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    response = client.patch(
+        f"/api/v1/projects/{project.slug}",
+        json={"webhook_type": "SLACK", "webhook_url": webhook_url},
+    )
+
+    assert response.status_code == 422
+    assert (
+        response.json()["detail"] == "webhook_url must be an http(s) URL when webhook_type is set"
+    )
+
+
+@pytest.mark.parametrize(
+    "webhook_url",
+    ["http://example.com:8080/hooks/incoming?token=abc", "https://example.com/path?token=abc"],
+)
+def test_webhook_url_accepts_host_port_path_and_query(
+    client, make_user, make_project, login_as, webhook_url
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    response = client.patch(
+        f"/api/v1/projects/{project.slug}",
+        json={"webhook_type": "SLACK", "webhook_url": webhook_url},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["webhook_url"] == webhook_url
+
+
 def test_delete_requires_confirmation(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)

@@ -146,7 +146,9 @@ def update_project(session: Session, project: Project, **changes) -> Project:
                 parsed.scheme in ("http", "https")
                 and bool(parsed.netloc)
                 and bool(parsed.hostname)
-                and not any(char.isspace() for char in parsed.netloc)
+                and not any(
+                    char == "\\" or char.isspace() or ord(char) < 32 for char in webhook_url or ""
+                )
             )
             _ = parsed.port
         except ValueError:
