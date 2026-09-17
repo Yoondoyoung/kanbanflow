@@ -6,6 +6,7 @@
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-meta">Backlog</p>
+      {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
       <button class="app-primary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>

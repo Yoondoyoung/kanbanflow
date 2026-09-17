@@ -8,6 +8,7 @@
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-meta">Sprint History</p>
+      {% include "partials/sprint_selector.html" %}
     </div>
   </header>
 
@@ -19,7 +20,7 @@
     <article class="backlog-ticket">
       <a href="/projects/{{ project.slug }}/sprints/{{ summary.sprint.id }}">{{ summary.sprint.name }}</a>
       <p>{{ summary.sprint.start_date.strftime('%b %-d') }} – {{ summary.sprint.end_date.strftime('%b %-d, %Y') }}{% if summary.sprint.goal %} · {{ summary.sprint.goal }}{% endif %}</p>
-      <p>Committed: {{ summary.sprint.committed_points or 0 }} pts · Completed: {{ summary.sprint.completed_points or 0 }} pts · Rollover: {{ summary.rollover_count }} · Delayed: {{ summary.delay_total }} days</p>
+      <p>Committed: {{ summary.sprint.committed_points or 0 }} pts · Completed: {{ summary.sprint.completed_points or 0 }} pts · Completed tickets: {{ summary.completed_count }} · Rollover: {{ summary.rollover_count }} · Delayed: {{ summary.delay_total }} days</p>
     </article>
     {% else %}
     <p class="sprint-meta">No closed sprints.</p>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="project-board">
   <header class="project-header">
-    <div><h1 class="project-title">Project settings</h1><p class="sprint-meta">{{ project.name }}</p></div>
+    <div><h1 class="project-title">Project settings</h1><p class="sprint-meta">{{ project.name }}</p>{% include "partials/sprint_selector.html" %}</div>
   </header>
   {% include "partials/project_nav.html" %}
   {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
@@ -28,7 +28,7 @@
   <section class="backlog-list" aria-labelledby="members-heading">
     <h2 id="members-heading">Members</h2>
     {% for project_member, member_user in members %}
-    <div class="backlog-ticket"><strong>{{ member_user.name }}</strong> · {{ member_user.email }} · {{ project_member.role.value }}
+    <div class="backlog-ticket"><strong>{{ member_user.name }}</strong> · {{ member_user.email }} · {{ project_member.role.value|capitalize }}
       {% if role == 'OWNER' %}
       <form action="/projects/{{ project.slug }}/settings/members/{{ member_user.id }}" method="post">
         <input type="hidden" name="_csrf" value="{{ csrf_token }}">

@@ -1,6 +1,6 @@
 <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-labelledby="ticket-detail-heading">
   <form class="space-y-3" hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
-        hx-target="#ticket-detail-panel" hx-swap="outerHTML">
+        hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <div class="flex items-baseline justify-between gap-2">
       <h2 id="ticket-detail-heading" class="font-semibold">#{{ ticket.ticket_number }} ticket</h2>
       <button type="button" class="text-sm" onclick="document.getElementById('ticket-detail-panel').innerHTML = ''">Close</button>

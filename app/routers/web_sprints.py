@@ -306,7 +306,8 @@ def remove_project_member_settings(
             request, session, user, project, member, error=exc.detail, status_code=exc.status_code
         )
     return RedirectResponse(
-        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+        "/dashboard" if user_id == user.id else f"/projects/{project.slug}/settings",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
@@ -350,6 +351,9 @@ def sprint_history(
             "rollover_count": sum(
                 not history.was_completed for history, _ in rows_by_sprint[sprint.id]
             ),
+            "completed_count": sum(
+                history.was_completed for history, _ in rows_by_sprint[sprint.id]
+            ),
             "delay_total": _history_delay_total(sprint, rows_by_sprint[sprint.id]),
         }
         for sprint in sprints
@@ -390,6 +394,7 @@ def sprint_history_detail(
             "role": member.role.value,
             "active_tab": "history",
             "sprint": sprint,
+            "selected_sprint_id": sprint.id,
             "history": rows,
             "rollover_count": sum(not entry.was_completed for entry, _ in rows),
             "delay_total": _history_delay_total(sprint, rows),

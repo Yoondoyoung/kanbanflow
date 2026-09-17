@@ -35,7 +35,7 @@ body { margin: 0; background: var(--canvas); color: var(--text); }
   .app-menu-button { background: transparent; border: 0; color: var(--text); cursor: pointer; font-size: 20px; padding: 4px; }
   .app-sidebar { bottom: 0; left: 0; position: fixed; top: 0; transform: translateX(-100%); transition: transform 160ms ease; z-index: 20; }
   .app-sidebar.is-open { box-shadow: 8px 0 24px rgb(55 53 47 / 14%); transform: translateX(0); }
-  .app-drawer-backdrop { background: rgb(55 53 47 / 25%); bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 10; }
+  .app-drawer-backdrop { background: rgb(55 53 47 / 25%); bottom: 0; display: block; left: 0; position: fixed; right: 0; top: 0; z-index: 10; }
   .app-main, .auth-main { padding: 20px 16px; }
 }
 

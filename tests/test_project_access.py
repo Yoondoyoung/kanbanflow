@@ -42,7 +42,7 @@ def test_missing_project_is_404_even_for_writes(client, make_user, login_as):
     assert client.patch("/api/v1/projects/nope", json={"name": "X"}).status_code == 404
 
 
-def test_webhook_url_must_have_http_or_https_host(client, make_user, make_project, login_as):
+def test_webhook_url_must_have_https_host(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
     login_as("ada@example.com")
@@ -55,7 +55,7 @@ def test_webhook_url_must_have_http_or_https_host(client, make_user, make_projec
             f"/api/v1/projects/{project.slug}",
             json={"webhook_type": "SLACK", "webhook_url": "http://example.com/hook"},
         ).status_code
-        == 200
+        == 422
     )
     assert (
         client.patch(
@@ -71,8 +71,7 @@ def test_webhook_url_must_have_http_or_https_host(client, make_user, make_projec
         )
         assert response.status_code == 422
         assert (
-            response.json()["detail"]
-            == "webhook_url must be an http(s) URL when webhook_type is set"
+            response.json()["detail"] == "webhook_url must be an https URL when webhook_type is set"
         )
 
 
@@ -98,14 +97,12 @@ def test_webhook_url_rejects_raw_unsafe_characters(
     )
 
     assert response.status_code == 422
-    assert (
-        response.json()["detail"] == "webhook_url must be an http(s) URL when webhook_type is set"
-    )
+    assert response.json()["detail"] == "webhook_url must be an https URL when webhook_type is set"
 
 
 @pytest.mark.parametrize(
     "webhook_url",
-    ["http://example.com:8080/hooks/incoming?token=abc", "https://example.com/path?token=abc"],
+    ["https://example.com:8080/hooks/incoming?token=abc", "https://example.com/path?token=abc"],
 )
 def test_webhook_url_accepts_host_port_path_and_query(
     client, make_user, make_project, login_as, webhook_url

@@ -74,6 +74,17 @@ def render(
     shell_context = {}
     if session and user and not name.startswith("partials/"):
         shell_context = _shell_context(session, user)
+        project = context.get("project")
+        if project is not None:
+            status_order = {
+                SprintStatus.ACTIVE: 0,
+                SprintStatus.PLANNING: 1,
+                SprintStatus.CLOSED: 2,
+            }
+            shell_context["sprint_options"] = sorted(
+                session.exec(select(Sprint).where(Sprint.project_id == project.id)).all(),
+                key=lambda sprint: (status_order[sprint.status], sprint.start_date),
+            )
     context = {
         **shell_context,
         "request": request,
@@ -221,6 +232,7 @@ def _ticket_detail(
     *,
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
+    page: bool = False,
 ) -> Response:
     members = session.exec(
         select(User)
@@ -238,7 +250,7 @@ def _ticket_detail(
     ).all()
     return render(
         request,
-        "partials/ticket_detail.html",
+        "ticket_detail.html" if page else "partials/ticket_detail.html",
         {
             "user": user,
             "project": project,
@@ -249,8 +261,11 @@ def _ticket_detail(
             "priorities": Priority,
             "columns": COLUMNS,
             "error": error,
+            "active_tab": "board",
+            "selected_sprint_id": ticket.sprint_id,
         },
         status_code=status_code,
+        session=session if page else None,
     )
 
 
@@ -296,6 +311,7 @@ def board(
     request: Request,
     user: User | None = Depends(optional_user),
     session: Session = Depends(get_session),
+    sprint_id: str | None = None,
     mine: bool = False,
     assignee_id: str | None = None,
     type_filter: TicketType | None = _TYPE_FILTER_QUERY,
@@ -326,6 +342,16 @@ def board(
         return RedirectResponse(
             f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
         )
+    if sprint_id:
+        sprint = session.exec(
+            select(Sprint).where(
+                Sprint.id == sprint_id,
+                Sprint.project_id == project.id,
+                Sprint.status.in_((SprintStatus.ACTIVE, SprintStatus.PLANNING)),
+            )
+        ).first()
+        if sprint is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Sprint not found")
 
     filters = [Ticket.project_id == project.id, Ticket.sprint_id == sprint.id]
     if mine:
@@ -364,6 +390,7 @@ def board(
             "role": member.role.value,
             "active_tab": "board",
             "sprint": sprint,
+            "selected_sprint_id": sprint.id,
             "columns": COLUMNS,
             "tickets_by_status": tickets_by_status,
             "truncated_columns": truncated_columns,
@@ -416,7 +443,9 @@ def ticket_detail(
                 "assignee_names": assignee_names,
             },
         )
-    return _ticket_detail(request, session, user, project, ticket)
+    return _ticket_detail(
+        request, session, user, project, ticket, page=not request.headers.get("HX-Request")
+    )
 
 
 @router.post("/projects/{slug}/tickets/{ticket_number}", dependencies=[Depends(verify_csrf)])
@@ -440,6 +469,8 @@ def update_ticket_form(
 ) -> Response:
     project, _ = project_and_member
     ticket = _project_ticket(session, project, ticket_number)
+    old_status = ticket.status
+    old_sprint_id = ticket.sprint_id
     try:
         points = int(story_points) if story_points else None
         changes = TicketUpdate(
@@ -488,7 +519,10 @@ def update_ticket_form(
             status_code=exc.status_code,
         )
     response = _ticket_detail(request, session, user, project, ticket)
-    response.headers["HX-Trigger"] = f"refresh-ticket-card-{ticket.id}"
+    if (ticket.status, ticket.sprint_id) != (old_status, old_sprint_id):
+        response.headers["HX-Refresh"] = "true"
+    else:
+        response.headers["HX-Trigger"] = f"refresh-ticket-card-{ticket.id}"
     return response
 
 

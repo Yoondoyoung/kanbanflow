@@ -9,6 +9,7 @@
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-title">{{ sprint.name }} <span class="sprint-status">{{ sprint.status.value|capitalize }}</span></p>
       <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
+      {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions">
       <button class="app-primary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
@@ -70,7 +71,9 @@
       {% endfor %}
       </div>
     </div>
-    <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-live="polite">Select a ticket to view details.</aside>
+    <div id="ticket-detail-root" @htmx:before-swap.camel="if ($event.detail.xhr.status >= 400 && $event.detail.xhr.status < 500) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }">
+      <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-live="polite">Select a ticket to view details.</aside>
+    </div>
   </div>
 
   {% include "partials/ticket_modal.html" %}

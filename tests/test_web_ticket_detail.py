@@ -91,7 +91,9 @@ def test_detail_fragment_renders_sanitized_markdown_and_project_members(
 ):
     login_as(ticket_world.owner.email)
 
-    response = client.get(f"/projects/{ticket_world.project.slug}/tickets/1")
+    response = client.get(
+        f"/projects/{ticket_world.project.slug}/tickets/1", headers={"HX-Request": "true"}
+    )
 
     assert response.status_code == 200, response.text
     assert "<html" not in response.text
@@ -128,7 +130,8 @@ def test_owner_updates_every_ticket_detail_field_and_requests_card_refresh(
 
     assert response.status_code == 200, response.text
     assert "Updated title" in response.text
-    assert response.headers["HX-Trigger"] == f"refresh-ticket-card-{ticket_world.ticket_id}"
+    assert response.headers["HX-Refresh"] == "true"
+    assert "HX-Trigger" not in response.headers
     ticket = _ticket(session, ticket_world)
     assert (
         ticket.title,
@@ -235,7 +238,7 @@ def test_compact_card_opens_the_detail_panel_and_refreshes_itself(client, ticket
     card_html = page.text.split('id="ticket-', 1)[1].split("</article>", 1)[0]
     assert "<strong>Safe</strong>" not in card_html
     assert f'hx-get="/projects/{ticket_world.project.slug}/tickets/1"' in page.text
-    assert 'hx-target="#ticket-detail-panel"' in page.text
+    assert 'hx-target="#ticket-detail-root"' in page.text
     assert f"refresh-ticket-card-{ticket_world.ticket_id}" in card.text
 
 

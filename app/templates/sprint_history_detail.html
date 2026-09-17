@@ -7,6 +7,7 @@
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ sprint.name }}</h1>
+      {% include "partials/sprint_selector.html" %}
       <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
       <p class="sprint-meta">Committed: {{ sprint.committed_points or 0 }} pts · Completed: {{ sprint.completed_points or 0 }} pts · Rollover: {{ rollover_count }} · Delayed: {{ delay_total }} days</p>
     </div>

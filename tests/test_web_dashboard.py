@@ -17,7 +17,7 @@ def test_dashboard_lists_projects(client, make_user, make_project, login_as):
     assert len(re.findall(r"<h1[^>]*>\s*Projects\s*</h1>", response.text)) == 1
     assert 'data-testid="project-row"' in response.text
     assert f'href="/projects/{project.slug}"' in response.text
-    assert "OWNER" in response.text
+    assert ">Owner</span>" in response.text
 
 
 def test_dashboard_has_accessible_project_creation_dialog(client, make_user, login_as):

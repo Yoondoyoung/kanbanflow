@@ -145,13 +145,13 @@ def update_project(session: Session, project: Project, **changes) -> Project:
     ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "webhook_url must be an http(s) URL when webhook_type is set",
+            "webhook_url must be an https URL when webhook_type is set",
         )
     if webhook_type != WebhookType.NONE:
         try:
             parsed = urlparse(webhook_url or "")
             valid_webhook_url = (
-                parsed.scheme in ("http", "https") and bool(parsed.netloc) and bool(parsed.hostname)
+                parsed.scheme == "https" and bool(parsed.netloc) and bool(parsed.hostname)
             )
             _ = parsed.port
         except ValueError:
@@ -159,7 +159,7 @@ def update_project(session: Session, project: Project, **changes) -> Project:
         if not valid_webhook_url:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "webhook_url must be an http(s) URL when webhook_type is set",
+                "webhook_url must be an https URL when webhook_type is set",
             )
     for field, value in changes.items():
         setattr(project, field, value.strip() if field == "name" else value)
@@ -586,6 +586,7 @@ def set_status(
     # enforce. completed_at tracks DONE membership: entering DONE stamps it,
     # leaving clears it. Re-affirming DONE (a double-clicked dropdown) must
     # not restamp it to a new timestamp, so only stamp when not already DONE.
+    entered_done = ticket.status != TicketStatus.DONE and new_status == TicketStatus.DONE
     if new_status == TicketStatus.DONE:
         if ticket.completed_at is None:
             ticket.completed_at = utcnow()
@@ -600,6 +601,6 @@ def set_status(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
-    if new_status == TicketStatus.DONE and project is not None:
+    if entered_done and project is not None:
         schedule(tasks, project, EVENT_TICKET_DONE, ticket)
     return ticket

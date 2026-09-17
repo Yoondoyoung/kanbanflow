@@ -4,7 +4,7 @@
          hx-target="this" hx-swap="outerHTML">
   <button type="button" class="w-full text-left"
           hx-get="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
-          hx-target="#ticket-detail-panel" hx-swap="outerHTML">
+          hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <span class="flex items-baseline gap-2">
       <span class="font-mono text-xs text-slate-500">#{{ ticket.ticket_number }}</span>
       <span class="font-medium">{{ ticket.title }}</span>

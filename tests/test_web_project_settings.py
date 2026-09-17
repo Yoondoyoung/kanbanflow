@@ -88,7 +88,7 @@ def test_webhook_validation_re_renders_settings(client, settings_world, login_as
     )
 
     assert response.status_code == 422
-    assert "http(s) URL" in response.text
+    assert "https URL" in response.text
     assert "&lt;b&gt;Changed&lt;/b&gt;" in response.text
     assert "<b>Changed</b>" not in response.text
     assert 'value="https://"' in response.text

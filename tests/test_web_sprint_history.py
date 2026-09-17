@@ -112,7 +112,8 @@ def test_history_lists_closed_sprints_newest_first_with_totals(client, history_w
     page = client.get(f"/projects/{history_world.project.slug}/sprints")
 
     assert page.status_code == 200
-    assert page.text.index("Sprint 2") < page.text.index("Sprint 1")
+    summaries = page.text.split('<section class="backlog-list"', 1)[1]
+    assert summaries.index("Sprint 2") < summaries.index("Sprint 1")
     assert "Committed: 8 pts" in page.text
     assert "Completed: 5 pts" in page.text
     assert "Rollover: 1" in page.text
