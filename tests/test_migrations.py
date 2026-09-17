@@ -32,6 +32,47 @@ def test_migration_produces_the_same_tables_as_the_models(tmp_path):
         assert migrated_columns == model_columns, f"{table_name} columns disagree"
 
 
+def test_api_token_migration_creates_indexes_and_user_foreign_key(tmp_path):
+    db = tmp_path / "migrated.db"
+    subprocess.run(
+        ["uv", "run", "alembic", "upgrade", "head"],
+        check=True,
+        env={"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]},
+    )
+    inspector = inspect(make_engine(f"sqlite:///{db}"))
+
+    expected_columns = {
+        "id",
+        "user_id",
+        "label",
+        "prefix",
+        "token_hash",
+        "created_at",
+        "last_used_at",
+        "revoked_at",
+    }
+    assert expected_columns == {column["name"] for column in inspector.get_columns("api_token")}
+    indexes = {index["name"]: index for index in inspector.get_indexes("api_token")}
+    assert not indexes["ix_api_token_user_id"]["unique"]
+    assert indexes["ix_api_token_token_hash"]["unique"]
+    referred_tables = {
+        foreign_key["referred_table"] for foreign_key in inspector.get_foreign_keys("api_token")
+    }
+    assert referred_tables == {"user"}
+
+
+def test_api_token_migration_downgrade_and_upgrade_are_safe(tmp_path):
+    db = tmp_path / "migrated.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    subprocess.run(["uv", "run", "alembic", "downgrade", "-1"], check=True, env=env)
+
+    assert "api_token" not in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    assert "api_token" in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+
+
 def test_sprint_migration_creates_constraints(tmp_path):
     db = tmp_path / "migrated.db"
     subprocess.run(

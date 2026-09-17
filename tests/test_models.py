@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
 from app.models import (
+    ApiToken,
     Project,
     ProjectMember,
     Role,
@@ -25,6 +26,57 @@ def make_user(session: Session, email: str = "a@b.com") -> User:
     session.commit()
     session.refresh(user)
     return user
+
+
+def test_api_token_stores_hash_and_prefix(session, make_user):
+    user = make_user()
+    token = ApiToken(
+        user_id=user.id,
+        label="Cursor",
+        prefix="kf_ab12",
+        token_hash="0" * 64,
+    )
+    session.add(token)
+    session.commit()
+
+    assert token.revoked_at is None
+
+
+def test_api_token_requires_an_existing_user(session):
+    session.add(
+        ApiToken(
+            user_id="missing-user",
+            label="Cursor",
+            prefix="kf_ab12",
+            token_hash="0" * 64,
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_api_token_hash_is_unique(session, make_user):
+    user = make_user()
+    session.add_all(
+        [
+            ApiToken(
+                user_id=user.id,
+                label="Cursor",
+                prefix="kf_ab12",
+                token_hash="0" * 64,
+            ),
+            ApiToken(
+                user_id=user.id,
+                label="Claude",
+                prefix="kf_cd34",
+                token_hash="0" * 64,
+            ),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        session.commit()
 
 
 def test_sprint_and_history_models(session, make_user, make_project):

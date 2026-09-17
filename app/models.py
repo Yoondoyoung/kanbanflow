@@ -63,6 +63,19 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class ApiToken(SQLModel, table=True):
+    __tablename__ = "api_token"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    label: str = Field(max_length=100)
+    prefix: str = Field(max_length=12)
+    token_hash: str = Field(max_length=64, unique=True, index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+    last_used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+
 class Project(SQLModel, table=True):
     __tablename__ = "project"
 
