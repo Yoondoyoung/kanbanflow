@@ -255,6 +255,22 @@ def test_board_css_keeps_columns_horizontally_scrollable_on_mobile():
     assert "grid-template-columns: repeat(4, minmax(240px, 1fr));" in stylesheet
 
 
+def test_board_accessibility_uses_labeled_filters_and_human_status_text(
+    client, active_sprint_world, login_as
+):
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{active_sprint_world.project.slug}").text
+
+    assert 'aria-label="Board filters"' in page
+    assert '<label for="assignee-filter">Assignee</label>' in page
+    assert '<label for="type-filter">Type</label>' in page
+    assert '<label for="priority-filter">Priority</label>' in page
+    assert 'aria-label="Board columns" tabindex="0"' in page
+    assert 'aria-current="page">Board</a>' in page
+    assert "In progress" in page
+
+
 def test_project_falls_back_to_planning_sprint(client, make_user, make_project, engine, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)

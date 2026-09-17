@@ -1,3 +1,6 @@
+from pathlib import Path
+
+
 def test_signed_in_shell_has_project_sidebar(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
@@ -38,3 +41,32 @@ def test_backdrop_hides_and_drawer_closes_when_resized_to_desktop(client, make_u
 
     assert 'x-show="navOpen && isMobile"' in page.text
     assert "if (!event.matches) navOpen = false" in page.text
+
+
+def test_dialogs_have_names_escape_handling_and_focus_targets():
+    dashboard = Path("app/templates/dashboard.html").read_text()
+    board = Path("app/templates/board.html").read_text()
+    backlog = Path("app/templates/backlog.html").read_text()
+    ticket_modal = Path("app/templates/partials/ticket_modal.html").read_text()
+    close_dialog = Path("app/templates/partials/sprint_close.html").read_text()
+
+    assert 'role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading"' in dashboard
+    assert "$refs.projectName.focus()" in dashboard
+    assert "$refs.projectDialogOpener.focus()" in dashboard
+    assert '<dialog id="ticket-modal"' in ticket_modal
+    assert 'role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading"' in ticket_modal
+    assert '@cancel="$event.preventDefault(); $el.close()"' in ticket_modal
+    assert 'x-ref="ticketTitle"' in ticket_modal
+    assert "$refs.ticketModalOpener.focus()" in ticket_modal
+    assert "$refs.ticketTitle.focus()" in board
+    assert "$refs.ticketTitle.focus()" in backlog
+    assert '@cancel="$event.preventDefault(); $el.close()"' in close_dialog
+    assert "$el.querySelector('h2').focus()" in close_dialog
+    assert "$refs.closeFormOpener.focus()" in close_dialog
+
+
+def test_styles_respect_reduced_motion():
+    stylesheet = Path("app/static/app.css").read_text()
+
+    assert "@media (prefers-reduced-motion: reduce)" in stylesheet
+    assert "transition-duration: 0.01ms !important" in stylesheet

@@ -20,6 +20,23 @@ docker compose up --build
 Open <http://localhost:8000> in a browser. Register an account, create a
 project, and add a ticket to the board.
 
+## Web workspace
+
+The dashboard lists every project you can access. Open a project to reach its
+active sprint Board; if there is no active sprint, Kanban Flow opens its
+planning sprint, then Backlog as a fallback. Project navigation includes:
+
+- **Board** — four sprint columns, filters, compact cards, and ticket details.
+- **Backlog** — unassigned tickets and the planning sprint.
+- **Sprint History** — closed-sprint summaries and close-time ticket states.
+- **Settings** — project details, webhook configuration, and membership.
+
+Only project **OWNER**s can create, start, or close sprints. Members can view
+sprint pages and work with tickets, but cannot run sprint lifecycle actions.
+
+On small screens, the project sidebar becomes a menu drawer. Board columns
+remain full-width and scroll horizontally instead of being compressed.
+
 The SQLite database file lives at `./data/kanbanflow.db` on the host, bind-mounted
 into the container at `/data`. Rebuilding or recreating the container does not
 delete this directory, so data survives `docker compose up --build`.

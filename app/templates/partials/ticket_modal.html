@@ -1,12 +1,12 @@
-<div x-show="modal" x-cloak
-     class="fixed inset-0 bg-black/40 flex items-center justify-center p-4">
-  <div id="ticket-modal" x-data="{ error: '' }" class="bg-white rounded p-5 w-full max-w-md" @click.outside="modal = false"
-       role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading">
+<dialog id="ticket-modal" x-ref="ticketModal" x-data="{ error: '' }" class="app-dialog w-full max-w-md p-5"
+        role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading"
+        @cancel="$event.preventDefault(); $el.close()" @close="$refs.ticketModalOpener.focus()"
+        @click="$event.target === $el && $el.close()">
     <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
     <form hx-post="/projects/{{ project.slug }}/tickets"
           hx-target="{{ ticket_target|default('#column-BACKLOG') }}"
           hx-swap="afterbegin"
-          @htmx:after-request="if ($event.detail.successful) { modal = false; error = ''; $el.reset(); } else { error = $event.detail.xhr.responseText; }"
+          @htmx:after-request="if ($event.detail.successful) { $refs.ticketModal.close(); error = ''; $el.reset(); } else { error = $event.detail.xhr.responseText; }"
           class="space-y-3">
       <p x-show="error" x-text="error" class="text-red-600 text-xs" role="alert"></p>
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
@@ -21,7 +21,7 @@
       </div>
       <div>
         <label for="ticket-title" class="block text-xs font-medium mb-1">Title</label>
-        <input id="ticket-title" class="w-full border rounded px-3 py-2" name="title" required>
+        <input id="ticket-title" x-ref="ticketTitle" class="w-full border rounded px-3 py-2" name="title" required>
       </div>
       <div>
         <label for="ticket-type" class="block text-xs font-medium mb-1">Type</label>
@@ -38,9 +38,8 @@
                   placeholder="Markdown supported"></textarea>
       </div>
       <div class="flex gap-2 justify-end">
-        <button type="button" class="px-3 py-1.5 text-sm" @click="modal = false">Cancel</button>
+        <button type="button" class="px-3 py-1.5 text-sm" @click="$refs.ticketModal.close()">Cancel</button>
         <button class="bg-slate-900 text-white rounded px-4 py-1.5 text-sm">Create</button>
       </div>
     </form>
-  </div>
-</div>
+</dialog>

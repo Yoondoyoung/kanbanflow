@@ -3,7 +3,7 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board" x-data="{ modal: false }">
+<div class="project-board" x-data>
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -11,7 +11,7 @@
       <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
     </div>
     <div class="project-actions">
-      <button class="app-primary-button" @click="modal = true">New ticket</button>
+      <button class="app-primary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
       {% if role == 'OWNER' %}
       <a class="app-secondary-button" data-testid="owner-sprint-actions" href="/projects/{{ project.slug }}/backlog">Plan sprint</a>
       {% if sprint.status.value == 'ACTIVE' %}

@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} Backlog · Kanban Flow{% endblock %}
 {% block content %}
-<div class="project-board" x-data="{ modal: false }"{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% elif start_form_open %} x-init="$nextTick(() => $refs.startForm.showModal())"{% endif %}>
+<div class="project-board" x-data{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% elif start_form_open %} x-init="$nextTick(() => $refs.startForm.showModal())"{% endif %}>
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-meta">Backlog</p>
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
-      <button class="app-primary-button" type="button" @click="modal = true">New ticket</button>
+      <button class="app-primary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
       {% if role == 'OWNER' %}
       <button class="app-primary-button" type="button" x-ref="sprintFormOpener" @click="$refs.sprintForm.showModal()">Add sprint</button>
       {% endif %}
