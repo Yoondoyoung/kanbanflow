@@ -27,17 +27,18 @@ def active_sprint(make_user, make_project, engine):
     return owner, project, sprint
 
 
-def test_modal_targets_the_backlog_column(client, active_sprint, login_as):
+def test_modal_redirects_after_a_successful_htmx_submission(client, active_sprint, login_as):
     owner, project, sprint = active_sprint
     login_as("ada@example.com")
     page = client.get(f"/projects/{project.slug}").text
-    assert 'hx-target="#column-BACKLOG"' in page
-    assert 'hx-swap="afterbegin"' in page
+    assert 'hx-swap="none"' in page
     assert f'hx-post="/projects/{project.slug}/tickets"' in page
     assert f'<option value="{sprint.id}" selected>' in page
 
 
-def test_submitting_the_modal_returns_a_card_fragment(client, make_user, make_project, login_as):
+def test_submitting_the_modal_redirects_after_an_htmx_success(
+    client, make_user, make_project, login_as
+):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
     login_as("ada@example.com")
@@ -49,12 +50,29 @@ def test_submitting_the_modal_returns_a_card_fragment(client, make_user, make_pr
             "description": "Happens on the second attempt",
             "_csrf": make_csrf_token(owner.id),
         },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
     )
-    assert response.status_code == 201
-    assert "<html" not in response.text
-    assert response.text.strip().startswith("<article")
-    assert "Card declines on retry" in response.text
-    assert "#1" in response.text
+    assert response.status_code == 204
+    assert response.headers["HX-Redirect"] == f"/projects/{project.slug}"
+    assert response.text == ""
+
+
+def test_non_htmx_ticket_submission_redirects_to_the_project(
+    client, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    response = client.post(
+        f"/projects/{project.slug}/tickets",
+        data={"title": "Card declines on retry", "type": "BUG", "_csrf": make_csrf_token(owner.id)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/projects/{project.slug}"
 
 
 def test_the_created_ticket_appears_on_the_board(client, active_sprint, login_as):
@@ -81,10 +99,50 @@ def test_empty_title_is_422(client, make_user, make_project, login_as):
     response = client.post(
         f"/projects/{project.slug}/tickets",
         data={"title": "   ", "type": "TASK", "_csrf": make_csrf_token(owner.id)},
+        headers={"HX-Request": "true"},
     )
     assert response.status_code == 422
     assert response.headers["content-type"].startswith("text/plain")
     assert "<html" not in response.text
+
+
+@pytest.mark.parametrize("sprint_status", [SprintStatus.ACTIVE, SprintStatus.CLOSED])
+def test_ticket_form_rejects_foreign_or_closed_sprint_destinations(
+    client, make_user, make_project, engine, login_as, sprint_status
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    foreign_project = make_project(owner, name="Other project")
+    with Session(engine) as session:
+        sprint = Sprint(
+            project_id=foreign_project.id if sprint_status is SprintStatus.ACTIVE else project.id,
+            name="Unavailable sprint",
+            goal="Not available",
+            status=sprint_status,
+            start_date=date(2026, 9, 21),
+            end_date=date(2026, 9, 28),
+        )
+        session.add(sprint)
+        session.commit()
+        session.refresh(sprint)
+    login_as(owner.email)
+
+    response = client.post(
+        f"/projects/{project.slug}/tickets",
+        data={
+            "title": "Invalid destination",
+            "type": "TASK",
+            "sprint_id": sprint.id,
+            "_csrf": make_csrf_token(owner.id),
+        },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/plain")
+    with Session(engine) as session:
+        assert session.exec(select(Ticket).where(Ticket.project_id == project.id)).first() is None
 
 
 def test_non_member_submission_is_403(client, make_user, make_project, login_as):
@@ -162,6 +220,7 @@ def test_backlog_modal_defaults_to_backlog_and_members_can_create_there(
     response = client.post(
         f"/projects/{project.slug}/tickets",
         data={"title": "Backlog ticket", "type": "TASK", "_csrf": make_csrf_token(member.id)},
+        follow_redirects=False,
     )
     with Session(engine) as session:
         ticket = session.exec(
@@ -169,7 +228,77 @@ def test_backlog_modal_defaults_to_backlog_and_members_can_create_there(
         ).one()
 
     assert "New ticket" in page.text
-    assert 'hx-target="#backlog-tickets"' in page.text
     assert '<option value="" selected>Backlog</option>' in page.text
-    assert response.status_code == 201
+    assert response.status_code == 303
     assert ticket.sprint_id is None
+
+
+def test_backlog_modal_lists_only_this_projects_open_sprints(
+    client, active_sprint, make_project, engine, login_as
+):
+    owner, project, active = active_sprint
+    other_project = make_project(owner, name="Other project")
+    with Session(engine) as session:
+        planning = Sprint(
+            project_id=project.id,
+            name="Next sprint",
+            goal="Next work",
+            status=SprintStatus.PLANNING,
+            start_date=date(2026, 9, 29),
+            end_date=date(2026, 10, 6),
+        )
+        foreign = Sprint(
+            project_id=other_project.id,
+            name="Foreign sprint",
+            goal="Not this project",
+            status=SprintStatus.ACTIVE,
+            start_date=date(2026, 9, 21),
+            end_date=date(2026, 9, 28),
+        )
+        session.add_all([planning, foreign])
+        session.commit()
+        session.refresh(planning)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/backlog").text
+
+    assert '<option value="" selected>Backlog</option>' in page
+    assert f'<option value="{active.id}">Sprint 1</option>' in page
+    assert f'<option value="{planning.id}">Next sprint</option>' in page
+    assert "Foreign sprint" not in page
+
+
+def test_backlog_sprint_destination_uses_an_htmx_redirect(client, active_sprint, engine, login_as):
+    owner, project, _ = active_sprint
+    with Session(engine) as session:
+        planning = Sprint(
+            project_id=project.id,
+            name="Next sprint",
+            goal="Next work",
+            status=SprintStatus.PLANNING,
+            start_date=date(2026, 9, 29),
+            end_date=date(2026, 10, 6),
+        )
+        session.add(planning)
+        session.commit()
+        session.refresh(planning)
+    login_as(owner.email)
+
+    response = client.post(
+        f"/projects/{project.slug}/tickets",
+        data={
+            "title": "Planned from backlog",
+            "type": "TASK",
+            "sprint_id": planning.id,
+            "_csrf": make_csrf_token(owner.id),
+        },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 204
+    assert response.headers["HX-Redirect"] == f"/projects/{project.slug}"
+    assert response.text == ""
+    with Session(engine) as session:
+        ticket = session.exec(select(Ticket).where(Ticket.title == "Planned from backlog")).one()
+    assert ticket.sprint_id == planning.id

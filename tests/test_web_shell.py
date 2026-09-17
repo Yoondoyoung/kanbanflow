@@ -55,11 +55,18 @@ def test_dialogs_have_names_escape_handling_and_focus_targets():
     assert "$refs.projectDialogOpener.focus()" in dashboard
     assert '<dialog id="ticket-modal"' in ticket_modal
     assert 'role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading"' in ticket_modal
+    assert "x-data=" not in ticket_modal
     assert '@cancel="$event.preventDefault(); $el.close()"' in ticket_modal
     assert 'x-ref="ticketTitle"' in ticket_modal
     assert "$refs.ticketModalOpener.focus()" in ticket_modal
-    assert "$refs.ticketTitle.focus()" in board
-    assert "$refs.ticketTitle.focus()" in backlog
+    for page in (board, backlog):
+        assert "x-data=\"{ ticketError: '' }\"" in page
+        assert 'x-ref="ticketModalOpener"' in page
+        assert "$refs.ticketModal.showModal()" in page
+        assert "$refs.ticketTitle.focus()" in page
+    assert "@htmx:after-request.camel=" in ticket_modal
+    assert "ticketError = $event.detail.xhr.responseText" in ticket_modal
+    assert "ticketError = ''; $el.reset()" in ticket_modal
     assert '@cancel="$event.preventDefault(); $el.close()"' in close_dialog
     assert "$el.querySelector('h2').focus()" in close_dialog
     assert "$refs.closeFormOpener.focus()" in close_dialog

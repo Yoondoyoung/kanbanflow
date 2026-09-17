@@ -510,7 +510,7 @@ def create_ticket_form(
     # this form bypasses any Pydantic schema), and the TICKET_CREATED notification all live
     # there exactly once.
     try:
-        ticket = create_ticket(
+        create_ticket(
             session,
             project,
             user,
@@ -525,12 +525,11 @@ def create_ticket_form(
         # Not a page and not JSON: the modal's error slot renders whatever text comes back
         # (see partials/ticket_modal.html's htmx:after-request handler), so plain text is enough.
         return Response(str(exc.detail), status_code=exc.status_code, media_type="text/plain")
-    return render(
-        request,
-        "partials/ticket_card.html",
-        {"user": user, "project": project, "ticket": ticket, "columns": COLUMNS},
-        status_code=status.HTTP_201_CREATED,
-    )
+    if request.headers.get("HX-Request"):
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
+        response.headers["HX-Redirect"] = f"/projects/{project.slug}"
+        return response
+    return RedirectResponse(f"/projects/{project.slug}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.post("/projects/{slug}/tickets/{ticket_number}/status", dependencies=[Depends(verify_csrf)])

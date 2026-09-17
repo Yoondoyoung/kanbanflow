@@ -1,14 +1,13 @@
-<dialog id="ticket-modal" x-ref="ticketModal" x-data="{ error: '' }" class="app-dialog w-full max-w-md p-5"
+<dialog id="ticket-modal" x-ref="ticketModal" class="app-dialog w-full max-w-md p-5"
         role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading"
         @cancel="$event.preventDefault(); $el.close()" @close="$refs.ticketModalOpener.focus()"
         @click="$event.target === $el && $el.close()">
     <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
     <form hx-post="/projects/{{ project.slug }}/tickets"
-          hx-target="{{ ticket_target|default('#column-BACKLOG') }}"
-          hx-swap="afterbegin"
-          @htmx:after-request="if ($event.detail.successful) { $refs.ticketModal.close(); error = ''; $el.reset(); } else { error = $event.detail.xhr.responseText; }"
+          hx-swap="none"
+          @htmx:after-request.camel="if ($event.detail.successful) { $refs.ticketModal.close(); ticketError = ''; $el.reset(); } else { ticketError = $event.detail.xhr.responseText; }"
           class="space-y-3">
-      <p x-show="error" x-text="error" class="text-red-600 text-xs" role="alert"></p>
+      <p x-show="ticketError" x-text="ticketError" class="text-red-600 text-xs" role="alert"></p>
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <div>
         <label for="ticket-sprint" class="block text-xs font-medium mb-1">Destination</label>

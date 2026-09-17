@@ -266,7 +266,7 @@ def test_board_accessibility_uses_labeled_filters_and_human_status_text(
     assert '<label for="assignee-filter">Assignee</label>' in page
     assert '<label for="type-filter">Type</label>' in page
     assert '<label for="priority-filter">Priority</label>' in page
-    assert 'aria-label="Board columns" tabindex="0"' in page
+    assert 'role="region" aria-label="Board columns" tabindex="0"' in page
     assert 'aria-current="page">Board</a>' in page
     assert "In progress" in page
 

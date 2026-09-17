@@ -3,7 +3,7 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board" x-data>
+<div class="project-board" x-data="{ ticketError: '' }">
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -50,7 +50,7 @@
   </form>
 
   <div class="board-workspace">
-    <div class="board-scroll" aria-label="Board columns" tabindex="0">
+    <div class="board-scroll" role="region" aria-label="Board columns" tabindex="0">
       <div class="board-columns">
       {% for column in columns %}
       <section class="board-column" aria-labelledby="column-{{ column.value }}-heading">

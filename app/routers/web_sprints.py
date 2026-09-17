@@ -105,7 +105,14 @@ def _backlog(
             "planning_points": sum(ticket.story_points or 0 for ticket in planning_tickets),
             "tickets": tickets,
             "sprint": None,
-            "ticket_target": "#backlog-tickets",
+            "destination_sprints": session.exec(
+                select(Sprint)
+                .where(
+                    Sprint.project_id == project.id,
+                    Sprint.status.in_((SprintStatus.ACTIVE, SprintStatus.PLANNING)),
+                )
+                .order_by(Sprint.start_date)
+            ).all(),
             "values": {},
             "field_errors": {},
             "error": None,

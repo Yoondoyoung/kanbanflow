@@ -69,8 +69,10 @@ def test_non_api_path_write_is_not_blocked_by_origin(client, make_user, make_pro
         f"/projects/{project.slug}/tickets",
         data={"title": "T", "_csrf": token},
         headers={"Origin": "https://evil.example.com"},
+        follow_redirects=False,
     )
-    assert response.status_code == 201
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/projects/{project.slug}"
 
 
 def test_foreign_origin_write_creates_no_ticket(client, session, make_user, make_project, login_as):
