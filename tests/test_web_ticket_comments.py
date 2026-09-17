@@ -5,7 +5,7 @@ from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
 from app.models import Project, Ticket, TicketComment, WebhookType
-from app.services import delete_project
+from app.services import delete_project, set_chat_webhook
 
 
 @pytest.fixture
@@ -16,15 +16,16 @@ def comment_world(make_user, make_project, add_member, engine):
     add_member(project, member)
     with Session(engine) as session:
         stored_project = session.get(Project, project.id)
-        stored_project.webhook_type = WebhookType.SLACK
-        stored_project.webhook_url = "https://example.com/hook"
+        set_chat_webhook(
+            session, stored_project, WebhookType.SLACK, "https://example.com/hook"
+        )
         ticket = Ticket(
             ticket_number=1,
             project_id=project.id,
             title="Campaign review",
             creator_id=owner.id,
         )
-        session.add_all([stored_project, ticket])
+        session.add(ticket)
         session.commit()
         session.refresh(ticket)
     return SimpleNamespace(owner=owner, member=member, project=project, ticket=ticket)

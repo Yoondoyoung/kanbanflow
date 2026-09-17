@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import Priority, Role, SprintStatus, TicketStatus, TicketType, WebhookType
+from app.models import Priority, Role, SprintStatus, TicketStatus, TicketType
 from app.services import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
@@ -72,8 +72,6 @@ class ProjectCreate(BaseModel):
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
-    webhook_type: WebhookType | None = None
-    webhook_url: str | None = Field(default=None, max_length=500)
 
     @field_validator("name")
     @classmethod
@@ -93,8 +91,6 @@ class ProjectOut(BaseModel):
     name: str
     slug: str
     key: str
-    webhook_type: WebhookType
-    webhook_url: str | None
     created_at: datetime
     role: str | None = None
 

@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import httpx
 from fastapi import BackgroundTasks
+from sqlmodel import Session
 
 from app.models import Project, Ticket, User, WebhookType
 
@@ -177,7 +178,13 @@ def dispatch(
             client.close()
 
 
-def schedule(tasks: BackgroundTasks | None, project: Project, event: str, ticket: Ticket) -> None:
+def schedule(
+    tasks: BackgroundTasks | None,
+    session: Session,
+    project: Project,
+    event: str,
+    ticket: Ticket,
+) -> None:
     """Queue a chat notification for delivery after the response is sent.
 
     Builds the payload immediately, while the session is still alive, and
@@ -185,26 +192,33 @@ def schedule(tasks: BackgroundTasks | None, project: Project, event: str, ticket
     into the background closure. `tasks=None` (no FastAPI request in scope,
     e.g. a direct service-layer call from a script or test) is a no-op.
     """
-    if tasks is None or project.webhook_type == WebhookType.NONE or not project.webhook_url:
+    if tasks is None:
         return
+    from app.services import chat_webhooks
+
     payload = build_payload(project, event, ticket)
-    tasks.add_task(dispatch, project.webhook_type, project.webhook_url, payload)
+    for webhook in chat_webhooks(session, project.id):
+        tasks.add_task(dispatch, webhook.provider, webhook.url, payload)
 
 
 def schedule_comment_mention(
     tasks: BackgroundTasks,
+    session: Session,
     project: Project,
     ticket: Ticket,
     author: User,
     mentioned_users: list[User],
     body: str,
 ) -> None:
-    if not mentioned_users or project.webhook_type == WebhookType.NONE or not project.webhook_url:
+    if not mentioned_users:
         return
+    from app.services import chat_webhooks
+
     payload = {
         **build_payload(project, EVENT_COMMENT_MENTION, ticket),
         "author_name": author.name or author.email,
         "mentioned_names": [user.name or user.email for user in mentioned_users],
         "comment_excerpt": body[:200],
     }
-    tasks.add_task(dispatch, project.webhook_type, project.webhook_url, payload)
+    for webhook in chat_webhooks(session, project.id):
+        tasks.add_task(dispatch, webhook.provider, webhook.url, payload)

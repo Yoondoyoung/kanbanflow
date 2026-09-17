@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
 from app.models import Project, ProjectMember, Role, WebhookType
+from app.services import chat_webhooks, set_chat_webhook
 
 
 @pytest.fixture
@@ -21,7 +22,7 @@ def _csrf(user):
     return {"_csrf": make_csrf_token(user.id)}
 
 
-def test_owner_sees_project_webhook_and_member_controls(client, settings_world, login_as):
+def test_owner_sees_integration_and_member_controls(client, settings_world, login_as):
     login_as(settings_world.owner.email)
 
     page = client.get(f"/projects/{settings_world.project.slug}/settings")
@@ -32,7 +33,9 @@ def test_owner_sees_project_webhook_and_member_controls(client, settings_world, 
     assert "ada@example.com" in page.text
     assert "bob@example.com" in page.text
     assert 'data-testid="owner-settings-controls"' in page.text
-    assert 'name="webhook_url"' in page.text
+    assert 'name="url"' in page.text
+    assert all(provider in page.text for provider in ("Slack", "Teams", "Discord", "GitHub"))
+    assert "Coming soon" in page.text
     assert 'name="confirm"' in page.text
 
 
@@ -75,14 +78,12 @@ def test_project_settings_save_redirects_to_a_textual_status(
 
 
 def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
-    client, settings_world, engine, login_as
+    client, settings_world, session, login_as
 ):
-    with Session(engine) as session:
-        project = session.get(Project, settings_world.project.id)
-        project.webhook_type = WebhookType.SLACK
-        project.webhook_url = "https://hooks.example.test/secret"
-        session.add(project)
-        session.commit()
+    project = session.get(Project, settings_world.project.id)
+    set_chat_webhook(
+        session, project, WebhookType.SLACK, "https://hooks.example.test/secret"
+    )
     login_as(settings_world.member.email)
 
     page = client.get(f"/projects/{settings_world.project.slug}/settings")
@@ -90,8 +91,9 @@ def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
     assert page.status_code == 200
     assert "Payment Gateway" in page.text
     assert "ada@example.com" in page.text
-    assert "Configured" in page.text
+    assert "Connected" in page.text
     assert "https://hooks.example.test/secret" not in page.text
+    assert 'name="url"' not in page.text
     assert 'data-testid="owner-settings-controls"' not in page.text
     assert f'action="/projects/{settings_world.project.slug}/settings/' not in page.text
 
@@ -114,50 +116,87 @@ def test_owner_renames_project_without_changing_its_slug(client, settings_world,
     assert (project.name, project.slug) == ("Checkout", "payment-gateway")
 
 
-def test_webhook_validation_re_renders_settings(client, settings_world, login_as):
+def test_chat_webhook_validation_re_renders_settings_without_url(
+    client, settings_world, login_as
+):
     login_as(settings_world.owner.email)
 
     response = client.post(
-        f"/projects/{settings_world.project.slug}/settings/project",
+        f"/projects/{settings_world.project.slug}/settings/integrations/SLACK",
         data={
-            "name": "<b>Changed</b>",
-            "webhook_type": "SLACK",
-            "webhook_url": "https://",
+            "url": "https://",
             **_csrf(settings_world.owner),
         },
     )
 
     assert response.status_code == 422
-    assert "https URL" in response.text
-    assert "&lt;b&gt;Changed&lt;/b&gt;" in response.text
-    assert "<b>Changed</b>" not in response.text
-    assert 'value="https://"' in response.text
+    assert "safe https URL" in response.text
+    assert 'value="https://"' not in response.text
 
 
-def test_member_api_redacts_webhook_but_owner_can_read_it(client, settings_world, engine, login_as):
+def test_chat_integration_routes_are_owner_only_and_never_render_secret(
+    client, settings_world, session, login_as
+):
     secret = "https://hooks.example.test/secret"
-    with Session(engine) as session:
-        project = session.get(Project, settings_world.project.id)
-        project.webhook_type = WebhookType.SLACK
-        project.webhook_url = secret
-        session.add(project)
-        session.commit()
+    project = session.get(Project, settings_world.project.id)
+    set_chat_webhook(session, project, WebhookType.SLACK, secret)
+    member_url = f"/projects/{settings_world.project.slug}/settings/integrations/SLACK"
+    disconnect_url = f"{member_url}/disconnect"
 
     login_as(settings_world.member.email)
-    member_project = client.get(f"/api/v1/projects/{settings_world.project.slug}")
-    member_list = client.get("/api/v1/projects")
-
-    assert member_project.status_code == 200
-    assert member_project.json()["webhook_url"] is None
-    assert member_list.json()[0]["webhook_url"] is None
+    assert client.post(
+        member_url,
+        data={"url": "https://hooks.example.test/x", **_csrf(settings_world.member)},
+    ).status_code == 403
+    member_page = client.get(f"/projects/{settings_world.project.slug}/settings")
+    assert "Slack" in member_page.text
+    assert "Connected" in member_page.text
+    assert 'name="url"' not in member_page.text
 
     client.post("/api/v1/auth/logout")
     login_as(settings_world.owner.email)
     owner_project = client.get(f"/api/v1/projects/{settings_world.project.slug}")
     owner_page = client.get(f"/projects/{settings_world.project.slug}/settings")
 
-    assert owner_project.json()["webhook_url"] == secret
-    assert secret in owner_page.text
+    assert "webhook_type" not in owner_project.json()
+    assert "webhook_url" not in owner_project.json()
+    assert "Configured" in owner_page.text
+    assert 'name="url"' in owner_page.text
+    assert secret not in owner_page.text
+    assert client.post(
+        disconnect_url,
+        data={"confirm": "Disconnect", **_csrf(settings_world.owner)},
+        follow_redirects=False,
+    ).status_code == 303
+    assert chat_webhooks(session, settings_world.project.id) == []
+
+
+def test_chat_integration_connects_and_rejects_invalid_provider_and_confirmation(
+    client, settings_world, session, login_as
+):
+    base = f"/projects/{settings_world.project.slug}/settings/integrations"
+    login_as(settings_world.owner.email)
+
+    connected = client.post(
+        f"{base}/TEAMS",
+        data={"url": "https://hooks.example.test/teams", **_csrf(settings_world.owner)},
+        follow_redirects=False,
+    )
+    lowercase = client.post(
+        f"{base}/teams",
+        data={"url": "https://hooks.example.test/teams", **_csrf(settings_world.owner)},
+    )
+    wrong_confirm = client.post(
+        f"{base}/TEAMS/disconnect",
+        data={"confirm": "yes", **_csrf(settings_world.owner)},
+    )
+
+    assert connected.status_code == 303
+    assert [row.provider for row in chat_webhooks(session, settings_world.project.id)] == [
+        WebhookType.TEAMS
+    ]
+    assert lowercase.status_code == 404
+    assert wrong_confirm.status_code == 422
 
 
 def test_owner_adds_changes_and_removes_members(client, settings_world, engine, login_as):

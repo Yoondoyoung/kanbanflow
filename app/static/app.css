@@ -188,6 +188,11 @@ button, input, select, textarea { font: inherit; }
 
 .settings-section { padding: var(--space-4); }
 .settings-section > h2 { margin-bottom: var(--space-3); }
+.integration-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.integration-card { border: 1px solid var(--line); border-radius: var(--radius-sm); display: grid; gap: var(--space-3); padding: var(--space-3); }
+.integration-card h3, .integration-card p { margin: 0; }
+.integration-card p { color: var(--text-secondary); font-size: 12px; margin-top: var(--space-1); }
+.integration-card input, .integration-card button { min-height: 40px; }
 .settings-member { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-4); justify-content: space-between; padding: var(--space-3) 0; }
 .settings-member-controls, .settings-member-controls form { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .settings-member-controls select { background: var(--control); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); min-height: 40px; padding: var(--space-2); }

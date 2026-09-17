@@ -83,10 +83,28 @@ class Project(SQLModel, table=True):
     name: str = Field(max_length=100)
     slug: str = Field(max_length=50, unique=True, index=True)
     key: str = Field(max_length=10, unique=True, index=True)
-    webhook_type: WebhookType = Field(default=WebhookType.NONE)
-    webhook_url: str | None = Field(default=None, max_length=500)
     next_ticket_number: int = Field(default=1)
     created_at: datetime = Field(default_factory=utcnow)
+
+
+class ProjectChatWebhook(SQLModel, table=True):
+    __tablename__ = "project_chat_webhook"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "provider", name="uq_project_chat_webhook_provider"
+        ),
+        CheckConstraint(
+            "provider IN ('SLACK', 'TEAMS', 'DISCORD')",
+            name="ck_chat_webhook_provider",
+        ),
+    )
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    project_id: str = Field(foreign_key="project.id", index=True)
+    provider: WebhookType
+    url: str = Field(max_length=500)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
 
 
 class ProjectMember(SQLModel, table=True):

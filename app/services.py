@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import re
 from datetime import date
@@ -12,6 +13,7 @@ from app.auth import hash_password
 from app.models import (
     Priority,
     Project,
+    ProjectChatWebhook,
     ProjectMember,
     Role,
     Sprint,
@@ -149,41 +151,102 @@ def update_project(session: Session, project: Project, **changes) -> Project:
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"name must be at most {NAME_MAX_LENGTH} characters",
             )
-    webhook_type = changes.get("webhook_type", project.webhook_type)
-    webhook_url = changes.get("webhook_url", project.webhook_url)
-    if webhook_url is not None and len(webhook_url) > 500:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "webhook_url must be at most 500 characters",
-        )
-    if webhook_url is not None and any(
-        char == "\\" or char.isspace() or ord(char) <= 31 or ord(char) == 127
-        for char in webhook_url
-    ):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "webhook_url must be an https URL when webhook_type is set",
-        )
-    if webhook_type != WebhookType.NONE:
-        try:
-            parsed = urlparse(webhook_url or "")
-            valid_webhook_url = (
-                parsed.scheme == "https" and bool(parsed.netloc) and bool(parsed.hostname)
-            )
-            _ = parsed.port
-        except ValueError:
-            valid_webhook_url = False
-        if not valid_webhook_url:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT,
-                "webhook_url must be an https URL when webhook_type is set",
-            )
     for field, value in changes.items():
         setattr(project, field, value.strip() if field == "name" else value)
     session.add(project)
     session.commit()
     session.refresh(project)
     return project
+
+
+def validate_webhook_url(url: str) -> None:
+    if len(url) > 500:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook URL must be at most 500 characters",
+        )
+    if any(
+        char == "\\" or char.isspace() or ord(char) <= 31 or ord(char) == 127
+        for char in url
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook URL must be a safe https URL",
+        )
+    try:
+        parsed = urlparse(url)
+        valid = parsed.scheme == "https" and bool(parsed.netloc) and bool(parsed.hostname)
+        _ = parsed.port
+    except ValueError:
+        valid = False
+    if not valid:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook URL must be a safe https URL",
+        )
+    try:
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        return
+    if any(
+        (
+            address.is_loopback,
+            address.is_private,
+            address.is_link_local,
+            address.is_multicast,
+            address.is_reserved,
+            address.is_unspecified,
+        )
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook URL must be a safe https URL",
+        )
+
+
+def chat_webhooks(session: Session, project_id: str) -> list[ProjectChatWebhook]:
+    return session.exec(
+        select(ProjectChatWebhook)
+        .where(ProjectChatWebhook.project_id == project_id)
+        .order_by(ProjectChatWebhook.provider)
+    ).all()
+
+
+def set_chat_webhook(
+    session: Session, project: Project, provider: WebhookType, url: str
+) -> ProjectChatWebhook:
+    if provider not in (WebhookType.SLACK, WebhookType.TEAMS, WebhookType.DISCORD):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "invalid chat provider")
+    validate_webhook_url(url)
+    webhook = session.exec(
+        select(ProjectChatWebhook).where(
+            ProjectChatWebhook.project_id == project.id,
+            ProjectChatWebhook.provider == provider,
+        )
+    ).first()
+    if webhook is None:
+        webhook = ProjectChatWebhook(project_id=project.id, provider=provider, url=url)
+    else:
+        webhook.url = url
+        webhook.updated_at = utcnow()
+    session.add(webhook)
+    session.commit()
+    session.refresh(webhook)
+    return webhook
+
+
+def disconnect_chat_webhook(
+    session: Session, project: Project, provider: WebhookType
+) -> None:
+    webhook = session.exec(
+        select(ProjectChatWebhook).where(
+            ProjectChatWebhook.project_id == project.id,
+            ProjectChatWebhook.provider == provider,
+        )
+    ).first()
+    if webhook is not None:
+        session.delete(webhook)
+    session.commit()
 
 
 def project_members(session: Session, project_id: str) -> list[tuple[ProjectMember, User]]:
@@ -277,6 +340,9 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
     session.execute(delete(Ticket).where(Ticket.project_id == project.id))
     session.execute(delete(Sprint).where(Sprint.project_id == project.id))
     session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
+    session.execute(
+        delete(ProjectChatWebhook).where(ProjectChatWebhook.project_id == project.id)
+    )
     session.flush()
     session.delete(project)
     session.commit()
@@ -561,7 +627,7 @@ def create_ticket(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
-    schedule(tasks, project, EVENT_TICKET_CREATED, ticket)
+    schedule(tasks, session, project, EVENT_TICKET_CREATED, ticket)
     return ticket
 
 
@@ -621,5 +687,5 @@ def set_status(
     session.commit()
     session.refresh(ticket)
     if entered_done and project is not None:
-        schedule(tasks, project, EVENT_TICKET_DONE, ticket)
+        schedule(tasks, session, project, EVENT_TICKET_DONE, ticket)
     return ticket

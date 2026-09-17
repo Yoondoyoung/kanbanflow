@@ -1,12 +1,14 @@
 import json
 import time
 
+import httpx
 import pytest
 from sqlmodel import Session, select
 
-from app.models import Project, Ticket, WebhookType
+import app.notifications as notifications
+from app.models import Project, ProjectChatWebhook, Ticket, WebhookType
 from app.notifications import EVENT_TICKET_CREATED, dispatch, schedule
-from app.services import create_ticket
+from app.services import create_ticket, set_chat_webhook
 
 
 @pytest.fixture
@@ -15,10 +17,7 @@ def slack_project(engine, make_user, make_project):
     project = make_project(owner)
     with Session(engine) as session:
         stored = session.get(Project, project.id)
-        stored.webhook_type = WebhookType.SLACK
-        stored.webhook_url = "https://example.com/hook"
-        session.add(stored)
-        session.commit()
+        set_chat_webhook(session, stored, WebhookType.SLACK, "https://example.com/hook")
     return project
 
 
@@ -88,9 +87,11 @@ def test_black_hole_webhook_does_not_break_creation(
 ):
     monkeypatch.setattr("app.notifications.time.sleep", lambda seconds: None)
     with Session(engine) as session:
-        stored = session.get(Project, slack_project.id)
-        stored.webhook_url = "https://127.0.0.1:9/hook"
-        session.add(stored)
+        webhook = session.exec(
+            select(ProjectChatWebhook).where(ProjectChatWebhook.project_id == slack_project.id)
+        ).one()
+        webhook.url = "https://127.0.0.1:9/hook"
+        session.add(webhook)
         session.commit()
     login_as("ada@example.com")
     with caplog.at_level("WARNING", logger="app.notifications"):
@@ -121,12 +122,9 @@ def test_schedule_enqueues_only_a_plain_dict_that_outlives_the_session(
     tasks = _RecordingTasks()
     with Session(engine) as session:
         stored = session.get(Project, project.id)
-        stored.webhook_type = WebhookType.SLACK
-        stored.webhook_url = "https://example.com/hook"
-        session.add(stored)
-        session.commit()
+        set_chat_webhook(session, stored, WebhookType.SLACK, "https://example.com/hook")
         ticket = create_ticket(session, stored, owner, title="T")
-        schedule(tasks, stored, EVENT_TICKET_CREATED, ticket)
+        schedule(tasks, session, stored, EVENT_TICKET_CREATED, ticket)
     # The session above is now closed. Nothing ORM-shaped may have been
     # captured by the enqueued call -- touching an unloaded attribute on
     # `stored` or `ticket` here would raise DetachedInstanceError, so the
@@ -145,11 +143,52 @@ def test_schedule_enqueues_only_a_plain_dict_that_outlives_the_session(
 
 def test_no_webhook_configured_schedules_nothing(session, make_user, make_project):
     owner = make_user(email="frank@example.com")
-    project = make_project(owner)  # webhook_type defaults to WebhookType.NONE
+    project = make_project(owner)
     ticket = create_ticket(session, project, owner, title="T")
     tasks = _RecordingTasks()
-    schedule(tasks, project, EVENT_TICKET_CREATED, ticket)
+    schedule(tasks, session, project, EVENT_TICKET_CREATED, ticket)
     assert tasks.calls == []
+
+
+def test_failed_first_dispatch_does_not_prevent_second(
+    session, make_user, make_project, monkeypatch
+):
+    owner = make_user(email="fanout-owner@example.com")
+    project = session.get(Project, make_project(owner).id)
+    first_url = "https://hooks.example.test/first"
+    second_url = "https://hooks.example.test/second"
+    set_chat_webhook(session, project, WebhookType.SLACK, first_url)
+    set_chat_webhook(session, project, WebhookType.TEAMS, second_url)
+    rows = session.exec(
+        select(ProjectChatWebhook)
+        .where(ProjectChatWebhook.project_id == project.id)
+        .order_by(ProjectChatWebhook.provider)
+    ).all()
+    assert [(row.provider, row.url) for row in rows] == [
+        (WebhookType.SLACK, first_url),
+        (WebhookType.TEAMS, second_url),
+    ]
+
+    ticket = create_ticket(session, project, owner, title="Fan out")
+    tasks = _RecordingTasks()
+    schedule(tasks, session, project, EVENT_TICKET_CREATED, ticket)
+    assert len(tasks.calls) == 2
+    assert [args[1] for _, args, _ in tasks.calls] == [first_url, second_url]
+
+    attempted = []
+
+    def post(_client, url, **kwargs):
+        attempted.append(url)
+        if url == first_url:
+            raise httpx.ConnectError("down")
+        return httpx.Response(200)
+
+    monkeypatch.setattr(httpx.Client, "post", post)
+    monkeypatch.setattr(notifications, "BACKOFF_SECONDS", ())
+    for func, args, kwargs in tasks.calls:
+        func(*args, **kwargs)
+
+    assert attempted == [first_url, second_url]
 
 
 def test_creation_latency_excludes_delivery(client, slack_project, login_as, monkeypatch):

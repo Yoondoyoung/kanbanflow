@@ -42,50 +42,8 @@ def test_missing_project_is_404_even_for_writes(client, make_user, login_as):
     assert client.patch("/api/v1/projects/nope", json={"name": "X"}).status_code == 404
 
 
-def test_webhook_url_must_have_https_host(client, make_user, make_project, login_as):
-    owner = make_user(email="ada@example.com")
-    project = make_project(owner)
-    login_as("ada@example.com")
-    assert (
-        client.patch(f"/api/v1/projects/{project.slug}", json={"webhook_type": "SLACK"}).status_code
-        == 422
-    )
-    assert (
-        client.patch(
-            f"/api/v1/projects/{project.slug}",
-            json={"webhook_type": "SLACK", "webhook_url": "http://example.com/hook"},
-        ).status_code
-        == 422
-    )
-    assert (
-        client.patch(
-            f"/api/v1/projects/{project.slug}",
-            json={"webhook_type": "SLACK", "webhook_url": "https://example.com/hook"},
-        ).status_code
-        == 200
-    )
-    for bad_url in ("https://", "https://?token=x", "https://[bad"):
-        response = client.patch(
-            f"/api/v1/projects/{project.slug}",
-            json={"webhook_type": "SLACK", "webhook_url": bad_url},
-        )
-        assert response.status_code == 422
-        assert (
-            response.json()["detail"] == "webhook_url must be an https URL when webhook_type is set"
-        )
-
-
-@pytest.mark.parametrize(
-    "webhook_url",
-    [
-        "https://example.com\\bad",
-        "https://example.com/a path",
-        "https://example.com/\x00hook",
-        "https://example.com/\x7fhook",
-    ],
-)
-def test_webhook_url_rejects_raw_unsafe_characters(
-    client, make_user, make_project, login_as, webhook_url
+def test_project_api_does_not_expose_legacy_webhook_fields(
+    client, make_user, make_project, login_as
 ):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
@@ -93,31 +51,12 @@ def test_webhook_url_rejects_raw_unsafe_characters(
 
     response = client.patch(
         f"/api/v1/projects/{project.slug}",
-        json={"webhook_type": "SLACK", "webhook_url": webhook_url},
-    )
-
-    assert response.status_code == 422
-    assert response.json()["detail"] == "webhook_url must be an https URL when webhook_type is set"
-
-
-@pytest.mark.parametrize(
-    "webhook_url",
-    ["https://example.com:8080/hooks/incoming?token=abc", "https://example.com/path?token=abc"],
-)
-def test_webhook_url_accepts_host_port_path_and_query(
-    client, make_user, make_project, login_as, webhook_url
-):
-    owner = make_user(email="ada@example.com")
-    project = make_project(owner)
-    login_as(owner.email)
-
-    response = client.patch(
-        f"/api/v1/projects/{project.slug}",
-        json={"webhook_type": "SLACK", "webhook_url": webhook_url},
+        json={"webhook_type": "SLACK", "webhook_url": "https://example.com/hook"},
     )
 
     assert response.status_code == 200
-    assert response.json()["webhook_url"] == webhook_url
+    assert "webhook_type" not in response.json()
+    assert "webhook_url" not in response.json()
 
 
 def test_delete_requires_confirmation(client, make_user, make_project, login_as):
@@ -242,20 +181,14 @@ def test_whitespace_only_name_update_is_rejected(client, make_user, make_project
     assert client.get(f"/api/v1/projects/{project.slug}").json()["name"] == "Payment Gateway"
 
 
-def test_explicit_null_project_update_fields_are_ignored(client, make_user, make_project, login_as):
+def test_explicit_null_project_update_fields_are_ignored(
+    client, make_user, make_project, login_as
+):
     owner = make_user(email="ada@example.com")
     project = make_project(owner, name="Payment Gateway")
     login_as(owner.email)
-    configured = client.patch(
-        f"/api/v1/projects/{project.slug}",
-        json={"webhook_type": "SLACK", "webhook_url": "https://example.com/hook"},
-    )
 
-    response = client.patch(
-        f"/api/v1/projects/{project.slug}", json={"name": None, "webhook_type": None}
-    )
+    response = client.patch(f"/api/v1/projects/{project.slug}", json={"name": None})
 
     assert response.status_code == 200
     assert response.json()["name"] == "Payment Gateway"
-    assert response.json()["webhook_type"] == configured.json()["webhook_type"]
-    assert response.json()["webhook_url"] == configured.json()["webhook_url"]

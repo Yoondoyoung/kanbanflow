@@ -15,17 +15,38 @@
     <form class="app-form" action="/projects/{{ project.slug }}/settings/project" method="post" data-testid="owner-settings-controls">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <label>Name <input name="name" value="{{ values.get('name', project.name) }}" maxlength="100" required></label>
-      <label>Webhook type
-        <select name="webhook_type">
-          {% for type in ['NONE', 'SLACK', 'TEAMS', 'DISCORD'] %}<option value="{{ type }}"{% if values.get('webhook_type', project.webhook_type.value) == type %} selected{% endif %}>{{ type.title() }}</option>{% endfor %}
-        </select>
-      </label>
-      <label>Webhook URL <input type="url" name="webhook_url" value="{{ values.get('webhook_url', project.webhook_url or '') }}" maxlength="500"></label>
       <button class="app-primary-button" type="submit">Save settings</button>
     </form>
     {% else %}
-    <p>Name: {{ project.name }}</p><p>Webhook type: {{ project.webhook_type.value.title() }}</p><p>Webhook: {{ 'Configured' if project.webhook_url else 'Not configured' }}</p>
+    <p>Name: {{ project.name }}</p>
     {% endif %}
+  </section>
+  <section class="settings-section app-surface" aria-labelledby="integrations-heading">
+    <h2 id="integrations-heading">Integrations</h2>
+    <div class="integration-grid">
+      {% for provider, label in [('SLACK', 'Slack'), ('TEAMS', 'Teams'), ('DISCORD', 'Discord')] %}
+      <article class="integration-card">
+        <div><h3>{{ label }}</h3><p>{% if chat_integrations.get(provider) %}{{ 'Configured' if role == 'OWNER' else 'Connected' }}{% else %}Not connected{% endif %}</p></div>
+        {% if role == 'OWNER' %}
+        <form class="app-form" action="/projects/{{ project.slug }}/settings/integrations/{{ provider }}" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <label>Webhook URL <input type="url" name="url" maxlength="500" required></label>
+          <button class="app-secondary-button" type="submit">{{ 'Replace' if chat_integrations.get(provider) else 'Connect' }}</button>
+        </form>
+        {% if chat_integrations.get(provider) %}
+        <form action="/projects/{{ project.slug }}/settings/integrations/{{ provider }}/disconnect" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="confirm" value="Disconnect">
+          <button class="app-danger-button" type="submit">Disconnect</button>
+        </form>
+        {% endif %}
+        {% endif %}
+      </article>
+      {% endfor %}
+      <article class="integration-card">
+        <div><h3>GitHub</h3><p>Coming soon</p></div>
+      </article>
+    </div>
   </section>
   <section class="settings-section app-surface" aria-labelledby="members-heading">
     <h2 id="members-heading">Members</h2>

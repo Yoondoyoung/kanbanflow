@@ -18,6 +18,7 @@ from app.models import (
     WebhookType,
 )
 from app.notifications import EVENT_TICKET_DONE
+from app.services import set_chat_webhook
 
 
 @pytest.fixture
@@ -192,10 +193,7 @@ def test_reaffirming_done_does_not_queue_another_done_notification(
     sent = []
     with Session(engine) as session:
         project = session.get(Project, web_world.project.id)
-        project.webhook_type = WebhookType.SLACK
-        project.webhook_url = "https://example.com/hook"
-        session.add(project)
-        session.commit()
+        set_chat_webhook(session, project, WebhookType.SLACK, "https://example.com/hook")
     monkeypatch.setattr("app.notifications.dispatch", lambda *args, **kwargs: sent.append(args[2]))
     login_as(web_world.owner.email)
 
@@ -395,25 +393,13 @@ def test_allowed_owner_self_removal_redirects_to_dashboard(
         )
 
 
-def test_webhooks_require_https_but_keep_https_paths_ports_and_queries(
-    client, web_world, engine, login_as
-):
-    webhook_url = "https://example.com:8443/hook?team=web"
-    login_as(web_world.owner.email)
-    insecure = client.patch(
-        f"/api/v1/projects/{web_world.project.slug}",
-        json={"webhook_type": "SLACK", "webhook_url": "http://example.com/hook"},
-    )
-    secure = client.patch(
-        f"/api/v1/projects/{web_world.project.slug}",
-        json={"webhook_type": "SLACK", "webhook_url": webhook_url},
-    )
+def test_integration_controls_keep_minimum_touch_target(client):
+    css = client.get("/static/app.css").text
+    controls = css.split(".integration-card input, .integration-card button {", 1)[1].split(
+        "}", 1
+    )[0]
 
-    assert insecure.status_code == 422
-    assert secure.status_code == 200
-    assert secure.json()["webhook_url"] == webhook_url
-    with Session(engine) as session:
-        assert session.get(Project, web_world.project.id).webhook_url == webhook_url
+    assert "min-height: 40px" in controls
 
 
 def test_project_sprint_selector_opens_open_boards_and_closed_history_for_members(

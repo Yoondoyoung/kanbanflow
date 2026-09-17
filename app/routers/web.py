@@ -630,7 +630,7 @@ def create_ticket_comment_form(
     )
     session.add(comment)
     session.commit()
-    schedule_comment_mention(tasks, project, ticket, user, mentioned_users, body)
+    schedule_comment_mention(tasks, session, project, ticket, user, mentioned_users, body)
     if request.headers.get("HX-Request") == "true":
         return _render_ticket_comments(request, session, user, project, ticket)
     return RedirectResponse(
@@ -692,7 +692,7 @@ def edit_ticket_comment_form(
     new_mentions = [
         mentioned for mentioned in mentioned_users if mentioned.id not in previous_mentions
     ]
-    schedule_comment_mention(tasks, project, ticket, user, new_mentions, body)
+    schedule_comment_mention(tasks, session, project, ticket, user, new_mentions, body)
     if request.headers.get("HX-Request") == "true":
         return _render_ticket_comments(request, session, user, project, ticket)
     return RedirectResponse(

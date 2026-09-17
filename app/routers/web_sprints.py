@@ -21,11 +21,14 @@ from app.routers.web import render
 from app.schemas import SprintCreate
 from app.services import (
     add_project_member,
+    chat_webhooks,
     close_sprint,
     create_sprint,
     delete_project,
+    disconnect_chat_webhook,
     project_members,
     remove_project_member,
+    set_chat_webhook,
     start_sprint,
     update_project,
     update_project_member,
@@ -34,7 +37,6 @@ from app.services import (
 
 router = APIRouter(tags=["web"])
 _TICKET_IDS_FORM = Form(...)
-_WEBHOOK_TYPE_FORM = Form(WebhookType.NONE)
 _MEMBER_ROLE_FORM = Form(Role.MEMBER)
 _REQUIRED_ROLE_FORM = Form(...)
 
@@ -60,6 +62,9 @@ def _settings(
             "role": member.role.value,
             "active_tab": "settings",
             "members": project_members(session, project.id),
+            "chat_integrations": {
+                webhook.provider.value: webhook for webhook in chat_webhooks(session, project.id)
+            },
             "error": error,
             "saved": saved,
             "values": values or {},
@@ -217,22 +222,14 @@ def project_settings(
 def update_project_settings(
     request: Request,
     name: str = Form(""),
-    webhook_type: WebhookType = _WEBHOOK_TYPE_FORM,
-    webhook_url: str = Form(""),
     access: tuple[Project, ProjectMember] = Depends(project_owner),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
-    values = {"name": name, "webhook_type": webhook_type.value, "webhook_url": webhook_url}
+    values = {"name": name}
     try:
-        update_project(
-            session,
-            project,
-            name=name,
-            webhook_type=webhook_type,
-            webhook_url=webhook_url or None,
-        )
+        update_project(session, project, name=name)
     except HTTPException as exc:
         return _settings(
             request,
@@ -246,6 +243,62 @@ def update_project_settings(
         )
     return RedirectResponse(
         f"/projects/{project.slug}/settings?saved=1", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+def _chat_provider(provider: str) -> WebhookType:
+    if provider not in {"SLACK", "TEAMS", "DISCORD"}:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chat provider not found")
+    return WebhookType(provider)
+
+
+@router.post(
+    "/projects/{slug}/settings/integrations/{provider}",
+    dependencies=[Depends(verify_csrf)],
+)
+def connect_chat_integration(
+    provider: str,
+    request: Request,
+    url: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    try:
+        set_chat_webhook(session, project, _chat_provider(provider), url)
+    except HTTPException as exc:
+        return _settings(
+            request,
+            session,
+            user,
+            project,
+            member,
+            error=exc.detail,
+            status_code=exc.status_code,
+        )
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post(
+    "/projects/{slug}/settings/integrations/{provider}/disconnect",
+    dependencies=[Depends(verify_csrf)],
+)
+def disconnect_chat_integration(
+    provider: str,
+    confirm: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    chat_provider = _chat_provider(provider)
+    if confirm != "Disconnect":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal Disconnect")
+    disconnect_chat_webhook(session, project, chat_provider)
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
     )
 
 

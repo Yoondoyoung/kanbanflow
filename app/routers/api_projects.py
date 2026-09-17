@@ -34,8 +34,6 @@ def _out(project: Project, role: Role | None) -> ProjectOut:
         name=project.name,
         slug=project.slug,
         key=project.key,
-        webhook_type=project.webhook_type,
-        webhook_url=project.webhook_url if role == Role.OWNER else None,
         created_at=project.created_at,
         role=role.value if role else None,
     )

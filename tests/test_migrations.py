@@ -43,6 +43,33 @@ def test_key_migration_backfills_existing_projects(tmp_path):
     assert "key" not in columns
 
 
+def test_chat_migration_round_trip(tmp_path):
+    db = tmp_path / "legacy-chat.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "d93f7a21c4e8"], check=True, env=env)
+    with make_engine(f"sqlite:///{db}").begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO project "
+                "(id,name,slug,key,webhook_type,webhook_url,next_ticket_number,created_at) "
+                "VALUES ('p','Project','project','PRJ','SLACK',"
+                "'https://hooks.example.test/legacy',1,'2026-01-01')"
+            )
+        )
+    subprocess.run(["uv", "run", "alembic", "upgrade", "e4b9c52d8fa1"], check=True, env=env)
+    with make_engine(f"sqlite:///{db}").connect() as connection:
+        assert connection.execute(
+            text("SELECT provider,url FROM project_chat_webhook")
+        ).one() == ("SLACK", "https://hooks.example.test/legacy")
+    subprocess.run(
+        ["uv", "run", "alembic", "downgrade", "d93f7a21c4e8"], check=True, env=env
+    )
+    with make_engine(f"sqlite:///{db}").connect() as connection:
+        assert connection.execute(
+            text("SELECT webhook_type,webhook_url FROM project WHERE id='p'")
+        ).one() == ("SLACK", "https://hooks.example.test/legacy")
+
+
 def test_migration_produces_the_same_tables_as_the_models(tmp_path):
     db = tmp_path / "migrated.db"
     subprocess.run(
@@ -141,9 +168,8 @@ def test_sprint_migration_rejects_invalid_dates(tmp_path):
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO project (id, name, slug, key, webhook_type, next_ticket_number, "
-                "created_at) "
-                "VALUES ('project-1', 'Project', 'project', 'PRO', 'NONE', 1, CURRENT_TIMESTAMP)"
+                "INSERT INTO project (id, name, slug, key, next_ticket_number, created_at) "
+                "VALUES ('project-1', 'Project', 'project', 'PRO', 1, CURRENT_TIMESTAMP)"
             )
         )
         with pytest.raises(IntegrityError):

@@ -17,6 +17,7 @@ from app.models import (
     WebhookType,
 )
 from app.notifications import EVENT_TICKET_DONE
+from app.services import set_chat_webhook
 
 
 @pytest.fixture
@@ -292,10 +293,7 @@ def test_detail_done_update_queues_one_done_notification_and_failed_update_queue
     sent = []
     with Session(engine) as session:
         project = session.get(Project, ticket_world.project.id)
-        project.webhook_type = WebhookType.SLACK
-        project.webhook_url = "https://example.com/hook"
-        session.add(project)
-        session.commit()
+        set_chat_webhook(session, project, WebhookType.SLACK, "https://example.com/hook")
     monkeypatch.setattr("app.notifications.dispatch", lambda _, __, payload: sent.append(payload))
     login_as(ticket_world.owner.email)
 
