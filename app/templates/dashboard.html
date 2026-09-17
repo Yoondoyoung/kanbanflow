@@ -1,48 +1,47 @@
 {% extends "base.html" %}
 {% block title %}Dashboard - Kanban Flow{% endblock %}
 {% block content %}
-<div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="max-w-3xl mx-auto space-y-6">
-  <div class="flex items-center">
-    <h1 id="projects-heading" class="text-lg font-semibold">Projects</h1>
-    <button x-ref="projectDialogOpener" class="ml-auto bg-slate-900 text-white rounded px-3 py-1.5 text-sm" type="button"
+<div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="app-page app-dashboard max-w-3xl mx-auto space-y-6">
+  <div class="app-page-header flex items-center">
+    <h1 id="projects-heading" class="app-page-title">Projects</h1>
+    <button x-ref="projectDialogOpener" class="app-primary-button ml-auto" type="button"
             aria-controls="project-dialog" aria-haspopup="dialog"
             @click="projectDialog = true; $refs.projectDialog.showModal(); $nextTick(() => $refs.projectName.focus())">New project</button>
   </div>
 
-  <section class="surface overflow-hidden" aria-labelledby="projects-heading">
+  <section class="surface app-surface overflow-hidden" aria-labelledby="projects-heading">
     {% if projects %}
-      <ul class="divide-y">
+      <ul class="app-row-list">
         {% for project in projects %}
           <li data-testid="project-row" class="app-row flex items-center gap-3 px-4 py-3">
-            <a class="font-medium" href="/projects/{{ project.slug }}">{{ project.name }}</a>
+            <a class="app-row-link" href="/projects/{{ project.slug }}">{{ project.name }}</a>
             <span class="ml-auto text-xs text-slate-500">{{ roles[project.id]|capitalize }}</span>
-            <a class="text-sm text-slate-600" href="/projects/{{ project.slug }}">Open<span class="sr-only"> {{ project.name }}</span></a>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="px-4 py-3 text-sm text-slate-500">No projects yet.</p>
+      <p class="app-empty-state px-4 py-3">No projects yet.</p>
     {% endif %}
   </section>
 
-  <dialog id="project-dialog" x-ref="projectDialog" data-testid="project-dialog" class="app-dialog w-full max-w-md p-5"
+  <dialog id="project-dialog" x-ref="projectDialog" data-testid="project-dialog" class="app-dialog"
           role="dialog" aria-modal="true" aria-labelledby="project-dialog-heading"
           x-init="if (projectDialog) { $el.showModal(); $nextTick(() => $refs.projectName.focus()) }"
           @close="projectDialog = false; $refs.projectDialogOpener.focus()"
           @click="$event.target === $el && $el.close()">
-      <div class="mb-3 flex items-center">
-        <h2 id="project-dialog-heading" class="font-semibold">New project</h2>
-        <button class="ml-auto text-slate-500" type="button" @click="$refs.projectDialog.close()" aria-label="Close new project dialog">×</button>
+      <div class="app-dialog-header flex items-center">
+        <h2 id="project-dialog-heading">New project</h2>
+        <button class="app-icon-button ml-auto" type="button" @click="$refs.projectDialog.close()" aria-label="Close new project dialog">×</button>
       </div>
-      {% if error %}<p id="form-error" role="alert" class="mb-3 text-sm text-red-600">{{ error }}</p>{% endif %}
-      <form method="post" action="/projects" class="space-y-3">
+      {% if error %}<p id="form-error" role="alert" class="form-error">{{ error }}</p>{% endif %}
+      <form method="post" action="/projects" class="app-form">
         <input type="hidden" name="_csrf" value="{{ csrf_token }}">
         <div>
-          <label for="project-name" class="block text-sm font-medium mb-1">Project name</label>
+          <label for="project-name">Project name</label>
           <input
             id="project-name"
             x-ref="projectName"
-            class="w-full border rounded px-3 py-2"
+            class="app-input"
             name="name"
             placeholder="Project name"
             value="{{ name|default('') }}"
@@ -50,9 +49,9 @@
             {% if error %}aria-describedby="form-error" aria-invalid="true"{% endif %}
           >
         </div>
-        <div class="flex justify-end gap-2">
-          <button class="rounded px-3 py-2 text-sm" type="button" @click="$refs.projectDialog.close()">Cancel</button>
-          <button class="bg-slate-900 text-white rounded px-4 py-2 text-sm">Create</button>
+        <div class="app-form-actions flex justify-end gap-2">
+          <button class="app-ghost-button" type="button" @click="$refs.projectDialog.close()">Cancel</button>
+          <button class="app-primary-button">Create</button>
         </div>
       </form>
   </dialog>

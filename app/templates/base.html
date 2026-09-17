@@ -10,6 +10,7 @@
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   {% if user %}
     <div class="app-shell" x-data="{ navOpen: false, isMobile: window.matchMedia('(max-width: 767px)').matches }"
          x-init="window.matchMedia('(max-width: 767px)').addEventListener('change', event => { isMobile = event.matches; if (!event.matches) navOpen = false })">
@@ -27,8 +28,8 @@
         <a href="/dashboard" class="app-brand">Kanban Flow</a>
         <nav aria-label="Projects" class="app-project-nav">
           <a href="/dashboard" class="app-projects-link">Projects</a>
-          {% for project in projects %}
-            <a href="/projects/{{ project.slug }}" class="app-project-link">{{ project.name }}</a>
+          {% for sidebar_project in projects %}
+            <a href="/projects/{{ sidebar_project.slug }}" class="app-project-link{% if project and project.id == sidebar_project.id %} is-active{% endif %}"{% if project and project.id == sidebar_project.id %} aria-current="page"{% endif %}>{{ sidebar_project.name }}</a>
           {% endfor %}
         </nav>
         <div class="app-user-menu">
@@ -42,7 +43,7 @@
   {% else %}
     <header class="auth-header"><a href="/login" class="app-brand">Kanban Flow</a></header>
   {% endif %}
-  <main{% if user %} id="main-content" class="app-main"{% else %} class="auth-main"{% endif %}>{% block content %}{% endblock %}</main>
+  <main id="main-content"{% if user %} class="app-main"{% else %} class="auth-main"{% endif %}>{% block content %}{% endblock %}</main>
   {% if user %}</div>{% endif %}
 </body>
 </html>

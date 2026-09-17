@@ -17,6 +17,8 @@ def test_dashboard_lists_projects(client, make_user, make_project, login_as):
     assert len(re.findall(r"<h1[^>]*>\s*Projects\s*</h1>", response.text)) == 1
     assert 'data-testid="project-row"' in response.text
     assert f'href="/projects/{project.slug}"' in response.text
+    row = re.search(r'<li data-testid="project-row".*?</li>', response.text, re.DOTALL).group()
+    assert row.count(f'href="/projects/{project.slug}"') == 1
     assert ">Owner</span>" in response.text
 
 

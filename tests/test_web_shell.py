@@ -11,6 +11,7 @@ def test_signed_in_shell_has_project_sidebar(client, make_user, make_project, lo
     assert 'data-testid="app-sidebar"' in page.text
     assert f'href="/projects/{project.slug}"' in page.text
     assert 'href="/static/app.css"' in page.text
+    assert 'href="#main-content">Skip to main content</a>' in page.text
 
 
 def test_app_stylesheet_is_served(client):

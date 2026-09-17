@@ -1,9 +1,6 @@
 <div class="sprint-selector">
   <label for="sprint-selector">Sprint</label>
   <select id="sprint-selector" onchange="window.location.href = this.value">
-    {% if active_tab == 'backlog' %}<option value="/projects/{{ project.slug }}/backlog" selected>Backlog</option>{% endif %}
-    {% if active_tab == 'history' and not selected_sprint_id|default('') %}<option value="/projects/{{ project.slug }}/sprints" selected>Sprint history</option>{% endif %}
-    {% if active_tab == 'settings' %}<option value="/projects/{{ project.slug }}/settings" selected>Settings</option>{% endif %}
     {% for selector_sprint in sprint_options %}
       {% if selector_sprint.status.value == 'CLOSED' %}
       <option value="/projects/{{ project.slug }}/sprints/{{ selector_sprint.id }}"{% if selected_sprint_id|default('') == selector_sprint.id %} selected{% endif %}>{{ selector_sprint.name }} · {{ selector_sprint.status.value|capitalize }}</option>
