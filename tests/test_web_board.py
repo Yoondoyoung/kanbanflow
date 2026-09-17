@@ -100,6 +100,18 @@ def test_empty_project_renders_four_empty_columns(client, active_sprint_world, l
     for column in ["BACKLOG", "SELECTED", "IN_PROGRESS", "DONE"]:
         assert f'id="column-{column}"' in response.text
         assert f'data-testid="column-count-{column}">0' in response.text
+        assert f'data-testid="empty-lane-{column}"' in response.text
+
+
+def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_world, login_as):
+    project = active_sprint_world.project
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{project.slug}?mine=1").text
+
+    assert 'id="ticket-detail-root" class="ticket-detail-root"' in page
+    assert 'class="board-filter-summary"' in page
+    assert f'href="/projects/{project.slug}">Clear filters</a>' in page
 
 
 def test_board_caps_each_column_and_shows_a_truncation_notice(

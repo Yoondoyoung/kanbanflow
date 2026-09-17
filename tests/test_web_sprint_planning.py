@@ -72,6 +72,20 @@ def test_backlog_only_lists_unassigned_tickets(client, backlog_world, login_as):
     assert "Planned ticket" not in page.text
 
 
+def test_planning_backlog_prioritizes_start_and_hides_empty_selection_action(
+    client, backlog_world, login_as
+):
+    login_as(backlog_world.owner.email)
+
+    page = client.get(f"/projects/{backlog_world.project.slug}/backlog").text
+
+    assert "Unscheduled tickets" in page
+    assert ">Add sprint</button>" not in page
+    assert ">Start sprint</button>" in page
+    assert 'x-show="selectedCount > 0"' in page
+    assert ':disabled="selectedCount === 0"' in page
+
+
 def test_owner_creates_a_dated_planning_sprint(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)

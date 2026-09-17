@@ -3,7 +3,7 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board" x-data="{ ticketError: '' }">
+<div class="project-board" x-data="{ ticketError: '', ticketOpener: null }">
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -25,29 +25,35 @@
   {% include "partials/project_nav.html" %}
 
   <form class="board-filters" method="get" aria-label="Board filters">
-    <label><input type="checkbox" name="mine" value="1"{% if mine %} checked{% endif %}> My tickets</label>
-    <label for="assignee-filter">Assignee</label>
-    <select id="assignee-filter" name="assignee_id">
-      <option value="">Anyone</option>
-      {% for member_user in members %}
-      <option value="{{ member_user.id }}"{% if assignee_id == member_user.id %} selected{% endif %}>{{ member_user.name }}</option>
-      {% endfor %}
-    </select>
-    <label for="type-filter">Type</label>
-    <select id="type-filter" name="type">
-      <option value="">All types</option>
-      {% for ticket_type in ticket_types %}
-      <option value="{{ ticket_type.value }}"{% if type_filter == ticket_type %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>
-      {% endfor %}
-    </select>
-    <label for="priority-filter">Priority</label>
-    <select id="priority-filter" name="priority">
-      <option value="">All priorities</option>
-      {% for ticket_priority in priorities %}
-      <option value="{{ ticket_priority.value }}"{% if priority_filter == ticket_priority %} selected{% endif %}>{{ ticket_priority.value|capitalize }}</option>
-      {% endfor %}
-    </select>
+    <div class="board-filter-controls">
+      <label class="board-filter-check"><input type="checkbox" name="mine" value="1"{% if mine %} checked{% endif %}> My tickets</label>
+      <label for="assignee-filter">Assignee</label>
+      <select id="assignee-filter" name="assignee_id">
+        <option value="">Anyone</option>
+        {% for member_user in members %}
+        <option value="{{ member_user.id }}"{% if assignee_id == member_user.id %} selected{% endif %}>{{ member_user.name }}</option>
+        {% endfor %}
+      </select>
+      <label for="type-filter">Type</label>
+      <select id="type-filter" name="type">
+        <option value="">All types</option>
+        {% for ticket_type in ticket_types %}
+        <option value="{{ ticket_type.value }}"{% if type_filter == ticket_type %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>
+        {% endfor %}
+      </select>
+      <label for="priority-filter">Priority</label>
+      <select id="priority-filter" name="priority">
+        <option value="">All priorities</option>
+        {% for ticket_priority in priorities %}
+        <option value="{{ ticket_priority.value }}"{% if priority_filter == ticket_priority %} selected{% endif %}>{{ ticket_priority.value|capitalize }}</option>
+        {% endfor %}
+      </select>
+    </div>
     <button class="app-secondary-button" type="submit">Filter</button>
+    {% if mine or assignee_id or type_filter or priority_filter %}
+    <p class="board-filter-summary">Filters active</p>
+    <a class="app-ghost-button" href="/projects/{{ project.slug }}">Clear filters</a>
+    {% endif %}
   </form>
 
   <div class="board-workspace">
@@ -62,6 +68,8 @@
         <div id="column-{{ column.value }}">
           {% for ticket in tickets_by_status[column.value] %}
             {% include "partials/ticket_card.html" %}
+          {% else %}
+          <p class="board-empty-state" data-testid="empty-lane-{{ column.value }}">No tickets here.</p>
           {% endfor %}
           {% if column.value in truncated_columns %}
           <p class="board-truncated">Showing the first 200 tickets.</p>
@@ -71,9 +79,7 @@
       {% endfor %}
       </div>
     </div>
-    <div id="ticket-detail-root" @htmx:before-swap.camel="if ($event.detail.xhr.status === 422 && ($event.detail.xhr.getResponseHeader('Content-Type') || '').startsWith('text/html')) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }">
-      <aside id="ticket-detail-panel" class="ticket-detail-panel" aria-live="polite">Select a ticket to view details.</aside>
-    </div>
+    <div id="ticket-detail-root" class="ticket-detail-root" aria-live="polite" @htmx:before-swap.camel="if ($event.detail.xhr.status === 422 && ($event.detail.xhr.getResponseHeader('Content-Type') || '').startsWith('text/html')) { $event.detail.shouldSwap = true; $event.detail.isError = false; $event.detail.target = $el; $event.detail.swapOverride = 'innerHTML' }"></div>
   </div>
 
   {% include "partials/ticket_modal.html" %}

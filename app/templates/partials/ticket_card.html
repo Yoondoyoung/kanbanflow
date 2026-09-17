@@ -1,15 +1,15 @@
-<article id="ticket-{{ ticket.id }}" class="bg-white border rounded p-3 mb-2 text-sm"
+<article id="ticket-{{ ticket.id }}" class="ticket-card"
          hx-get="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}?card=true"
          hx-trigger="refresh-ticket-card-{{ ticket.id }} from:body"
          hx-target="this" hx-swap="outerHTML">
-  <button type="button" class="w-full text-left"
+  <button type="button" class="ticket-card-open" @click="ticketOpener = $el"
           hx-get="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
           hx-target="#ticket-detail-root" hx-swap="innerHTML">
-    <span class="flex items-baseline gap-2">
-      <span class="font-mono text-xs text-slate-500">#{{ ticket.ticket_number }}</span>
-      <span class="font-medium">{{ ticket.title }}</span>
+    <span class="ticket-card-title">
+      <span class="ticket-number">#{{ ticket.ticket_number }}</span>
+      <span>{{ ticket.title }}</span>
     </span>
-    <span class="mt-1 flex gap-2 text-xs text-slate-500">
+    <span class="ticket-card-meta">
       <span>{{ ticket.type.value|replace('_', ' ')|capitalize }}</span>
       <span>{{ ticket.priority.value|capitalize }}</span>
       <span>{% if ticket.assignee_id %}{{ (assignee_names|default({})).get(ticket.assignee_id, "Unassigned") }}{% else %}Unassigned{% endif %}</span>

@@ -1,17 +1,17 @@
-<dialog id="ticket-modal" x-ref="ticketModal" class="app-dialog w-full max-w-md p-5"
+<dialog id="ticket-modal" x-ref="ticketModal" class="app-dialog"
         role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading"
         @cancel="$event.preventDefault(); $el.close()" @close="$refs.ticketModalOpener.focus()"
         @click="$event.target === $el && $el.close()">
-    <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
+    <header class="app-dialog-header"><h2 id="ticket-modal-heading">New ticket</h2></header>
     <form hx-post="/projects/{{ project.slug }}/tickets"
           hx-swap="none"
           @htmx:after-request.camel="if ($event.detail.xhr.status >= 200 && $event.detail.xhr.status < 300) { $refs.ticketModal.close(); ticketError = ''; $el.reset(); } else { ticketError = $event.detail.xhr.responseText; }"
-          class="space-y-3">
-      <p x-show="ticketError" x-text="ticketError" class="text-red-600 text-xs" role="alert"></p>
+          class="app-form">
+      <p x-show="ticketError" x-text="ticketError" class="form-error" role="alert"></p>
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <div>
-        <label for="ticket-sprint" class="block text-xs font-medium mb-1">Destination</label>
-        <select id="ticket-sprint" class="w-full border rounded px-3 py-2" name="sprint_id">
+        <label for="ticket-sprint">Destination</label>
+        <select id="ticket-sprint" name="sprint_id">
           <option value=""{% if not sprint %} selected{% endif %}>Backlog</option>
           {% for destination in destination_sprints|default([]) %}
           <option value="{{ destination.id }}"{% if sprint and destination.id == sprint.id %} selected{% endif %}>{{ destination.name }}</option>
@@ -19,12 +19,12 @@
         </select>
       </div>
       <div>
-        <label for="ticket-title" class="block text-xs font-medium mb-1">Title</label>
-        <input id="ticket-title" x-ref="ticketTitle" class="w-full border rounded px-3 py-2" name="title" required>
+        <label for="ticket-title">Title</label>
+        <input id="ticket-title" x-ref="ticketTitle" name="title" required>
       </div>
       <div>
-        <label for="ticket-type" class="block text-xs font-medium mb-1">Type</label>
-        <select id="ticket-type" class="w-full border rounded px-3 py-2" name="type" required>
+        <label for="ticket-type">Type</label>
+        <select id="ticket-type" name="type" required>
           <option value="STORY">Story</option>
           <option value="BUG">Bug</option>
           <option value="DEMO_REQUEST">Demo request</option>
@@ -32,13 +32,13 @@
         </select>
       </div>
       <div>
-        <label for="ticket-description" class="block text-xs font-medium mb-1">Description</label>
-        <textarea id="ticket-description" class="w-full border rounded px-3 py-2" name="description" rows="4"
+        <label for="ticket-description">Description</label>
+        <textarea id="ticket-description" name="description" rows="4"
                   placeholder="Markdown supported"></textarea>
       </div>
-      <div class="flex gap-2 justify-end">
-        <button type="button" class="px-3 py-1.5 text-sm" @click="$refs.ticketModal.close()">Cancel</button>
-        <button class="bg-slate-900 text-white rounded px-4 py-1.5 text-sm">Create</button>
+      <div class="app-form-actions">
+        <button type="button" class="app-ghost-button" @click="$refs.ticketModal.close()">Cancel</button>
+        <button class="app-primary-button">Create</button>
       </div>
     </form>
 </dialog>

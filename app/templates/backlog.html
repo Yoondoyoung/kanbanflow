@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ project.name }} Backlog · Kanban Flow{% endblock %}
 {% block content %}
-<div class="project-board" x-data="{ ticketError: '' }"{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% elif start_form_open %} x-init="$nextTick(() => $refs.startForm.showModal())"{% endif %}>
+<div class="project-board" x-data="{ ticketError: '', selectedCount: 0 }"{% if sprint_form_open %} x-init="$nextTick(() => $refs.sprintForm.showModal())"{% elif start_form_open %} x-init="$nextTick(() => $refs.startForm.showModal())"{% endif %}>
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -9,8 +9,8 @@
       {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
-      <button class="app-primary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
-      {% if role == 'OWNER' %}
+      <button class="{% if planning_sprint %}app-secondary-button{% else %}app-primary-button{% endif %}" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
+      {% if role == 'OWNER' and not planning_sprint %}
       <button class="app-primary-button" type="button" x-ref="sprintFormOpener" @click="$refs.sprintForm.showModal()">Add sprint</button>
       {% endif %}
     </div>
@@ -19,23 +19,26 @@
   {% include "partials/project_nav.html" %}
 
   {% if planning_sprint %}
-  <section class="backlog-planning" aria-labelledby="planning-heading">
-    <h2 id="planning-heading">Planning: {{ planning_sprint.name }}</h2>
-    <p>{{ planning_sprint.start_date.strftime('%b %-d') }} – {{ planning_sprint.end_date.strftime('%b %-d, %Y') }}{% if planning_sprint.goal %} · {{ planning_sprint.goal }}{% endif %}</p>
+  <section class="backlog-planning-sprint" aria-labelledby="planning-heading">
+    <div>
+      <p class="section-eyebrow">Planning sprint</p>
+      <h2 id="planning-heading">{{ planning_sprint.name }}</h2>
+      <p class="sprint-meta">{{ planning_sprint.start_date.strftime('%b %-d') }} – {{ planning_sprint.end_date.strftime('%b %-d, %Y') }}{% if planning_sprint.goal %} · {{ planning_sprint.goal }}{% endif %}</p>
+    </div>
     {% if role == 'OWNER' %}<button class="app-primary-button" type="button" x-ref="startFormOpener" @click="$refs.startForm.showModal()">Start sprint</button>{% endif %}
   </section>
   {% endif %}
 
   <section class="backlog-list" aria-labelledby="backlog-heading">
-    <h2 id="backlog-heading">Unassigned tickets</h2>
+    <div class="backlog-list-header"><div><p class="section-eyebrow">Queue</p><h2 id="backlog-heading">Unscheduled tickets</h2></div></div>
     <div id="backlog-tickets">
     {% if role == 'OWNER' and planning_sprint and tickets %}
-    <form action="/projects/{{ project.slug }}/sprints/{{ planning_sprint.id }}/tickets" method="post">
+    <form class="backlog-selection" action="/projects/{{ project.slug }}/sprints/{{ planning_sprint.id }}/tickets" method="post" @change="selectedCount = $el.querySelectorAll('input[name=ticket_ids]:checked').length" @submit.prevent="if (!selectedCount) return; $el.submit()">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       {% for ticket in tickets %}
       <label class="backlog-ticket"><input type="checkbox" name="ticket_ids" value="{{ ticket.id }}"> #{{ ticket.ticket_number }} {{ ticket.title }}</label>
       {% endfor %}
-      <button class="app-secondary-button" type="submit">Add selected to sprint</button>
+      <button class="app-secondary-button" type="submit" x-show="selectedCount > 0" x-cloak :disabled="selectedCount === 0">Add selected</button>
     </form>
     {% else %}
       {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% else %}<p class="sprint-meta">No unassigned tickets.</p>{% endfor %}

@@ -44,3 +44,28 @@ def test_sprint_selector_contains_only_sprint_destinations(
     assert "Backlog" not in selector
     assert "Sprint history" not in selector
     assert "Settings" not in selector
+
+
+def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
+    from fastapi.templating import Jinja2Templates
+
+    templates = Jinja2Templates(directory="app/templates")
+    source = templates.get_template("partials/ticket_detail.html").render(
+        ticket=type("Ticket", (), {"ticket_number": 1})(),
+        project=type("Project", (), {"slug": "project"})(),
+        form_values={
+            "title": "Ticket",
+            "description": "",
+            "type": "TASK",
+            "priority": "MEDIUM",
+            "story_points": "",
+            "assignee_id": "",
+            "status": "BACKLOG",
+            "sprint_id": "",
+            "resolution_notes": "",
+        },
+        ticket_types=[], priorities=[], columns=[], members=[], sprints=[], csrf_token="token", error=None,
+    )
+
+    assert 'class="ticket-detail-drawer"' in source
+    assert 'role="dialog" aria-modal="true"' in source
