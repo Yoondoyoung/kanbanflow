@@ -179,8 +179,12 @@ def test_project_opens_active_sprint(client, active_sprint_world, login_as):
     assert active_sprint_world.sprint.goal in page.text
     assert "Active" in page.text
     assert 'data-testid="project-tabs"' in page.text
-    for tab in ("Board", "Backlog", "Sprint History", "Settings"):
+    for tab in ("Board", "Backlog", "History"):
         assert f">{tab}</a>" in page.text
+    assert (
+        f'<a class="project-settings-link" href="/projects/{active_sprint_world.project.slug}/settings">Settings</a>'
+        in page.text
+    )
 
 
 def test_project_prefers_active_sprint_over_planning(client, active_sprint_world, engine, login_as):
