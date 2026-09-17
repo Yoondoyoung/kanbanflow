@@ -61,7 +61,7 @@ def test_dialogs_have_names_escape_handling_and_focus_targets():
     assert 'x-ref="ticketTitle"' in ticket_modal
     assert "$refs.ticketModalOpener.focus()" in ticket_modal
     for page in (board, backlog):
-        assert "x-data=\"{ ticketError: '' }\"" in page
+        assert "x-data=\"{ ticketError: ''," in page
         assert 'x-ref="ticketModalOpener"' in page
         assert "$refs.ticketModal.showModal()" in page
         assert "$refs.ticketTitle.focus()" in page

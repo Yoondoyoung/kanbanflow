@@ -456,7 +456,7 @@ def test_history_summary_counts_completed_tickets_from_close_snapshot(client, we
     page = client.get(f"/projects/{web_world.project.slug}/sprints")
 
     assert page.status_code == 200
-    assert "Completed tickets: 1" in page.text
+    assert "<dt>Completed tickets</dt><dd>1</dd>" in page.text
 
 
 def test_web_role_labels_are_human_readable(client, web_world, login_as):

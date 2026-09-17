@@ -136,6 +136,19 @@ def test_history_uses_labeled_metric_rows(client, history_world, login_as):
     assert '<dt>Delayed</dt><dd>7 days</dd>' in page.text
 
 
+def test_empty_history_keeps_its_message_inside_the_archive_surface(
+    client, make_user, make_project, login_as
+):
+    """Removing the padded archive empty state must make this fail."""
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/sprints")
+
+    assert '<p class="app-empty-state sprint-history-empty">No closed sprints.</p>' in page.text
+
+
 def test_history_detail_uses_close_time_ticket_snapshot_and_is_read_only(
     client, history_world, login_as
 ):
