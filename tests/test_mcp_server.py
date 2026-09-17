@@ -54,16 +54,19 @@ async def test_api_request_raises_concise_api_error_without_token(monkeypatch):
     monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
 
     async def handler(request):
-        return httpx.Response(403, json={"detail": "Bearer test-token cannot create sprints"})
+        return httpx.Response(
+            403,
+            headers={"X-Upstream-Error": "Bearer test-token"},
+            json={"detail": f"Bearer test-token {'x' * 8192}"},
+        )
 
-    with pytest.raises(
-        ValueError, match=r"Kanban Flow API 403: Bearer \[redacted\] cannot create sprints"
-    ) as error:
+    with pytest.raises(ValueError, match="Kanban Flow API 403: Forbidden") as error:
         await api_request(
             "POST", "/api/v1/projects/demo/sprints", transport=httpx.MockTransport(handler)
         )
 
     assert "test-token" not in str(error.value)
+    assert len(str(error.value)) < 100
 
 
 @pytest.mark.anyio
@@ -73,8 +76,37 @@ async def test_api_request_handles_non_json_api_errors(monkeypatch):
     async def handler(request):
         return httpx.Response(502, content=b"upstream response was not JSON")
 
-    with pytest.raises(ValueError, match="Kanban Flow API 502: Bad Gateway"):
+    with pytest.raises(ValueError, match="Kanban Flow API 502: Request failed"):
         await api_request("GET", "/api/v1/projects", transport=httpx.MockTransport(handler))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "https://attacker.example/api/v1/projects",
+        "//attacker.example/api/v1/projects",
+        "https://token@attacker.example/api/v1/projects",
+        "/api/v1/../tokens",
+        "/api/v1\\projects",
+        "/projects",
+    ],
+)
+async def test_api_request_rejects_unsafe_paths_before_sending_token(monkeypatch, path):
+    monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    seen = []
+
+    async def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    with pytest.raises(
+        ValueError, match="Kanban Flow API request path must be a relative /api/v1/ path"
+    ) as error:
+        await api_request("GET", path, transport=httpx.MockTransport(handler))
+
+    assert seen == []
+    assert "test-token" not in str(error.value)
 
 
 def test_mcp_settings_defaults_and_server_are_importable(monkeypatch):
