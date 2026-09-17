@@ -137,6 +137,40 @@ async def test_api_request_preserves_harmless_query_values(monkeypatch):
     assert result == {"items": []}
 
 
+@pytest.mark.anyio
+async def test_encoded_segments_stay_on_api_host_and_reject_backslashes(monkeypatch):
+    monkeypatch.setenv("KANBANFLOW_BASE_URL", "https://kanban.example/base/")
+    monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    seen = []
+
+    async def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json={"items": []})
+
+    result = await api_request(
+        "GET",
+        f"/api/v1/projects/{mcp_server._path_segment('café')}/sprints",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert result == {"items": []}
+    assert str(seen[0].url) == "https://kanban.example/base/api/v1/projects/caf%C3%A9/sprints"
+    assert seen[0].headers["authorization"] == "Bearer test-token"
+
+    backslash = "\\"
+    seen.clear()
+    with pytest.raises(
+        ValueError, match="Kanban Flow API request path must be a relative /api/v1/ path"
+    ):
+        await api_request(
+            "GET",
+            f"/api/v1/projects/{mcp_server._path_segment(backslash)}/sprints",
+            transport=httpx.MockTransport(handler),
+        )
+
+    assert seen == []
+
+
 def test_mcp_settings_defaults_and_server_are_importable(monkeypatch):
     monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
 
