@@ -139,16 +139,19 @@ def update_project(session: Session, project: Project, **changes) -> Project:
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook_url must be at most 500 characters",
         )
+    if webhook_url is not None and any(
+        char == "\\" or char.isspace() or ord(char) <= 31 or ord(char) == 127
+        for char in webhook_url
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook_url must be an http(s) URL when webhook_type is set",
+        )
     if webhook_type != WebhookType.NONE:
         try:
             parsed = urlparse(webhook_url or "")
             valid_webhook_url = (
-                parsed.scheme in ("http", "https")
-                and bool(parsed.netloc)
-                and bool(parsed.hostname)
-                and not any(
-                    char == "\\" or char.isspace() or ord(char) < 32 for char in webhook_url or ""
-                )
+                parsed.scheme in ("http", "https") and bool(parsed.netloc) and bool(parsed.hostname)
             )
             _ = parsed.port
         except ValueError:

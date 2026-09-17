@@ -82,6 +82,7 @@ def test_webhook_url_must_have_http_or_https_host(client, make_user, make_projec
         "https://example.com\\bad",
         "https://example.com/a path",
         "https://example.com/\x00hook",
+        "https://example.com/\x7fhook",
     ],
 )
 def test_webhook_url_rejects_raw_unsafe_characters(
