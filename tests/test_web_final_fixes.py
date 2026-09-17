@@ -257,7 +257,9 @@ def test_non_htmx_detail_post_redirects_to_its_full_page(client, web_world, logi
     assert page.status_code == 200
     assert "<html" in page.text
     assert "Native update" in page.text
-    assert f'<form class="space-y-3" method="post" action="{url}"' in page.text
+    assert f'<form class="app-form ticket-detail-form" method="post" action="{url}"' in page.text
+    assert f'href="/projects/{web_world.project.slug}">Back to board</a>' in page.text
+    assert "ticketOpener" not in page.text
 
 
 def test_non_htmx_detail_validation_renders_a_full_page_form(client, web_world, login_as):
@@ -270,7 +272,9 @@ def test_non_htmx_detail_validation_renders_a_full_page_form(client, web_world, 
     assert response.headers["content-type"].startswith("text/html")
     assert "<html" in response.text
     assert "Save changes" in response.text
-    assert f'<form class="space-y-3" method="post" action="{url}"' in response.text
+    assert f'<form class="app-form ticket-detail-form" method="post" action="{url}"' in response.text
+    assert f'href="/projects/{web_world.project.slug}">Back to board</a>' in response.text
+    assert "ticketOpener" not in response.text
 
 
 @pytest.mark.parametrize(

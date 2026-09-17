@@ -1,11 +1,19 @@
-<aside id="ticket-detail-panel" class="ticket-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => $el.querySelector('input, select, textarea, button').focus())" @keydown.escape.window="$el.closest('#ticket-detail-root').replaceChildren(); $nextTick(() => ticketOpener && ticketOpener.focus())">
+{% if detail_drawer %}
+<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('input, select, textarea, button').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
+{% else %}
+<section id="ticket-detail-panel" class="ticket-detail-page" aria-labelledby="ticket-detail-heading">
+{% endif %}
   <form class="app-form ticket-detail-form" method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}" hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
         hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <div class="ticket-detail-header">
       <h2 id="ticket-detail-heading">#{{ ticket.ticket_number }} ticket</h2>
-      <button type="button" class="app-ghost-button" @click="$el.closest('#ticket-detail-root').replaceChildren(); $nextTick(() => ticketOpener && ticketOpener.focus())">Close</button>
+      {% if detail_drawer %}
+      <button type="button" class="app-ghost-button" @click="$el.closest('dialog').close()">Close</button>
+      {% else %}
+      <a class="app-ghost-button" href="/projects/{{ project.slug }}">Back to board</a>
+      {% endif %}
     </div>
-    {% if error %}<p class="text-red-600 text-sm" role="alert">{{ error }}</p>{% endif %}
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
     {% set type_values = ticket_types | map(attribute='value') | list %}
     {% set priority_values = priorities | map(attribute='value') | list %}
     {% set status_values = columns | map(attribute='value') | list %}
@@ -71,4 +79,4 @@
     <div><label for="detail-resolution-notes">Resolution notes</label><textarea id="detail-resolution-notes" name="resolution_notes" rows="3">{{ form_values['resolution_notes'] }}</textarea></div>
     <button class="app-primary-button">Save changes</button>
   </form>
-</aside>
+{% if detail_drawer %}</dialog>{% else %}</section>{% endif %}

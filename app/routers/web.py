@@ -278,6 +278,7 @@ def _ticket_detail(
             "form_values": form_values,
             "active_tab": "board",
             "selected_sprint_id": ticket.sprint_id,
+            "detail_drawer": not page,
         },
         status_code=status_code,
         session=session if page else None,

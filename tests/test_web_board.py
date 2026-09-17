@@ -114,6 +114,31 @@ def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_wor
     assert f'href="/projects/{project.slug}">Clear filters</a>' in page
 
 
+def test_board_ticket_detail_fragment_uses_a_native_dialog(client, active_sprint_world, login_as):
+    project = active_sprint_world.project
+    login_as(active_sprint_world.owner.email)
+    ticket = client.post(
+        "/api/v1/tickets",
+        json={"slug": project.slug, "title": "Open in dialog", "sprint_id": active_sprint_world.sprint.id},
+    ).json()
+
+    fragment = client.get(
+        f"/projects/{project.slug}/tickets/{ticket['ticket_number']}",
+        headers={"HX-Request": "true"},
+    )
+
+    assert fragment.status_code == 200
+    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"' in fragment.text
+    assert "$el.showModal()" in fragment.text
+
+
+def test_board_filter_checkbox_has_a_40px_hit_target():
+    stylesheet = Path("app/static/app.css").read_text()
+
+    assert ".board-filter-check" in stylesheet
+    assert "min-height: 40px" in stylesheet.split(".board-filter-check", 1)[1].split("}", 1)[0]
+
+
 def test_board_caps_each_column_and_shows_a_truncation_notice(
     client, engine, active_sprint_world, login_as
 ):

@@ -65,7 +65,9 @@ def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
             "resolution_notes": "",
         },
         ticket_types=[], priorities=[], columns=[], members=[], sprints=[], csrf_token="token", error=None,
+        detail_drawer=True,
     )
 
-    assert 'class="ticket-detail-drawer"' in source
-    assert 'role="dialog" aria-modal="true"' in source
+    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"' in source
+    assert "$el.showModal()" in source
+    assert "ticket-drawer-closed" in source
