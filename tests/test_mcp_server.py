@@ -89,6 +89,10 @@ async def test_api_request_handles_non_json_api_errors(monkeypatch):
         "https://token@attacker.example/api/v1/projects",
         "/api/v1/../tokens",
         "/api/v1\\projects",
+        "/api/v1/%252e%252e/tokens",
+        "/api/v1/%25252e%25252e/tokens",
+        "/api/v1/%255cprojects",
+        "/api/v1/%25255cprojects",
         "/projects",
     ],
 )
@@ -107,6 +111,28 @@ async def test_api_request_rejects_unsafe_paths_before_sending_token(monkeypatch
 
     assert seen == []
     assert "test-token" not in str(error.value)
+
+
+@pytest.mark.anyio
+async def test_api_request_preserves_harmless_query_values(monkeypatch):
+    monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    seen = {}
+
+    async def handler(request):
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"items": []})
+
+    result = await api_request(
+        "GET",
+        "/api/v1/projects?next=https://example.test/%5C&filter=a%2Fb",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert (
+        seen["url"]
+        == "http://localhost:8000/api/v1/projects?next=https://example.test/%5C&filter=a%2Fb"
+    )
+    assert result == {"items": []}
 
 
 def test_mcp_settings_defaults_and_server_are_importable(monkeypatch):

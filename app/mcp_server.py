@@ -21,19 +21,23 @@ def _api_path(path: str) -> str:
         parsed = urlsplit(path)
     except ValueError:
         raise ValueError("Kanban Flow API request path must be a relative /api/v1/ path") from None
-    decoded_path = unquote(parsed.path)
-    if (
-        parsed.scheme
-        or parsed.netloc
-        or parsed.fragment
-        or "\\" in path
-        or "\\" in decoded_path
-        or "//" in decoded_path
-        or not decoded_path.startswith("/api/v1/")
-        or any(part in {".", ".."} for part in decoded_path.split("/"))
-    ):
-        raise ValueError("Kanban Flow API request path must be a relative /api/v1/ path")
-    return path.lstrip("/")
+    decoded_path = parsed.path
+    for _ in range(4):
+        if (
+            parsed.scheme
+            or parsed.netloc
+            or parsed.fragment
+            or "\\" in decoded_path
+            or "//" in decoded_path
+            or not decoded_path.startswith("/api/v1/")
+            or any(part in {".", ".."} for part in decoded_path.split("/"))
+        ):
+            raise ValueError("Kanban Flow API request path must be a relative /api/v1/ path")
+        next_path = unquote(decoded_path)
+        if next_path == decoded_path:
+            return path.lstrip("/")
+        decoded_path = next_path
+    raise ValueError("Kanban Flow API request path must be a relative /api/v1/ path")
 
 
 def _status_detail(status: int) -> str:
