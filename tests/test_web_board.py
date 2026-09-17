@@ -114,7 +114,9 @@ def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_wor
     assert f'href="/projects/{project.slug}">Clear filters</a>' in page
 
 
-def test_board_ticket_detail_fragment_uses_a_native_dialog(client, active_sprint_world, login_as):
+def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
+    client, active_sprint_world, login_as
+):
     project = active_sprint_world.project
     login_as(active_sprint_world.owner.email)
     ticket = client.post(
@@ -133,10 +135,26 @@ def test_board_ticket_detail_fragment_uses_a_native_dialog(client, active_sprint
 
     assert fragment.status_code == 200
     assert (
-        '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"'
+        '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal"'
         in fragment.text
     )
     assert "$el.showModal()" in fragment.text
+    assert 'id="ticket-detail-heading" tabindex="-1"' in fragment.text
+    assert "$el.querySelector('#ticket-detail-heading').focus()" in fragment.text
+    assert 'class="ticket-detail-layout"' in fragment.text
+
+    css = client.get("/static/app.css").text
+    modal_css = css.split(".ticket-detail-modal {", 1)[1].split("}", 1)[0]
+    assert "margin: auto" in modal_css
+    assert "max-width: 1120px" in modal_css
+    layout_css = css.split(".ticket-detail-modal .ticket-detail-layout {", 1)[1].split(
+        "}", 1
+    )[0]
+    assert "grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr)" in layout_css
+    comments_css = css.split(".ticket-detail-modal .ticket-comments {", 1)[1].split(
+        "}", 1
+    )[0]
+    assert "border-left: 1px solid var(--line)" in comments_css
 
 
 def test_board_filter_checkbox_has_a_40px_hit_target():

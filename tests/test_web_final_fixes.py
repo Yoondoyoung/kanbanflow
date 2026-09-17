@@ -359,7 +359,7 @@ def test_detail_missing_or_blank_title_returns_an_html_form_with_attempted_value
     assert 'role="alert"' in response.text
     assert 'name="title" value="" required' in response.text
     assert "Missing title description" in response.text
-    assert '<option value="BUG" selected>Bug</option>' in response.text
+    assert '<option value="BUG" selected>Issue</option>' in response.text
     assert '<option value="HIGH" selected>High</option>' in response.text
     assert '<option value="5" selected>5</option>' in response.text
     assert f'<option value="{web_world.member.id}" selected>Bob</option>' in response.text

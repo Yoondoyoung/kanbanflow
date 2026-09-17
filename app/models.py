@@ -126,6 +126,20 @@ class Ticket(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class TicketComment(SQLModel, table=True):
+    __tablename__ = "ticket_comment"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    ticket_id: str = Field(foreign_key="ticket.id", index=True)
+    author_id: str = Field(foreign_key="user.id", index=True)
+    body: str = Field(max_length=5000)
+    mentioned_user_ids: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime | None = None
+
+
 class Sprint(SQLModel, table=True):
     __tablename__ = "sprint"
     __table_args__ = (

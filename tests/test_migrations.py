@@ -65,9 +65,13 @@ def test_api_token_migration_downgrade_and_upgrade_are_safe(tmp_path):
     db = tmp_path / "migrated.db"
     env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
     subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
-    subprocess.run(["uv", "run", "alembic", "downgrade", "-1"], check=True, env=env)
+    subprocess.run(
+        ["uv", "run", "alembic", "downgrade", "6c25b12d1a91"], check=True, env=env
+    )
 
-    assert "api_token" not in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+    downgraded_tables = inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+    assert "api_token" not in downgraded_tables
+    assert "ticket_comment" not in downgraded_tables
 
     subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
     assert "api_token" in inspect(make_engine(f"sqlite:///{db}")).get_table_names()

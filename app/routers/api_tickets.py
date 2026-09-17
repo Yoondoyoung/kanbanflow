@@ -1,4 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from app.auth import current_user, load_project_and_membership, project_reader, require_member
@@ -10,6 +11,7 @@ from app.models import (
     Role,
     SprintTicketHistory,
     Ticket,
+    TicketComment,
     TicketStatus,
     TicketType,
     User,
@@ -173,5 +175,6 @@ def delete_ticket(
         select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
+    session.execute(delete(TicketComment).where(TicketComment.ticket_id == ticket.id))
     session.delete(ticket)
     session.commit()

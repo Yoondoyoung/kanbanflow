@@ -2,6 +2,7 @@ import json
 
 from app.models import WebhookType
 from app.notifications import (
+    EVENT_COMMENT_MENTION,
     EVENT_TICKET_CREATED,
     FORMATTERS,
     build_payload,
@@ -50,6 +51,37 @@ def test_teams_payload_is_an_adaptive_card():
 def test_formatters_are_json_serializable():
     for formatter in FORMATTERS.values():
         json.dumps(formatter(PAYLOAD))
+
+
+def test_comment_mention_names_are_visible_in_every_webhook():
+    payload = {
+        **PAYLOAD,
+        "event": EVENT_COMMENT_MENTION,
+        "author_name": "Ada Lovelace",
+        "mentioned_names": ["Bob Builder"],
+        "comment_excerpt": "Please review",
+    }
+
+    for formatter in FORMATTERS.values():
+        body = json.dumps(formatter(payload))
+        assert "Ada Lovelace" in body
+        assert "Bob Builder" in body
+
+
+def test_comment_mentions_cannot_trigger_native_slack_or_discord_pings():
+    payload = {
+        **PAYLOAD,
+        "event": EVENT_COMMENT_MENTION,
+        "author_name": "Ada <!channel>",
+        "mentioned_names": ["Bob <@U123>"],
+        "comment_excerpt": "@everyone <!here>",
+    }
+
+    slack = json.dumps(format_slack(payload))
+    assert "<!channel>" not in slack
+    assert "<@U123>" not in slack
+    assert "<!here>" not in slack
+    assert format_discord(payload)["allowed_mentions"] == {"parse": []}
 
 
 def test_unassigned_ticket_renders_sensibly_in_every_formatter():

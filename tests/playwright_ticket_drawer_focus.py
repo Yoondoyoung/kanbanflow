@@ -109,17 +109,76 @@ def main() -> None:
                 card.wait_for()
                 old_card = page.locator(".ticket-card").first.element_handle()
                 assert old_card is not None
-                _step("opening drawer")
+                _step("opening centered modal")
                 card.click()
-                page.locator("#ticket-detail-panel").wait_for()
-                _step("saving drawer")
+                panel = page.locator("#ticket-detail-panel")
+                panel.wait_for()
+                box = panel.bounding_box()
+                viewport = page.viewport_size
+                assert box is not None and viewport is not None
+                assert abs(box["x"] + box["width"] / 2 - viewport["width"] / 2) < 2
+                assert abs(box["y"] + box["height"] / 2 - viewport["height"] / 2) < 2
+                form_box = page.locator(".ticket-detail-form").bounding_box()
+                comments_box = page.locator("#ticket-comments").bounding_box()
+                assert form_box is not None and comments_box is not None
+                assert comments_box["x"] > form_box["x"] + form_box["width"]
+                _step("saving modal")
                 page.locator("#ticket-detail-panel button", has_text="Save changes").click()
                 page.locator("#ticket-detail-panel [role=status]").wait_for()
                 page.wait_for_function("card => !card.isConnected", arg=old_card)
-                _step("closing drawer and checking focus")
+                _step("adding a comment")
+                comment_input = page.locator("#new-comment-body")
+                comment_input.fill("@Ad")
+                mention_menu = page.locator("#new-comment-mentions")
+                mention_menu.wait_for(state="visible")
+                comment_input.press("Enter")
+                assert comment_input.input_value() == "@Ada "
+                assert page.locator(
+                    '.ticket-comment-form input[name="mention_ids"]'
+                ).count() == 1
+                comment_input.fill("Ready for review")
+                assert page.locator(
+                    '.ticket-comment-form input[name="mention_ids"]'
+                ).count() == 0
+                comment_input.fill("@Ad")
+                mention_menu.wait_for(state="visible")
+                comment_input.press("Enter")
+                comment_input.type("Ready for review")
+                page.get_by_role("button", name="Comment", exact=True).click()
+                page.locator(".ticket-comment", has_text="Ready for review").wait_for()
+                comment = page.locator(".ticket-comment", has_text="Ready for review")
+                actions_box = comment.locator(".ticket-comment-actions").bounding_box()
+                comment_box = comment.bounding_box()
+                body_box = comment.locator(".ticket-comment-body").bounding_box()
+                assert actions_box is not None and comment_box is not None and body_box is not None
+                assert actions_box["x"] > comment_box["x"] + comment_box["width"] / 2
+                assert actions_box["y"] < body_box["y"]
+                assert comment.locator(".ticket-comment-mentions").count() == 0
+                comment_time = comment.locator("time")
+                raw_time = comment_time.get_attribute("datetime")
+                expected_time = page.evaluate(
+                    "value => new Intl.DateTimeFormat([], "
+                    "{dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value))",
+                    raw_time,
+                )
+                assert comment_time.inner_text() == expected_time
+                _step("closing modal and checking focus")
                 page.get_by_role("button", name="Close").click()
                 page.locator("#ticket-detail-panel").wait_for(state="detached")
                 assert card.evaluate("element => element === document.activeElement")
+                _step("checking full-screen mobile modal")
+                page.set_viewport_size({"width": 390, "height": 844})
+                card.click()
+                panel.wait_for()
+                mobile_box = panel.bounding_box()
+                assert mobile_box is not None
+                assert mobile_box["x"] == 0 and mobile_box["y"] == 0
+                assert mobile_box["width"] == 390 and mobile_box["height"] == 844
+                mobile_form_box = page.locator(".ticket-detail-form").bounding_box()
+                mobile_comments_box = page.locator("#ticket-comments").bounding_box()
+                assert mobile_form_box is not None and mobile_comments_box is not None
+                assert mobile_comments_box["y"] > mobile_form_box["y"] + mobile_form_box["height"]
+                page.get_by_role("button", name="Close").click()
                 browser.close()
                 _step("passed")
         except Exception as error:

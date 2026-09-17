@@ -1,0 +1,66 @@
+<section id="ticket-comments" class="ticket-comments" aria-labelledby="ticket-comments-heading"
+         @htmx:before-swap.stop.camel="if ($event.detail.xhr.status === 422) { $event.detail.shouldSwap = true; $event.detail.isError = false }">
+  <div class="ticket-comments-header">
+    <h3 id="ticket-comments-heading">Comments</h3>
+    <span>{{ comments|length }}</span>
+  </div>
+  {% if comment_error %}<p class="form-error" role="alert">{{ comment_error }}</p>{% endif %}
+  <div class="ticket-comment-list">
+    {% for item in comments %}
+    <article class="ticket-comment">
+      <header>
+        <strong>{{ item.author_name }}</strong>
+        <time data-local-time datetime="{{ item.comment.created_at.isoformat() }}Z">{{ item.comment.created_at.strftime('%b %-d, %Y · %-I:%M %p UTC') }}</time>
+        {% if item.comment.updated_at %}<span>Edited</span>{% endif %}
+      </header>
+      {% if item.mention_names %}<p class="ticket-comment-mentions">{% for name in item.mention_names %}<span>@{{ name }}</span>{% endfor %}</p>{% endif %}
+      <p class="ticket-comment-body">{{ item.comment.body }}</p>
+      {% if item.can_edit or item.can_delete %}
+      <div class="ticket-comment-actions">
+        {% if item.can_edit %}
+        <details>
+          <summary>Edit</summary>
+          <form class="app-form" method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/edit"
+                hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/edit" hx-target="#ticket-comments" hx-swap="outerHTML">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <textarea name="body" rows="3" maxlength="5000" required>{{ item.comment.body }}</textarea>
+            <details class="ticket-mentions">
+              <summary>Mention teammates</summary>
+              <div>{% for member in members %}<label><input type="checkbox" name="mention_ids" value="{{ member.id }}"{% if member.id in item.comment.mentioned_user_ids %} checked{% endif %}> @{{ member.name or member.email }}</label>{% endfor %}</div>
+            </details>
+            <button class="app-secondary-button" type="submit">Save comment</button>
+          </form>
+        </details>
+        {% endif %}
+        {% if item.can_delete %}
+        <form method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/delete"
+              hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/delete" hx-target="#ticket-comments" hx-swap="outerHTML" hx-confirm="Delete this comment?">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <button class="app-ghost-button" type="submit">Delete</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+    </article>
+    {% else %}
+    <p class="ticket-comments-empty">No comments yet. Start the conversation.</p>
+    {% endfor %}
+  </div>
+  <form class="app-form ticket-comment-form" method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments"
+        hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments" hx-target="#ticket-comments" hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <div class="ticket-mention-composer">
+      <label for="new-comment-body">Add a comment</label>
+      <textarea id="new-comment-body" name="body" rows="3" maxlength="5000" required
+                data-mention-input aria-autocomplete="list" aria-controls="new-comment-mentions" aria-expanded="false"
+                placeholder="Type @ to mention a teammate"></textarea>
+      <div id="new-comment-mentions" class="ticket-mention-menu" role="listbox" aria-label="Project members" hidden>
+        {% for member in members %}<button type="button" role="option" aria-selected="false"
+          data-mention-id="{{ member.id }}" data-mention-name="{{ member.name or member.email }}"
+          data-mention-search="{{ (member.name or '')|lower }} {{ member.email|lower }}">@{{ member.name or member.email }}{% if member.name %}<span>{{ member.email }}</span>{% endif %}</button>{% endfor %}
+      </div>
+      <div data-selected-mentions></div>
+    </div>
+    <button class="app-primary-button" type="submit">Comment</button>
+  </form>
+</section>

@@ -107,7 +107,7 @@ def test_backlog_has_one_primary_owner_action_without_a_planning_sprint(
     assert 'class="app-primary-button" type="button" x-ref="sprintFormOpener"' in header
 
 
-def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
+def test_ticket_detail_partial_is_an_accessible_centered_modal():
     from fastapi.templating import Jinja2Templates
 
     templates = Jinja2Templates(directory="app/templates")
@@ -135,7 +135,7 @@ def test_ticket_detail_partial_is_an_accessible_overlay_drawer():
         detail_drawer=True,
     )
 
-    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer"' in source
+    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal"' in source
     assert "$el.showModal()" in source
     assert "ticket-drawer-closed" in source
 

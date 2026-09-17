@@ -18,6 +18,7 @@ from app.models import (
     SprintStatus,
     SprintTicketHistory,
     Ticket,
+    TicketComment,
     TicketStatus,
     TicketType,
     User,
@@ -255,6 +256,8 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
     session.execute(
         delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
     )
+    ticket_ids = select(Ticket.id).where(Ticket.project_id == project.id)
+    session.execute(delete(TicketComment).where(TicketComment.ticket_id.in_(ticket_ids)))
     session.execute(delete(Ticket).where(Ticket.project_id == project.id))
     session.execute(delete(Sprint).where(Sprint.project_id == project.id))
     session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))

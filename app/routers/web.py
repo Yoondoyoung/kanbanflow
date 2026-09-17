@@ -30,13 +30,17 @@ from app.models import (
     Priority,
     Project,
     ProjectMember,
+    Role,
     Sprint,
     SprintStatus,
     Ticket,
+    TicketComment,
     TicketStatus,
     TicketType,
     User,
+    utcnow,
 )
+from app.notifications import schedule_comment_mention
 from app.routers.api_auth import _set_session
 from app.schemas import StatusUpdate, TicketUpdate
 from app.services import create_project, create_ticket, register_user, set_status, update_ticket
@@ -59,6 +63,7 @@ _email_adapter = TypeAdapter(EmailStr)
 _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 _STATUS_FORM_FIELD = Form(..., alias="status")
 _TYPE_FILTER_QUERY = Query(None, alias="type")
+_MENTION_IDS_FORM = Form(None)
 
 
 def render(
@@ -223,7 +228,87 @@ def _project_ticket(session: Session, project: Project, ticket_number: int) -> T
     return ticket
 
 
-def _ticket_detail(
+def _comment_members(session: Session, project: Project, mention_ids: list[str]) -> list[User]:
+    mention_ids = list(dict.fromkeys(mention_ids))
+    if not mention_ids:
+        return []
+    users = session.exec(
+        select(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project.id, User.id.in_(mention_ids))
+    ).all()
+    if len(users) != len(mention_ids):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "Mentions must be project members"
+        )
+    by_id = {user.id: user for user in users}
+    return [by_id[user_id] for user_id in mention_ids]
+
+
+def _comment_input(
+    session: Session, project: Project, body: str, mention_ids: list[str]
+) -> tuple[str, list[User]]:
+    body = body.strip()
+    if not body:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Comment cannot be empty")
+    if len(body) > 5000:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Comment must be at most 5000 characters",
+        )
+    return body, _comment_members(session, project, mention_ids)
+
+
+def _project_comment(session: Session, ticket: Ticket, comment_id: str) -> TicketComment:
+    comment = session.get(TicketComment, comment_id)
+    if comment is None or comment.ticket_id != ticket.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Comment not found")
+    return comment
+
+
+def _ticket_comments(
+    session: Session, project: Project, ticket: Ticket, viewer: User
+) -> tuple[list[dict], list[User]]:
+    members = session.exec(
+        select(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project.id)
+        .order_by(User.name)
+    ).all()
+    viewer_membership = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.project_id == project.id,
+            ProjectMember.user_id == viewer.id,
+        )
+    ).one()
+    is_owner = viewer_membership.role == Role.OWNER
+    names = {member.id: member.name or member.email for member in members}
+    rows = session.exec(
+        select(TicketComment, User)
+        .join(User, User.id == TicketComment.author_id)
+        .where(TicketComment.ticket_id == ticket.id)
+        .order_by(TicketComment.created_at)
+    ).all()
+    return (
+        [
+            {
+                "comment": comment,
+                "author_name": author.name or author.email,
+                "mention_names": [
+                    names[user_id]
+                    for user_id in comment.mentioned_user_ids
+                    if user_id in names and f"@{names[user_id]}" not in comment.body
+                ],
+                "can_edit": comment.author_id == viewer.id,
+                "can_delete": comment.author_id == viewer.id or is_owner,
+            }
+            for comment, author in rows
+        ],
+        members,
+    )
+
+
+def _render_ticket_comments(
     request: Request,
     session: Session,
     user: User,
@@ -232,16 +317,38 @@ def _ticket_detail(
     *,
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
+) -> Response:
+    comments, members = _ticket_comments(session, project, ticket, user)
+    return render(
+        request,
+        "partials/ticket_comments.html",
+        {
+            "user": user,
+            "project": project,
+            "ticket": ticket,
+            "comments": comments,
+            "members": members,
+            "comment_error": error,
+        },
+        status_code=status_code,
+    )
+
+
+def _ticket_detail(
+    request: Request,
+    session: Session,
+    user: User,
+    project: Project,
+    ticket: Ticket,
+    *,
+    error: str | None = None,
+    comment_error: str | None = None,
+    status_code: int = status.HTTP_200_OK,
     page: bool = False,
     submitted_values: dict[str, str] | None = None,
     saved: bool = False,
 ) -> Response:
-    members = session.exec(
-        select(User)
-        .join(ProjectMember, ProjectMember.user_id == User.id)
-        .where(ProjectMember.project_id == project.id)
-        .order_by(User.name)
-    ).all()
+    comments, members = _ticket_comments(session, project, ticket, user)
     sprints = session.exec(
         select(Sprint)
         .where(
@@ -271,6 +378,8 @@ def _ticket_detail(
             "project": project,
             "ticket": ticket,
             "members": members,
+            "comments": comments,
+            "comment_error": comment_error,
             "sprints": sprints,
             "ticket_types": TicketType,
             "priorities": Priority,
@@ -470,6 +579,153 @@ def ticket_detail(
         ticket,
         page=not request.headers.get("HX-Request"),
         saved=saved,
+    )
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/comments",
+    dependencies=[Depends(verify_csrf)],
+)
+def create_ticket_comment_form(
+    slug: str,
+    ticket_number: int,
+    request: Request,
+    tasks: BackgroundTasks,
+    body: str = Form(""),
+    mention_ids: list[str] | None = _MENTION_IDS_FORM,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    try:
+        body, mentioned_users = _comment_input(session, project, body, mention_ids or [])
+    except HTTPException as exc:
+        if request.headers.get("HX-Request") != "true":
+            return _ticket_detail(
+                request,
+                session,
+                user,
+                project,
+                ticket,
+                page=True,
+                comment_error=exc.detail,
+                status_code=exc.status_code,
+            )
+        return _render_ticket_comments(
+            request,
+            session,
+            user,
+            project,
+            ticket,
+            error=exc.detail,
+            status_code=exc.status_code,
+        )
+    comment = TicketComment(
+        ticket_id=ticket.id,
+        author_id=user.id,
+        body=body,
+        mentioned_user_ids=[mentioned.id for mentioned in mentioned_users],
+    )
+    session.add(comment)
+    session.commit()
+    schedule_comment_mention(tasks, project, ticket, user, mentioned_users, body)
+    if request.headers.get("HX-Request") == "true":
+        return _render_ticket_comments(request, session, user, project, ticket)
+    return RedirectResponse(
+        f"/projects/{project.slug}/tickets/{ticket.ticket_number}#ticket-comments",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/comments/{comment_id}/edit",
+    dependencies=[Depends(verify_csrf)],
+)
+def edit_ticket_comment_form(
+    slug: str,
+    ticket_number: int,
+    comment_id: str,
+    request: Request,
+    tasks: BackgroundTasks,
+    body: str = Form(""),
+    mention_ids: list[str] | None = _MENTION_IDS_FORM,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    comment = _project_comment(session, ticket, comment_id)
+    if comment.author_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the author can edit this comment")
+    try:
+        body, mentioned_users = _comment_input(session, project, body, mention_ids or [])
+    except HTTPException as exc:
+        if request.headers.get("HX-Request") != "true":
+            return _ticket_detail(
+                request,
+                session,
+                user,
+                project,
+                ticket,
+                page=True,
+                comment_error=exc.detail,
+                status_code=exc.status_code,
+            )
+        return _render_ticket_comments(
+            request,
+            session,
+            user,
+            project,
+            ticket,
+            error=exc.detail,
+            status_code=exc.status_code,
+        )
+    previous_mentions = set(comment.mentioned_user_ids)
+    comment.body = body
+    comment.mentioned_user_ids = [mentioned.id for mentioned in mentioned_users]
+    comment.updated_at = utcnow()
+    session.add(comment)
+    session.commit()
+    new_mentions = [
+        mentioned for mentioned in mentioned_users if mentioned.id not in previous_mentions
+    ]
+    schedule_comment_mention(tasks, project, ticket, user, new_mentions, body)
+    if request.headers.get("HX-Request") == "true":
+        return _render_ticket_comments(request, session, user, project, ticket)
+    return RedirectResponse(
+        f"/projects/{project.slug}/tickets/{ticket.ticket_number}#ticket-comments",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/comments/{comment_id}/delete",
+    dependencies=[Depends(verify_csrf)],
+)
+def delete_ticket_comment_form(
+    slug: str,
+    ticket_number: int,
+    comment_id: str,
+    request: Request,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, membership = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    comment = _project_comment(session, ticket, comment_id)
+    if comment.author_id != user.id and membership.role != Role.OWNER:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot delete this comment")
+    session.delete(comment)
+    session.commit()
+    if request.headers.get("HX-Request") == "true":
+        return _render_ticket_comments(request, session, user, project, ticket)
+    return RedirectResponse(
+        f"/projects/{project.slug}/tickets/{ticket.ticket_number}#ticket-comments",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 

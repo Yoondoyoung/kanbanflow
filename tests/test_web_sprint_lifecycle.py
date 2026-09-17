@@ -167,6 +167,24 @@ def test_close_preview_shows_totals_destination_and_accessible_dialog(
     assert "@submit=\"$el.querySelector('[type=submit]').disabled = true\"" in response.text
 
 
+def test_close_preview_explains_how_to_create_a_rollover_destination(
+    client, lifecycle_world, engine, login_as
+):
+    with Session(engine) as session:
+        next_sprint = session.get(Sprint, lifecycle_world.next_sprint.id)
+        next_sprint.status = SprintStatus.CLOSED
+        session.add(next_sprint)
+        session.commit()
+
+    login_as(lifecycle_world.owner.email)
+    response = client.get(
+        f"/projects/{lifecycle_world.project.slug}/sprints/{lifecycle_world.active.id}/close"
+    )
+
+    assert response.status_code == 200
+    assert "Create a planning sprint from Backlog before closing this sprint." in response.text
+
+
 def test_close_requires_a_planning_destination_without_mutation(
     client, lifecycle_world, engine, login_as
 ):

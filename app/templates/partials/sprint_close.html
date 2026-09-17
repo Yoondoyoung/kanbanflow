@@ -3,6 +3,7 @@
     <header class="app-dialog-header"><h2 id="sprint-close-heading" tabindex="-1" autofocus>Close {{ sprint.name }}?</h2></header>
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
     <p>{{ completed_points }} completed points · {{ unfinished_count }} unfinished tickets</p>
+    {% if not planning_sprints %}<p class="form-status">Create a planning sprint from Backlog before closing this sprint. Unfinished tickets will roll over to it.</p>{% endif %}
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <label>Rollover destination
       <select name="next_sprint_id" required>

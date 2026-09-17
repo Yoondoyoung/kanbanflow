@@ -1,12 +1,13 @@
 {% if detail_drawer %}
-<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-drawer" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('input, select, textarea, button').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
+<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('#ticket-detail-heading').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
 {% else %}
 <section id="ticket-detail-panel" class="ticket-detail-page" aria-labelledby="ticket-detail-heading">
 {% endif %}
+  <div class="ticket-detail-layout">
   <form class="app-form ticket-detail-form" method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}" hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"
         hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <div class="ticket-detail-header">
-      <h2 id="ticket-detail-heading">#{{ ticket.ticket_number }} ticket</h2>
+      <h2 id="ticket-detail-heading" tabindex="-1">#{{ ticket.ticket_number }} · Work item</h2>
       {% if detail_drawer %}
       <button type="button" class="app-ghost-button" @click="$el.closest('dialog').close()">Close</button>
       {% else %}
@@ -20,22 +21,24 @@
     {% set status_values = columns | map(attribute='value') | list %}
     {% set member_ids = members | map(attribute='id') | list %}
     {% set sprint_ids = sprints | map(attribute='id') | list %}
+    {% set type_labels = {'STORY': 'Initiative', 'BUG': 'Issue', 'DEMO_REQUEST': 'Review request', 'TASK': 'Task'} %}
+    {% set status_labels = {'BACKLOG': 'Not planned', 'SELECTED': 'Ready', 'IN_PROGRESS': 'In progress', 'DONE': 'Done'} %}
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div>
-      <label for="detail-title">Title</label>
+      <label for="detail-title">Work item title</label>
       <input id="detail-title" name="title" value="{{ form_values['title'] }}" required>
     </div>
     <div>
-      <label for="detail-description">Description</label>
+      <label for="detail-description">Details</label>
       <textarea id="detail-description" name="description" rows="6">{{ form_values['description'] }}</textarea>
       {% if form_values['description'] %}<div class="ticket-description">{{ form_values['description'] | markdown | safe }}</div>{% endif %}
     </div>
     <div class="ticket-detail-grid">
       <div>
-        <label for="detail-type">Type</label>
+        <label for="detail-type">Category</label>
         <select id="detail-type" name="type">
           {% if form_values['type'] not in type_values %}<option value="{{ form_values['type'] }}" selected>{{ form_values['type'] }}</option>{% endif %}
-          {% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if form_values['type'] == ticket_type.value %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+          {% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if form_values['type'] == ticket_type.value %} selected{% endif %}>{{ type_labels.get(ticket_type.value, ticket_type.value|replace('_', ' ')|capitalize) }}</option>{% endfor %}
         </select>
       </div>
       <div>
@@ -46,7 +49,7 @@
         </select>
       </div>
       <div>
-        <label for="detail-points">Points</label>
+        <label for="detail-points">Effort</label>
         <select id="detail-points" name="story_points">
           {% if form_values['story_points'] not in ['', '1', '2', '3', '5', '8', '13'] %}<option value="{{ form_values['story_points'] }}" selected>{{ form_values['story_points'] }}</option>{% endif %}
           <option value=""{% if not form_values['story_points'] %} selected{% endif %}>Unestimated</option>
@@ -54,7 +57,7 @@
         </select>
       </div>
       <div>
-        <label for="detail-assignee">Assignee</label>
+        <label for="detail-assignee">Owner</label>
         <select id="detail-assignee" name="assignee_id">
           {% if form_values['assignee_id'] and form_values['assignee_id'] not in member_ids %}<option value="{{ form_values['assignee_id'] }}" selected>{{ form_values['assignee_id'] }}</option>{% endif %}
           <option value=""{% if not form_values['assignee_id'] %} selected{% endif %}>Unassigned</option>
@@ -62,22 +65,24 @@
         </select>
       </div>
       <div>
-        <label for="detail-status">Status</label>
+        <label for="detail-status">Progress</label>
         <select id="detail-status" name="status">
           {% if form_values['status'] not in status_values %}<option value="{{ form_values['status'] }}" selected>{{ form_values['status'] }}</option>{% endif %}
-          {% for column in columns %}<option value="{{ column.value }}"{% if form_values['status'] == column.value %} selected{% endif %}>{{ column.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+          {% for column in columns %}<option value="{{ column.value }}"{% if form_values['status'] == column.value %} selected{% endif %}>{{ status_labels.get(column.value, column.value|replace('_', ' ')|capitalize) }}</option>{% endfor %}
         </select>
       </div>
       <div>
-        <label for="detail-sprint">Destination</label>
+        <label for="detail-sprint">Schedule</label>
         <select id="detail-sprint" name="sprint_id">
           {% if form_values['sprint_id'] and form_values['sprint_id'] not in sprint_ids %}<option value="{{ form_values['sprint_id'] }}" selected>{{ form_values['sprint_id'] }}</option>{% endif %}
-          <option value=""{% if not form_values['sprint_id'] %} selected{% endif %}>Backlog</option>
+          <option value=""{% if not form_values['sprint_id'] %} selected{% endif %}>Unscheduled</option>
           {% for sprint in sprints %}<option value="{{ sprint.id }}"{% if form_values['sprint_id'] == sprint.id %} selected{% endif %}>{{ sprint.name }}</option>{% endfor %}
         </select>
       </div>
     </div>
-    <div><label for="detail-resolution-notes">Resolution notes</label><textarea id="detail-resolution-notes" name="resolution_notes" rows="3">{{ form_values['resolution_notes'] }}</textarea></div>
+    <div><label for="detail-resolution-notes">Outcome notes</label><textarea id="detail-resolution-notes" name="resolution_notes" rows="3">{{ form_values['resolution_notes'] }}</textarea></div>
     <button class="app-primary-button">Save changes</button>
   </form>
+  {% include "partials/ticket_comments.html" %}
+  </div>
 {% if detail_drawer %}</dialog>{% else %}</section>{% endif %}

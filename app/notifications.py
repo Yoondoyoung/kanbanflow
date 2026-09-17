@@ -5,7 +5,7 @@ from collections.abc import Callable
 import httpx
 from fastapi import BackgroundTasks
 
-from app.models import Project, Ticket, WebhookType
+from app.models import Project, Ticket, User, WebhookType
 
 logger = logging.getLogger("app.notifications")
 
@@ -14,10 +14,12 @@ BACKOFF_SECONDS = (1, 2, 4)
 
 EVENT_TICKET_CREATED = "TICKET_CREATED"
 EVENT_TICKET_DONE = "TICKET_DONE"
+EVENT_COMMENT_MENTION = "COMMENT_MENTION"
 
 _HEADLINES = {
     EVENT_TICKET_CREATED: "New ticket",
     EVENT_TICKET_DONE: "Ticket completed",
+    EVENT_COMMENT_MENTION: "New mention",
 }
 
 _UNASSIGNED = "Unassigned"
@@ -39,6 +41,9 @@ def build_payload(project: Project, event: str, ticket: Ticket) -> dict:
 
 
 def _headline(payload: dict) -> str:
+    if payload["event"] == EVENT_COMMENT_MENTION:
+        names = ", ".join(payload["mentioned_names"])
+        return f"{payload['author_name']} mentioned {names} on #{payload['ticket_number']}"
     return (
         f"{_HEADLINES.get(payload['event'], payload['event'])} "
         f"#{payload['ticket_number']}: {payload['title']}"
@@ -46,6 +51,8 @@ def _headline(payload: dict) -> str:
 
 
 def _detail(payload: dict) -> str:
+    if payload["event"] == EVENT_COMMENT_MENTION:
+        return f"{payload['project_name']} · {payload['comment_excerpt']}"
     assignee = payload["assignee_id"] or _UNASSIGNED
     return (
         f"{payload['project_name']} · {payload['type']} · "
@@ -53,7 +60,21 @@ def _detail(payload: dict) -> str:
     )
 
 
+def _escape_slack(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def format_slack(payload: dict) -> dict:
+    if payload["event"] == EVENT_COMMENT_MENTION:
+        payload = {
+            **payload,
+            "project_name": _escape_slack(payload["project_name"]),
+            "author_name": _escape_slack(payload["author_name"]),
+            "mentioned_names": [
+                _escape_slack(name) for name in payload["mentioned_names"]
+            ],
+            "comment_excerpt": _escape_slack(payload["comment_excerpt"]),
+        }
     return {
         "text": _headline(payload),
         "blocks": [
@@ -65,9 +86,14 @@ def format_slack(payload: dict) -> dict:
 
 def format_discord(payload: dict) -> dict:
     return {
+        "allowed_mentions": {"parse": []},
         "embeds": [
             {
-                "title": f"#{payload['ticket_number']} {payload['title']}",
+                "title": (
+                    _headline(payload)
+                    if payload["event"] == EVENT_COMMENT_MENTION
+                    else f"#{payload['ticket_number']} {payload['title']}"
+                ),
                 "description": _detail(payload),
             }
         ]
@@ -162,4 +188,23 @@ def schedule(tasks: BackgroundTasks | None, project: Project, event: str, ticket
     if tasks is None or project.webhook_type == WebhookType.NONE or not project.webhook_url:
         return
     payload = build_payload(project, event, ticket)
+    tasks.add_task(dispatch, project.webhook_type, project.webhook_url, payload)
+
+
+def schedule_comment_mention(
+    tasks: BackgroundTasks,
+    project: Project,
+    ticket: Ticket,
+    author: User,
+    mentioned_users: list[User],
+    body: str,
+) -> None:
+    if not mentioned_users or project.webhook_type == WebhookType.NONE or not project.webhook_url:
+        return
+    payload = {
+        **build_payload(project, EVENT_COMMENT_MENTION, ticket),
+        "author_name": author.name or author.email,
+        "mentioned_names": [user.name or user.email for user in mentioned_users],
+        "comment_excerpt": body[:200],
+    }
     tasks.add_task(dispatch, project.webhook_type, project.webhook_url, payload)

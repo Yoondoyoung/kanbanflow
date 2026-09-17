@@ -5,6 +5,7 @@ from sqlalchemy import JSON, text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 
+import app.models as models
 from app.models import (
     ApiToken,
     Project,
@@ -18,6 +19,15 @@ from app.models import (
     TicketType,
     User,
 )
+
+
+def test_ticket_comment_tracks_author_mentions_and_edit_time():
+    assert hasattr(models, "TicketComment")
+
+    comment = models.TicketComment(ticket_id="ticket", author_id="author", body="Please review")
+
+    assert comment.mentioned_user_ids == []
+    assert comment.updated_at is None
 
 
 def make_user(session: Session, email: str = "a@b.com") -> User:
