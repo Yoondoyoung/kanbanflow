@@ -6,25 +6,69 @@
       <button type="button" class="text-sm" onclick="document.getElementById('ticket-detail-panel').innerHTML = ''">Close</button>
     </div>
     {% if error %}<p class="text-red-600 text-sm" role="alert">{{ error }}</p>{% endif %}
+    {% set type_values = ticket_types | map(attribute='value') | list %}
+    {% set priority_values = priorities | map(attribute='value') | list %}
+    {% set status_values = columns | map(attribute='value') | list %}
+    {% set member_ids = members | map(attribute='id') | list %}
+    {% set sprint_ids = sprints | map(attribute='id') | list %}
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <div>
       <label for="detail-title" class="block text-xs font-medium mb-1">Title</label>
-      <input id="detail-title" class="w-full border rounded px-3 py-2" name="title" value="{{ ticket.title }}" required>
+      <input id="detail-title" class="w-full border rounded px-3 py-2" name="title" value="{{ form_values['title'] }}" required>
     </div>
     <div>
       <label for="detail-description" class="block text-xs font-medium mb-1">Description</label>
-      <textarea id="detail-description" class="w-full border rounded px-3 py-2" name="description" rows="6">{{ ticket.description }}</textarea>
-      {% if ticket.description %}<div class="prose prose-sm mt-2">{{ ticket.description | markdown | safe }}</div>{% endif %}
+      <textarea id="detail-description" class="w-full border rounded px-3 py-2" name="description" rows="6">{{ form_values['description'] }}</textarea>
+      {% if form_values['description'] %}<div class="prose prose-sm mt-2">{{ form_values['description'] | markdown | safe }}</div>{% endif %}
     </div>
     <div class="grid grid-cols-2 gap-3">
-      <div><label for="detail-type" class="block text-xs font-medium mb-1">Type</label><select id="detail-type" class="w-full border rounded px-3 py-2" name="type">{% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if ticket.type == ticket_type %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select></div>
-      <div><label for="detail-priority" class="block text-xs font-medium mb-1">Priority</label><select id="detail-priority" class="w-full border rounded px-3 py-2" name="priority">{% for ticket_priority in priorities %}<option value="{{ ticket_priority.value }}"{% if ticket.priority == ticket_priority %} selected{% endif %}>{{ ticket_priority.value|capitalize }}</option>{% endfor %}</select></div>
-      <div><label for="detail-points" class="block text-xs font-medium mb-1">Points</label><select id="detail-points" class="w-full border rounded px-3 py-2" name="story_points"><option value="">Unestimated</option>{% for points in (1, 2, 3, 5, 8, 13) %}<option value="{{ points }}"{% if ticket.story_points == points %} selected{% endif %}>{{ points }}</option>{% endfor %}</select></div>
-      <div><label for="detail-assignee" class="block text-xs font-medium mb-1">Assignee</label><select id="detail-assignee" class="w-full border rounded px-3 py-2" name="assignee_id"><option value="">Unassigned</option>{% for member in members %}<option value="{{ member.id }}"{% if ticket.assignee_id == member.id %} selected{% endif %}>{{ member.name or member.email }}</option>{% endfor %}</select></div>
-      <div><label for="detail-status" class="block text-xs font-medium mb-1">Status</label><select id="detail-status" class="w-full border rounded px-3 py-2" name="status">{% for column in columns %}<option value="{{ column.value }}"{% if ticket.status == column %} selected{% endif %}>{{ column.value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select></div>
-      <div><label for="detail-sprint" class="block text-xs font-medium mb-1">Destination</label><select id="detail-sprint" class="w-full border rounded px-3 py-2" name="sprint_id"><option value="">Backlog</option>{% for sprint in sprints %}<option value="{{ sprint.id }}"{% if ticket.sprint_id == sprint.id %} selected{% endif %}>{{ sprint.name }}</option>{% endfor %}</select></div>
+      <div>
+        <label for="detail-type" class="block text-xs font-medium mb-1">Type</label>
+        <select id="detail-type" class="w-full border rounded px-3 py-2" name="type">
+          {% if form_values['type'] not in type_values %}<option value="{{ form_values['type'] }}" selected>{{ form_values['type'] }}</option>{% endif %}
+          {% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if form_values['type'] == ticket_type.value %} selected{% endif %}>{{ ticket_type.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="detail-priority" class="block text-xs font-medium mb-1">Priority</label>
+        <select id="detail-priority" class="w-full border rounded px-3 py-2" name="priority">
+          {% if form_values['priority'] not in priority_values %}<option value="{{ form_values['priority'] }}" selected>{{ form_values['priority'] }}</option>{% endif %}
+          {% for ticket_priority in priorities %}<option value="{{ ticket_priority.value }}"{% if form_values['priority'] == ticket_priority.value %} selected{% endif %}>{{ ticket_priority.value|capitalize }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="detail-points" class="block text-xs font-medium mb-1">Points</label>
+        <select id="detail-points" class="w-full border rounded px-3 py-2" name="story_points">
+          {% if form_values['story_points'] not in ['', '1', '2', '3', '5', '8', '13'] %}<option value="{{ form_values['story_points'] }}" selected>{{ form_values['story_points'] }}</option>{% endif %}
+          <option value=""{% if not form_values['story_points'] %} selected{% endif %}>Unestimated</option>
+          {% for points in (1, 2, 3, 5, 8, 13) %}<option value="{{ points }}"{% if form_values['story_points'] == points|string %} selected{% endif %}>{{ points }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="detail-assignee" class="block text-xs font-medium mb-1">Assignee</label>
+        <select id="detail-assignee" class="w-full border rounded px-3 py-2" name="assignee_id">
+          {% if form_values['assignee_id'] and form_values['assignee_id'] not in member_ids %}<option value="{{ form_values['assignee_id'] }}" selected>{{ form_values['assignee_id'] }}</option>{% endif %}
+          <option value=""{% if not form_values['assignee_id'] %} selected{% endif %}>Unassigned</option>
+          {% for member in members %}<option value="{{ member.id }}"{% if form_values['assignee_id'] == member.id %} selected{% endif %}>{{ member.name or member.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="detail-status" class="block text-xs font-medium mb-1">Status</label>
+        <select id="detail-status" class="w-full border rounded px-3 py-2" name="status">
+          {% if form_values['status'] not in status_values %}<option value="{{ form_values['status'] }}" selected>{{ form_values['status'] }}</option>{% endif %}
+          {% for column in columns %}<option value="{{ column.value }}"{% if form_values['status'] == column.value %} selected{% endif %}>{{ column.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="detail-sprint" class="block text-xs font-medium mb-1">Destination</label>
+        <select id="detail-sprint" class="w-full border rounded px-3 py-2" name="sprint_id">
+          {% if form_values['sprint_id'] and form_values['sprint_id'] not in sprint_ids %}<option value="{{ form_values['sprint_id'] }}" selected>{{ form_values['sprint_id'] }}</option>{% endif %}
+          <option value=""{% if not form_values['sprint_id'] %} selected{% endif %}>Backlog</option>
+          {% for sprint in sprints %}<option value="{{ sprint.id }}"{% if form_values['sprint_id'] == sprint.id %} selected{% endif %}>{{ sprint.name }}</option>{% endfor %}
+        </select>
+      </div>
     </div>
-    <div><label for="detail-resolution-notes" class="block text-xs font-medium mb-1">Resolution notes</label><textarea id="detail-resolution-notes" class="w-full border rounded px-3 py-2" name="resolution_notes" rows="3">{{ ticket.resolution_notes or '' }}</textarea></div>
+    <div><label for="detail-resolution-notes" class="block text-xs font-medium mb-1">Resolution notes</label><textarea id="detail-resolution-notes" class="w-full border rounded px-3 py-2" name="resolution_notes" rows="3">{{ form_values['resolution_notes'] }}</textarea></div>
     <button class="app-primary-button">Save changes</button>
   </form>
 </aside>

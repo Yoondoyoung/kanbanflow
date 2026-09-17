@@ -233,6 +233,7 @@ def _ticket_detail(
     error: str | None = None,
     status_code: int = status.HTTP_200_OK,
     page: bool = False,
+    submitted_values: dict[str, str] | None = None,
 ) -> Response:
     members = session.exec(
         select(User)
@@ -248,6 +249,19 @@ def _ticket_detail(
         )
         .order_by(Sprint.start_date)
     ).all()
+    form_values = {
+        "title": ticket.title,
+        "description": ticket.description,
+        "type": ticket.type.value,
+        "priority": ticket.priority.value,
+        "story_points": str(ticket.story_points or ""),
+        "assignee_id": ticket.assignee_id or "",
+        "status": ticket.status.value,
+        "resolution_notes": ticket.resolution_notes or "",
+        "sprint_id": ticket.sprint_id or "",
+    }
+    if submitted_values is not None:
+        form_values.update(submitted_values)
     return render(
         request,
         "ticket_detail.html" if page else "partials/ticket_detail.html",
@@ -261,6 +275,7 @@ def _ticket_detail(
             "priorities": Priority,
             "columns": COLUMNS,
             "error": error,
+            "form_values": form_values,
             "active_tab": "board",
             "selected_sprint_id": ticket.sprint_id,
         },
@@ -454,13 +469,13 @@ def update_ticket_form(
     ticket_number: int,
     request: Request,
     tasks: BackgroundTasks,
-    title: str = Form(...),
+    title: str = Form(""),
     description: str = Form(""),
-    type: str = Form(...),
-    priority: str = Form(...),
+    type: str = Form(""),
+    priority: str = Form(""),
     story_points: str = Form(""),
     assignee_id: str = Form(""),
-    status_value: str = Form(..., alias="status"),
+    status_value: str = Form("", alias="status"),
     resolution_notes: str = Form(""),
     sprint_id: str = Form(""),
     project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
@@ -472,6 +487,17 @@ def update_ticket_form(
     is_hx = bool(request.headers.get("HX-Request"))
     old_status = ticket.status
     old_sprint_id = ticket.sprint_id
+    submitted_values = {
+        "title": title,
+        "description": description,
+        "type": type,
+        "priority": priority,
+        "story_points": story_points,
+        "assignee_id": assignee_id,
+        "status": status_value,
+        "resolution_notes": resolution_notes,
+        "sprint_id": sprint_id,
+    }
     try:
         points = int(story_points) if story_points else None
         changes = TicketUpdate(
@@ -509,6 +535,7 @@ def update_ticket_form(
             error=error,
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             page=not is_hx,
+            submitted_values=submitted_values,
         )
     except HTTPException as exc:
         return _ticket_detail(
@@ -520,6 +547,7 @@ def update_ticket_form(
             error=exc.detail,
             status_code=exc.status_code,
             page=not is_hx,
+            submitted_values=submitted_values,
         )
     if not is_hx:
         return RedirectResponse(

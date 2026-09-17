@@ -273,6 +273,93 @@ def test_non_htmx_detail_validation_renders_a_full_page_form(client, web_world, 
     assert f'<form class="space-y-3" method="post" action="{url}"' in response.text
 
 
+@pytest.mark.parametrize(
+    ("headers", "full_page"),
+    [({}, True), ({"HX-Request": "true"}, False)],
+    ids=["native", "htmx"],
+)
+def test_detail_typed_validation_keeps_every_attempted_field(
+    client, web_world, login_as, headers, full_page
+):
+    login_as(web_world.owner.email)
+    response = client.post(
+        f"/projects/{web_world.project.slug}/tickets/1",
+        data=_detail_data(
+            web_world,
+            title="<b>Draft title</b>",
+            description="<script>draft()</script>",
+            type="INVALID_TYPE",
+            priority="INVALID_PRIORITY",
+            story_points="4",
+            assignee_id="missing-assignee",
+            status="INVALID_STATUS",
+            resolution_notes="<img src=x onerror=alert(1)>",
+            sprint_id="missing-sprint",
+        ),
+        headers=headers,
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/html")
+    assert ("<html" in response.text) is full_page
+    assert 'role="alert"' in response.text
+    assert 'value="&lt;b&gt;Draft title&lt;/b&gt;"' in response.text
+    assert "&lt;script&gt;draft()&lt;/script&gt;" in response.text
+    assert '<option value="INVALID_TYPE" selected>INVALID_TYPE</option>' in response.text
+    assert '<option value="INVALID_PRIORITY" selected>INVALID_PRIORITY</option>' in response.text
+    assert '<option value="4" selected>4</option>' in response.text
+    assert '<option value="missing-assignee" selected>missing-assignee</option>' in response.text
+    assert '<option value="INVALID_STATUS" selected>INVALID_STATUS</option>' in response.text
+    assert '<option value="missing-sprint" selected>missing-sprint</option>' in response.text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in response.text
+    assert "<script>draft()</script>" not in response.text
+
+
+@pytest.mark.parametrize(
+    ("headers", "full_page"),
+    [({}, True), ({"HX-Request": "true"}, False)],
+    ids=["native", "htmx"],
+)
+@pytest.mark.parametrize("title", [None, ""], ids=["missing", "blank"])
+def test_detail_missing_or_blank_title_returns_an_html_form_with_attempted_values(
+    client, web_world, login_as, headers, full_page, title
+):
+    login_as(web_world.owner.email)
+    data = _detail_data(
+        web_world,
+        description="Missing title description",
+        type="BUG",
+        priority="HIGH",
+        story_points="5",
+        assignee_id=web_world.member.id,
+        status="IN_PROGRESS",
+        resolution_notes="Missing title notes",
+        sprint_id=web_world.planning_id,
+    )
+    if title is None:
+        del data["title"]
+    else:
+        data["title"] = title
+
+    response = client.post(
+        f"/projects/{web_world.project.slug}/tickets/1", data=data, headers=headers
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("text/html")
+    assert ("<html" in response.text) is full_page
+    assert 'role="alert"' in response.text
+    assert 'name="title" value="" required' in response.text
+    assert "Missing title description" in response.text
+    assert '<option value="BUG" selected>Bug</option>' in response.text
+    assert '<option value="HIGH" selected>High</option>' in response.text
+    assert '<option value="5" selected>5</option>' in response.text
+    assert f'<option value="{web_world.member.id}" selected>Bob</option>' in response.text
+    assert '<option value="IN_PROGRESS" selected>In progress</option>' in response.text
+    assert f'<option value="{web_world.planning_id}" selected>Sprint 2</option>' in response.text
+    assert "Missing title notes" in response.text
+
+
 def test_allowed_owner_self_removal_redirects_to_dashboard(
     client, web_world, make_user, add_member, engine, login_as
 ):
