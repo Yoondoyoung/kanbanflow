@@ -47,6 +47,7 @@ def _settings(
     member: ProjectMember,
     *,
     error: str | None = None,
+    values: dict | None = None,
     status_code: int = status.HTTP_200_OK,
 ) -> Response:
     return render(
@@ -59,6 +60,7 @@ def _settings(
             "active_tab": "settings",
             "members": project_members(session, project.id),
             "error": error,
+            "values": values or {},
         },
         status_code=status_code,
         session=session,
@@ -212,6 +214,7 @@ def update_project_settings(
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
+    values = {"name": name, "webhook_type": webhook_type.value, "webhook_url": webhook_url}
     try:
         update_project(
             session,
@@ -222,7 +225,14 @@ def update_project_settings(
         )
     except HTTPException as exc:
         return _settings(
-            request, session, user, project, member, error=exc.detail, status_code=exc.status_code
+            request,
+            session,
+            user,
+            project,
+            member,
+            error=exc.detail,
+            values=values,
+            status_code=exc.status_code,
         )
     return RedirectResponse(
         f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER

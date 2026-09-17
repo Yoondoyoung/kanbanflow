@@ -4,7 +4,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Project, ProjectMember, Role
+from app.models import Project, ProjectMember, Role, WebhookType
 
 
 @pytest.fixture
@@ -36,7 +36,15 @@ def test_owner_sees_project_webhook_and_member_controls(client, settings_world, 
     assert 'name="confirm"' in page.text
 
 
-def test_member_reads_settings_without_mutation_controls(client, settings_world, login_as):
+def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
+    client, settings_world, engine, login_as
+):
+    with Session(engine) as session:
+        project = session.get(Project, settings_world.project.id)
+        project.webhook_type = WebhookType.SLACK
+        project.webhook_url = "https://hooks.example.test/secret"
+        session.add(project)
+        session.commit()
     login_as(settings_world.member.email)
 
     page = client.get(f"/projects/{settings_world.project.slug}/settings")
@@ -44,6 +52,8 @@ def test_member_reads_settings_without_mutation_controls(client, settings_world,
     assert page.status_code == 200
     assert "Payment Gateway" in page.text
     assert "ada@example.com" in page.text
+    assert "Configured" in page.text
+    assert "https://hooks.example.test/secret" not in page.text
     assert 'data-testid="owner-settings-controls"' not in page.text
     assert f'action="/projects/{settings_world.project.slug}/settings/' not in page.text
 
@@ -70,15 +80,44 @@ def test_webhook_validation_re_renders_settings(client, settings_world, login_as
     response = client.post(
         f"/projects/{settings_world.project.slug}/settings/project",
         data={
-            "name": settings_world.project.name,
+            "name": "<b>Changed</b>",
             "webhook_type": "SLACK",
-            "webhook_url": "http://example.com/hook",
+            "webhook_url": "https://",
             **_csrf(settings_world.owner),
         },
     )
 
     assert response.status_code == 422
-    assert "https URL" in response.text
+    assert "http(s) URL" in response.text
+    assert "&lt;b&gt;Changed&lt;/b&gt;" in response.text
+    assert "<b>Changed</b>" not in response.text
+    assert 'value="https://"' in response.text
+
+
+def test_member_api_redacts_webhook_but_owner_can_read_it(client, settings_world, engine, login_as):
+    secret = "https://hooks.example.test/secret"
+    with Session(engine) as session:
+        project = session.get(Project, settings_world.project.id)
+        project.webhook_type = WebhookType.SLACK
+        project.webhook_url = secret
+        session.add(project)
+        session.commit()
+
+    login_as(settings_world.member.email)
+    member_project = client.get(f"/api/v1/projects/{settings_world.project.slug}")
+    member_list = client.get("/api/v1/projects")
+
+    assert member_project.status_code == 200
+    assert member_project.json()["webhook_url"] is None
+    assert member_list.json()[0]["webhook_url"] is None
+
+    client.post("/api/v1/auth/logout")
+    login_as(settings_world.owner.email)
+    owner_project = client.get(f"/api/v1/projects/{settings_world.project.slug}")
+    owner_page = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert owner_project.json()["webhook_url"] == secret
+    assert secret in owner_page.text
 
 
 def test_owner_adds_changes_and_removes_members(client, settings_world, engine, login_as):

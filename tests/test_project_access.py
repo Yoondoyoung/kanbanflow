@@ -42,7 +42,7 @@ def test_missing_project_is_404_even_for_writes(client, make_user, login_as):
     assert client.patch("/api/v1/projects/nope", json={"name": "X"}).status_code == 404
 
 
-def test_webhook_url_must_be_https_and_present(client, make_user, make_project, login_as):
+def test_webhook_url_must_have_http_or_https_host(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)
     login_as("ada@example.com")
@@ -55,7 +55,7 @@ def test_webhook_url_must_be_https_and_present(client, make_user, make_project, 
             f"/api/v1/projects/{project.slug}",
             json={"webhook_type": "SLACK", "webhook_url": "http://example.com/hook"},
         ).status_code
-        == 422
+        == 200
     )
     assert (
         client.patch(
@@ -64,6 +64,16 @@ def test_webhook_url_must_be_https_and_present(client, make_user, make_project, 
         ).status_code
         == 200
     )
+    for bad_url in ("https://", "https://?token=x", "https://[bad"):
+        response = client.patch(
+            f"/api/v1/projects/{project.slug}",
+            json={"webhook_type": "SLACK", "webhook_url": bad_url},
+        )
+        assert response.status_code == 422
+        assert (
+            response.json()["detail"]
+            == "webhook_url must be an http(s) URL when webhook_type is set"
+        )
 
 
 def test_delete_requires_confirmation(client, make_user, make_project, login_as):
@@ -186,3 +196,22 @@ def test_whitespace_only_name_update_is_rejected(client, make_user, make_project
     assert response.status_code == 422
     # The project's name must be untouched by the rejected update.
     assert client.get(f"/api/v1/projects/{project.slug}").json()["name"] == "Payment Gateway"
+
+
+def test_explicit_null_project_update_fields_are_ignored(client, make_user, make_project, login_as):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner, name="Payment Gateway")
+    login_as(owner.email)
+    configured = client.patch(
+        f"/api/v1/projects/{project.slug}",
+        json={"webhook_type": "SLACK", "webhook_url": "https://example.com/hook"},
+    )
+
+    response = client.patch(
+        f"/api/v1/projects/{project.slug}", json={"name": None, "webhook_type": None}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Payment Gateway"
+    assert response.json()["webhook_type"] == configured.json()["webhook_type"]
+    assert response.json()["webhook_url"] == configured.json()["webhook_url"]

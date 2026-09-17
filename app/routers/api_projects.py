@@ -34,7 +34,7 @@ def _out(project: Project, role: Role | None) -> ProjectOut:
         name=project.name,
         slug=project.slug,
         webhook_type=project.webhook_type,
-        webhook_url=project.webhook_url,
+        webhook_url=project.webhook_url if role == Role.OWNER else None,
         created_at=project.created_at,
         role=role.value if role else None,
     )
@@ -76,7 +76,9 @@ def update_project(
     session: Session = Depends(get_session),
 ):
     project, member = access
-    update_project_service(session, project, **body.model_dump(exclude_unset=True))
+    update_project_service(
+        session, project, **body.model_dump(exclude_unset=True, exclude_none=True)
+    )
     return _out(project, member.role)
 
 

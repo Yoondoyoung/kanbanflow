@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import date
+from urllib.parse import urlparse
 
 from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import delete, text, update
@@ -138,13 +139,23 @@ def update_project(session: Session, project: Project, **changes) -> Project:
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook_url must be at most 500 characters",
         )
-    if webhook_type != WebhookType.NONE and (
-        not webhook_url or not webhook_url.startswith("https://")
-    ):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "webhook_url must be an https URL when webhook_type is set",
-        )
+    if webhook_type != WebhookType.NONE:
+        try:
+            parsed = urlparse(webhook_url or "")
+            valid_webhook_url = (
+                parsed.scheme in ("http", "https")
+                and bool(parsed.netloc)
+                and bool(parsed.hostname)
+                and not any(char.isspace() for char in parsed.netloc)
+            )
+            _ = parsed.port
+        except ValueError:
+            valid_webhook_url = False
+        if not valid_webhook_url:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "webhook_url must be an http(s) URL when webhook_type is set",
+            )
     for field, value in changes.items():
         setattr(project, field, value.strip() if field == "name" else value)
     session.add(project)

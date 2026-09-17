@@ -12,17 +12,17 @@
     {% if role == 'OWNER' %}
     <form action="/projects/{{ project.slug }}/settings/project" method="post" data-testid="owner-settings-controls">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-      <label>Name <input name="name" value="{{ project.name }}" maxlength="100" required></label>
+      <label>Name <input name="name" value="{{ values.get('name', project.name) }}" maxlength="100" required></label>
       <label>Webhook type
         <select name="webhook_type">
-          {% for type in ['NONE', 'SLACK', 'TEAMS', 'DISCORD'] %}<option value="{{ type }}"{% if project.webhook_type.value == type %} selected{% endif %}>{{ type.title() }}</option>{% endfor %}
+          {% for type in ['NONE', 'SLACK', 'TEAMS', 'DISCORD'] %}<option value="{{ type }}"{% if values.get('webhook_type', project.webhook_type.value) == type %} selected{% endif %}>{{ type.title() }}</option>{% endfor %}
         </select>
       </label>
-      <label>Webhook URL <input type="url" name="webhook_url" value="{{ project.webhook_url or '' }}" maxlength="500"></label>
+      <label>Webhook URL <input type="url" name="webhook_url" value="{{ values.get('webhook_url', project.webhook_url or '') }}" maxlength="500"></label>
       <button class="app-primary-button" type="submit">Save settings</button>
     </form>
     {% else %}
-    <p>Name: {{ project.name }}</p><p>Webhook type: {{ project.webhook_type.value.title() }}</p><p>Webhook URL: {{ project.webhook_url or 'Not configured' }}</p>
+    <p>Name: {{ project.name }}</p><p>Webhook type: {{ project.webhook_type.value.title() }}</p><p>Webhook: {{ 'Configured' if project.webhook_url else 'Not configured' }}</p>
     {% endif %}
   </section>
   <section class="backlog-list" aria-labelledby="members-heading">
