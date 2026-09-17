@@ -114,6 +114,19 @@ class _RecordingTasks:
         self.calls.append((func, args, kwargs))
 
 
+def _two_destination_tasks(session, make_user, make_project, email):
+    owner = make_user(email=email)
+    project = session.get(Project, make_project(owner).id)
+    first_url = "https://hooks.example.test/first"
+    second_url = "https://hooks.example.test/second"
+    set_chat_webhook(session, project, WebhookType.SLACK, first_url)
+    set_chat_webhook(session, project, WebhookType.TEAMS, second_url)
+    ticket = create_ticket(session, project, owner, title="Fan out")
+    tasks = _RecordingTasks()
+    schedule(tasks, session, project, EVENT_TICKET_CREATED, ticket)
+    return tasks, first_url, second_url
+
+
 def test_schedule_enqueues_only_a_plain_dict_that_outlives_the_session(
     engine, make_user, make_project
 ):
@@ -189,6 +202,70 @@ def test_failed_first_dispatch_does_not_prevent_second(
         func(*args, **kwargs)
 
     assert attempted == [first_url, second_url]
+
+
+def test_client_constructor_failure_does_not_prevent_second_destination(
+    session, make_user, make_project, monkeypatch
+):
+    tasks, _, second_url = _two_destination_tasks(
+        session, make_user, make_project, "constructor-owner@example.com"
+    )
+    delivered = []
+    constructions = 0
+
+    class WorkingClient:
+        def post(self, url, **kwargs):
+            delivered.append(url)
+            return httpx.Response(200)
+
+        def close(self):
+            pass
+
+    def client_factory(**kwargs):
+        nonlocal constructions
+        constructions += 1
+        if constructions == 1:
+            raise RuntimeError("constructor failed")
+        return WorkingClient()
+
+    monkeypatch.setattr(httpx, "Client", client_factory)
+    for func, args, kwargs in tasks.calls:
+        func(*args, **kwargs)
+
+    assert delivered == [second_url]
+
+
+def test_client_close_failure_does_not_prevent_second_destination(
+    session, make_user, make_project, monkeypatch
+):
+    tasks, first_url, second_url = _two_destination_tasks(
+        session, make_user, make_project, "close-owner@example.com"
+    )
+    delivered = []
+    constructions = 0
+
+    class LifecycleClient:
+        def __init__(self, close_raises):
+            self.close_raises = close_raises
+
+        def post(self, url, **kwargs):
+            delivered.append(url)
+            return httpx.Response(200)
+
+        def close(self):
+            if self.close_raises:
+                raise RuntimeError("close failed")
+
+    def client_factory(**kwargs):
+        nonlocal constructions
+        constructions += 1
+        return LifecycleClient(close_raises=constructions == 1)
+
+    monkeypatch.setattr(httpx, "Client", client_factory)
+    for func, args, kwargs in tasks.calls:
+        func(*args, **kwargs)
+
+    assert delivered == [first_url, second_url]
 
 
 def test_creation_latency_excludes_delivery(client, slack_project, login_as, monkeypatch):

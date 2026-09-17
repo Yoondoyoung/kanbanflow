@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
 import pytest
+from fastapi import Response
 from sqlmodel import Session, select
 
+import app.routers.web_sprints as web_sprints
 from app.auth import make_csrf_token
 from app.models import Project, ProjectMember, Role, WebhookType
 from app.services import chat_webhooks, set_chat_webhook
@@ -96,6 +98,28 @@ def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
     assert 'name="url"' not in page.text
     assert 'data-testid="owner-settings-controls"' not in page.text
     assert f'action="/projects/{settings_world.project.slug}/settings/' not in page.text
+
+
+def test_settings_template_context_contains_only_chat_provider_status(
+    client, settings_world, session, login_as, monkeypatch
+):
+    project = session.get(Project, settings_world.project.id)
+    secret = "https://hooks.example.test/context-secret"
+    set_chat_webhook(session, project, WebhookType.SLACK, secret)
+    captured = {}
+
+    def capture_render(request, name, context, **kwargs):
+        captured.update(context)
+        return Response()
+
+    monkeypatch.setattr(web_sprints, "render", capture_render)
+    login_as(settings_world.owner.email)
+
+    response = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert response.status_code == 200
+    assert captured["chat_integrations"] == {"SLACK": True}
+    assert secret not in repr(captured["chat_integrations"])
 
 
 def test_owner_renames_project_without_changing_its_slug(client, settings_world, engine, login_as):

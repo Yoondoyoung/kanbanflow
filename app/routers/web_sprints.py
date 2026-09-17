@@ -63,7 +63,7 @@ def _settings(
             "active_tab": "settings",
             "members": project_members(session, project.id),
             "chat_integrations": {
-                webhook.provider.value: webhook for webhook in chat_webhooks(session, project.id)
+                webhook.provider.value: True for webhook in chat_webhooks(session, project.id)
             },
             "error": error,
             "saved": saved,

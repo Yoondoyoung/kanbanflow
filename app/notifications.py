@@ -136,17 +136,17 @@ def dispatch(
 ) -> None:
     """Best-effort chat webhook delivery. Never raises.
 
-    Runs after the response has been sent (inside a background task per
-    Task 17), so there is no caller left to handle an exception. Retries
-    up to 3 times with 1s/2s/4s backoff, then logs one WARNING and gives up.
+    Runs after the response has been sent (inside a background task per Task 17),
+    so there is no caller left to handle an exception. Retries up to 3 times with
+    1s/2s/4s backoff, then logs one WARNING and gives up.
     """
     formatter = FORMATTERS.get(webhook_type)
     if formatter is None or not webhook_url:
         return
     owned = client is None
-    client = client or httpx.Client(timeout=TIMEOUT_SECONDS)
     try:
         try:
+            client = client or httpx.Client(timeout=TIMEOUT_SECONDS)
             body = formatter(payload)
             for attempt in range(len(BACKOFF_SECONDS) + 1):
                 try:
@@ -158,24 +158,24 @@ def dispatch(
                 if attempt < len(BACKOFF_SECONDS):
                     time.sleep(BACKOFF_SECONDS[attempt])
             logger.warning(
-                "chat webhook delivery failed after %d attempts: project_id=%s ticket_number=%s",
+                "chat webhook delivery failed after %d attempts: "
+                "project_id=%s ticket_number=%s",
                 len(BACKOFF_SECONDS) + 1,
                 payload.get("project_id"),
                 payload.get("ticket_number"),
             )
-        except Exception:
-            # Anything beyond httpx.HTTPError (a malformed payload, a broken
-            # formatter, a non-JSON-serializable body, ...) must not escape:
-            # dispatch runs in a background task with no caller to catch it.
-            logger.warning(
-                "chat webhook delivery raised unexpectedly: project_id=%s ticket_number=%s",
-                payload.get("project_id"),
-                payload.get("ticket_number"),
-                exc_info=True,
-            )
-    finally:
-        if owned:
-            client.close()
+        finally:
+            if owned and client is not None:
+                client.close()
+    except Exception:
+        # Construction, formatting, delivery, and owned-client cleanup are all
+        # best-effort because background-task exceptions stop later tasks.
+        logger.warning(
+            "chat webhook delivery raised unexpectedly: project_id=%s ticket_number=%s",
+            payload.get("project_id"),
+            payload.get("ticket_number"),
+            exc_info=True,
+        )
 
 
 def schedule(
