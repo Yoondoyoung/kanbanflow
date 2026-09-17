@@ -104,11 +104,48 @@ The available commands are:
 - `POST /api/v1/sprints/{id}/close`
 - `GET /api/v1/sprints/{id}/history`
 
+## MCP sprint tools
+
+The local MCP server uses stdio and calls this application's API; it does not
+open another network service. Start the web API first, then, while logged in,
+issue a personal API token with `POST /api/v1/tokens` and a JSON body such as
+`{"label":"local-mcp"}`. The response's `token` value is shown exactly once;
+copy it into a local `.env.mcp` file (start from `.env.mcp.example`) and never
+commit the plaintext token.
+
+```dotenv
+KANBANFLOW_BASE_URL=http://localhost:8000
+KANBANFLOW_API_TOKEN=paste-the-token-shown-once
+```
+
+Configure your MCP client to launch the server as a stdio process, with those
+two values in its environment:
+
+```json
+{
+  "command": "uv",
+  "args": ["run", "mcp", "run", "app/mcp_server.py"],
+  "env": {
+    "KANBANFLOW_BASE_URL": "http://localhost:8000",
+    "KANBANFLOW_API_TOKEN": "paste-the-token-shown-once"
+  }
+}
+```
+
+Equivalently, after loading those variables in your shell, run:
+
+```bash
+uv run mcp run app/mcp_server.py
+```
+
+The tools list sprints available to the token's user and let project **OWNER**s
+create, start, and close sprints. Revoke a lost or unused token with
+`DELETE /api/v1/tokens/{token_id}`; deletion is idempotent and immediately
+prevents further bearer-token use.
+
 ## Out of scope for this slice
 
-AI reports, GitHub webhooks, the `ApiToken` / personal-access-token system,
-the MCP server, and rate limiting are slice-2 work and are intentionally
-absent here — their absence is not a defect in this slice.
+AI reports, GitHub webhooks, and rate limiting are out of scope.
 
 ## Design documents
 

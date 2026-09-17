@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 .venv/
 .env
+.env.*
+!.env.example
+!.env.mcp.example
 *.db
 *.db-wal
 *.db-shm
