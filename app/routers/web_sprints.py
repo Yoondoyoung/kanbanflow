@@ -60,6 +60,8 @@ def _backlog(
             "planning_ticket_count": len(planning_tickets),
             "planning_points": sum(ticket.story_points or 0 for ticket in planning_tickets),
             "tickets": tickets,
+            "sprint": None,
+            "ticket_target": "#backlog-tickets",
             "values": {},
             "field_errors": {},
             "error": None,

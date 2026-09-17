@@ -424,6 +424,7 @@ def update_ticket_form(
     slug: str,
     ticket_number: int,
     request: Request,
+    tasks: BackgroundTasks,
     title: str = Form(...),
     description: str = Form(""),
     type: str = Form(...),
@@ -459,6 +460,7 @@ def update_ticket_form(
             status_update.status,
             status_update.resolution_notes,
             project=project,
+            tasks=tasks,
         )
     except (ValidationError, ValueError) as exc:
         error = (

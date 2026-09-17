@@ -4,7 +4,7 @@
        role="dialog" aria-modal="true" aria-labelledby="ticket-modal-heading">
     <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
     <form hx-post="/projects/{{ project.slug }}/tickets"
-          hx-target="#column-BACKLOG"
+          hx-target="{{ ticket_target|default('#column-BACKLOG') }}"
           hx-swap="afterbegin"
           @htmx:after-request="if ($event.detail.successful) { modal = false; error = ''; $el.reset(); } else { error = $event.detail.xhr.responseText; }"
           class="space-y-3">
@@ -13,7 +13,7 @@
       <div>
         <label for="ticket-sprint" class="block text-xs font-medium mb-1">Destination</label>
         <select id="ticket-sprint" class="w-full border rounded px-3 py-2" name="sprint_id">
-          <option value="">Backlog</option>
+          <option value=""{% if not sprint %} selected{% endif %}>Backlog</option>
           {% for destination in destination_sprints|default([]) %}
           <option value="{{ destination.id }}"{% if sprint and destination.id == sprint.id %} selected{% endif %}>{{ destination.name }}</option>
           {% endfor %}

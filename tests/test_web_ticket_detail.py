@@ -5,7 +5,17 @@ import pytest
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Priority, Sprint, SprintStatus, Ticket, TicketStatus, TicketType
+from app.models import (
+    Priority,
+    Project,
+    Sprint,
+    SprintStatus,
+    Ticket,
+    TicketStatus,
+    TicketType,
+    WebhookType,
+)
+from app.notifications import EVENT_TICKET_DONE
 
 
 @pytest.fixture
@@ -235,3 +245,45 @@ def test_outsider_cannot_read_ticket_detail(client, ticket_world, login_as):
     response = client.get(f"/projects/{ticket_world.project.slug}/tickets/1")
 
     assert response.status_code == 404
+
+
+def test_detail_done_update_queues_one_done_notification_and_failed_update_queues_none(
+    client, ticket_world, engine, login_as, monkeypatch
+):
+    sent = []
+    with Session(engine) as session:
+        project = session.get(Project, ticket_world.project.id)
+        project.webhook_type = WebhookType.SLACK
+        project.webhook_url = "https://example.com/hook"
+        session.add(project)
+        session.commit()
+    monkeypatch.setattr("app.notifications.dispatch", lambda _, __, payload: sent.append(payload))
+    login_as(ticket_world.owner.email)
+
+    done = client.post(
+        f"/projects/{ticket_world.project.slug}/tickets/1",
+        data={
+            "title": "Unsafe details",
+            "description": "Text",
+            "type": "BUG",
+            "priority": "HIGH",
+            "status": "DONE",
+            "_csrf": make_csrf_token(ticket_world.owner.id),
+        },
+    )
+    failed = client.post(
+        f"/projects/{ticket_world.project.slug}/tickets/1",
+        data={
+            "title": "Unsafe details",
+            "description": "Text",
+            "type": "BUG",
+            "priority": "HIGH",
+            "status": "DONE",
+            "assignee_id": ticket_world.outsider.id,
+            "_csrf": make_csrf_token(ticket_world.owner.id),
+        },
+    )
+
+    assert done.status_code == 200
+    assert failed.status_code == 422
+    assert [payload["event"] for payload in sent] == [EVENT_TICKET_DONE]

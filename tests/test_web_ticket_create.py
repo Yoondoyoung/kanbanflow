@@ -2,10 +2,10 @@ import re
 from datetime import date
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Sprint, SprintStatus
+from app.models import Sprint, SprintStatus, Ticket
 
 
 @pytest.fixture
@@ -147,3 +147,29 @@ def test_five_interactions_or_fewer(client, active_sprint, login_as):
     modal = page.split('id="ticket-modal"')[1].split("</form>")[0]
     required = re.findall(r"<(?:input|select|textarea)[^>]*\brequired\b[^>]*>", modal)
     assert len(required) <= 2, "only title and type may be required"
+
+
+def test_backlog_modal_defaults_to_backlog_and_members_can_create_there(
+    client, make_user, make_project, add_member, engine, login_as
+):
+    owner = make_user(email="ada@example.com")
+    member = make_user(email="bob@example.com")
+    project = make_project(owner)
+    add_member(project, member)
+    login_as(member.email)
+
+    page = client.get(f"/projects/{project.slug}/backlog")
+    response = client.post(
+        f"/projects/{project.slug}/tickets",
+        data={"title": "Backlog ticket", "type": "TASK", "_csrf": make_csrf_token(member.id)},
+    )
+    with Session(engine) as session:
+        ticket = session.exec(
+            select(Ticket).where(Ticket.project_id == project.id, Ticket.ticket_number == 1)
+        ).one()
+
+    assert "New ticket" in page.text
+    assert 'hx-target="#backlog-tickets"' in page.text
+    assert '<option value="" selected>Backlog</option>' in page.text
+    assert response.status_code == 201
+    assert ticket.sprint_id is None
