@@ -8,11 +8,20 @@ from fastapi.templating import Jinja2Templates
 from app.auth import SESSION_COOKIE
 from app.config import settings
 from app.rendering import render_markdown
-from app.routers import api_auth, api_projects, api_sprints, api_tickets, web, web_sprints
+from app.routers import (
+    api_auth,
+    api_projects,
+    api_sprints,
+    api_tickets,
+    api_tokens,
+    web,
+    web_sprints,
+)
 
 app = FastAPI(title="Kanban Flow")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 app.include_router(api_auth.router)
+app.include_router(api_tokens.router)
 app.include_router(api_projects.router)
 app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
@@ -27,6 +36,7 @@ async def block_foreign_origin_cookie_writes(request: Request, call_next):
         request.method in UNSAFE_METHODS
         and request.url.path.startswith("/api/v1/")
         and SESSION_COOKIE in request.cookies
+        and "authorization" not in request.headers
         and origin
         and origin not in settings.allowed_origins
     ):

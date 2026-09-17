@@ -1,3 +1,7 @@
+import hashlib
+import secrets
+from datetime import timedelta
+
 import bcrypt
 from fastapi import Depends, HTTPException, Request, status
 from itsdangerous import BadData, URLSafeTimedSerializer
@@ -5,7 +9,7 @@ from sqlmodel import Session, select
 
 from app.config import settings
 from app.db import get_session
-from app.models import Project, ProjectMember, Role, User
+from app.models import ApiToken, Project, ProjectMember, Role, User, utcnow
 
 SESSION_COOKIE = "kf_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 14
@@ -43,7 +47,56 @@ def read_session_cookie(raw: str) -> str | None:
         return None
 
 
+def issue_api_token(session: Session, user: User, label: str) -> tuple[ApiToken, str]:
+    plaintext = f"kf_{secrets.token_urlsafe(32)}"
+    token = ApiToken(
+        user_id=user.id,
+        label=label,
+        prefix=plaintext[:10],
+        token_hash=hashlib.sha256(plaintext.encode()).hexdigest(),
+    )
+    session.add(token)
+    session.commit()
+    session.refresh(token)
+    return token, plaintext
+
+
+def _bearer_token(authorization: str) -> str | None:
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1]:
+        return None
+    return parts[1]
+
+
+def _is_older_than_an_hour(value) -> bool:
+    if value is None:
+        return True
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=utcnow().tzinfo)
+    return utcnow() - value > timedelta(hours=1)
+
+
 def optional_user(request: Request, session: Session = Depends(get_session)) -> User | None:
+    authorization = request.headers.get("authorization")
+    if authorization is not None:
+        plaintext = _bearer_token(authorization)
+        if plaintext is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        token_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+        token = session.exec(
+            select(ApiToken).where(ApiToken.token_hash == token_hash, ApiToken.revoked_at.is_(None))
+        ).first()
+        if token is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        user = session.get(User, token.user_id)
+        if user is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        if _is_older_than_an_hour(token.last_used_at):
+            token.last_used_at = utcnow()
+            session.add(token)
+            session.commit()
+        return user
+
     raw = request.cookies.get(SESSION_COOKIE)
     if not raw:
         return None

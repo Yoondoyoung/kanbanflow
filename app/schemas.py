@@ -41,6 +41,31 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class TokenCreate(BaseModel):
+    label: str = Field(min_length=1, max_length=100)
+
+    @field_validator("label")
+    @classmethod
+    def _strip_and_reject_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("label must not be blank")
+        return value
+
+
+class TokenOut(BaseModel):
+    id: str
+    label: str
+    prefix: str
+    created_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+
+class TokenIssued(TokenOut):
+    token: str
+
+
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
