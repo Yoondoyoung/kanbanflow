@@ -65,6 +65,8 @@ def test_dialogs_have_names_escape_handling_and_focus_targets():
         assert "$refs.ticketModal.showModal()" in page
         assert "$refs.ticketTitle.focus()" in page
     assert "@htmx:after-request.camel=" in ticket_modal
+    assert "$event.detail.xhr.status >= 200 && $event.detail.xhr.status < 300" in ticket_modal
+    assert "$event.detail.successful" not in ticket_modal
     assert "ticketError = $event.detail.xhr.responseText" in ticket_modal
     assert "ticketError = ''; $el.reset()" in ticket_modal
     assert '@cancel="$event.preventDefault(); $el.close()"' in close_dialog

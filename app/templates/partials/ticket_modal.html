@@ -5,7 +5,7 @@
     <h2 id="ticket-modal-heading" class="font-semibold mb-3">New ticket</h2>
     <form hx-post="/projects/{{ project.slug }}/tickets"
           hx-swap="none"
-          @htmx:after-request.camel="if ($event.detail.successful) { $refs.ticketModal.close(); ticketError = ''; $el.reset(); } else { ticketError = $event.detail.xhr.responseText; }"
+          @htmx:after-request.camel="if ($event.detail.xhr.status >= 200 && $event.detail.xhr.status < 300) { $refs.ticketModal.close(); ticketError = ''; $el.reset(); } else { ticketError = $event.detail.xhr.responseText; }"
           class="space-y-3">
       <p x-show="ticketError" x-text="ticketError" class="text-red-600 text-xs" role="alert"></p>
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
