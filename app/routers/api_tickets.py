@@ -12,6 +12,7 @@ from app.models import (
     SprintTicketHistory,
     Ticket,
     TicketComment,
+    TicketGitLink,
     TicketStatus,
     TicketType,
     User,
@@ -175,6 +176,7 @@ def delete_ticket(
         select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
+    session.execute(delete(TicketGitLink).where(TicketGitLink.ticket_id == ticket.id))
     session.execute(delete(TicketComment).where(TicketComment.ticket_id == ticket.id))
     session.delete(ticket)
     session.commit()

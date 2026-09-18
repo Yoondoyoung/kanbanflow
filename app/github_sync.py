@@ -194,12 +194,16 @@ def extract_ticket_numbers(
         rf"(?<![A-Z0-9]){re.escape(project_key)}-([1-9][0-9]*)(?![A-Z0-9])",
         re.IGNORECASE,
     )
-    return {
-        int(match.group(1))
-        for text in texts
-        if isinstance(text, str)
-        for match in pattern.finditer(text)
-    }
+    numbers = set()
+    for text in texts:
+        if not isinstance(text, str):
+            continue
+        for match in pattern.finditer(text):
+            try:
+                numbers.add(int(match.group(1)))
+            except ValueError:
+                continue
+    return numbers
 
 
 def parse_github_datetime(value: str) -> datetime:

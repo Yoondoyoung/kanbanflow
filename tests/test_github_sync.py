@@ -72,6 +72,10 @@ def test_extract_ticket_numbers_is_case_insensitive_and_boundary_aware():
     ) == {7, 104}
 
 
+def test_extract_ticket_numbers_ignores_oversized_reference_and_keeps_valid():
+    assert extract_ticket_numbers("PAY", [f"PAY-{'9' * 5000} PAY-104"]) == {104}
+
+
 def test_review_aggregation_uses_latest_effective_review_per_login():
     reviews = [
         {

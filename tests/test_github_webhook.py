@@ -577,6 +577,71 @@ def test_push_stores_only_linked_commits_with_sha_derived_url(
     assert connected_repo.first.status is TicketStatus.IN_PROGRESS
 
 
+def test_push_ignores_oversized_reference_and_commits_delivery_and_valid_commit(
+    signed_webhook, connected_repo, session
+):
+    valid_sha = "d" * 40
+
+    response = signed_webhook(
+        "push",
+        {
+            "installation": {"id": 7001},
+            "repository": {"id": 501},
+            "commits": [
+                {
+                    "id": "c" * 40,
+                    "message": f"{connected_repo.project.key}-{'9' * 5000}",
+                    "timestamp": "2026-09-17T14:00:00Z",
+                },
+                {
+                    "id": valid_sha,
+                    "message": f"Ship {connected_repo.project.key}-1",
+                    "timestamp": "2026-09-17T14:01:00Z",
+                },
+            ],
+        },
+        "oversized-reference",
+    )
+
+    assert response.status_code == 200
+    assert session.exec(
+        select(IntegrationDelivery).where(IntegrationDelivery.delivery_id == "oversized-reference")
+    ).one()
+    artifact = session.exec(select(GitHubArtifact)).one()
+    assert artifact.external_id == valid_sha
+    assert session.get(TicketGitLink, (connected_repo.first.id, artifact.id)) is not None
+
+
+def test_delete_linked_ticket_preserves_github_artifact_and_other_ticket(
+    client, connected_repo, login_as, session
+):
+    artifact = _stored_pull(session, connected_repo)
+    first_id = connected_repo.first.id
+    second_id = connected_repo.second.id
+    artifact_id = artifact.id
+    session.add_all(
+        [
+            TicketGitLink(ticket_id=first_id, artifact_id=artifact_id),
+            TicketGitLink(ticket_id=second_id, artifact_id=artifact_id),
+        ]
+    )
+    session.commit()
+    login_as(connected_repo.owner.email)
+
+    try:
+        response = client.delete(f"/api/v1/tickets/{first_id}")
+    except IntegrityError as exc:
+        pytest.fail(f"linked ticket deletion raised IntegrityError: {exc}")
+
+    assert response.status_code == 204, response.text
+    session.expire_all()
+    assert session.get(Ticket, first_id) is None
+    assert session.get(Ticket, second_id) is not None
+    assert session.get(GitHubArtifact, artifact_id) is not None
+    assert session.get(TicketGitLink, (first_id, artifact_id)) is None
+    assert session.get(TicketGitLink, (second_id, artifact_id)) is not None
+
+
 def test_installation_repositories_removed_marks_only_listed_repository_attention_required(
     signed_webhook, connected_repo, session
 ):

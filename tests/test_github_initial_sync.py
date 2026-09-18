@@ -63,3 +63,31 @@ def test_initial_sync_ignores_non_open_pull_requests(session, github_sync_world)
     assert github.review_calls == []
     assert github.check_calls == []
     assert session.exec(select(GitHubArtifact)).all() == []
+
+
+def test_initial_sync_ignores_oversized_reference_and_imports_valid_pull(
+    session, github_sync_world
+):
+    github = FakeGitHub()
+    github.open_pull_requests = lambda installation_id, full_name: [
+        {
+            **_pull(title="oversized", body=f"PAY-{'9' * 5000}"),
+            "id": 9004,
+            "node_id": "PR_node_9004",
+            "number": 20,
+            "head": {"ref": "feature/oversized", "sha": "d" * 40},
+        },
+        {
+            **_pull(title="PAY-1 valid", body=""),
+            "id": 9005,
+            "node_id": "PR_node_9005",
+            "number": 21,
+            "head": {"ref": "feature/valid", "sha": "e" * 40},
+        },
+    ]
+
+    assert sync_open_pull_requests(session, github_sync_world.connection, github) == 1
+    session.commit()
+    assert [artifact.title for artifact in session.exec(select(GitHubArtifact)).all()] == [
+        "PAY-1 valid"
+    ]
