@@ -114,6 +114,63 @@ def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_wor
     assert f'href="/projects/{project.slug}">Clear filters</a>' in page
 
 
+def test_board_enables_the_sketch_scope_without_theming_nested_dialogs(
+    client, active_sprint_world, login_as
+):
+    login_as(active_sprint_world.owner.email)
+    response = client.get(f"/projects/{active_sprint_world.project.slug}?mine=1")
+
+    assert response.status_code == 200
+    assert 'class="project-board sketch-board"' in response.text
+    assert 'class="board-filter-summary">Filters active</p>' in response.text
+    assert '<dialog id="ticket-modal"' in response.text
+    assert 'id="ticket-modal" x-ref="ticketModal" class="app-dialog"' in response.text
+    assert "sketch-ticket-detail" not in response.text
+
+
+def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
+    response = client.get("/static/app.css")
+    assert response.status_code == 200
+    css = response.text
+
+    root_tokens = css.split(":root {", 1)[1].split("}", 1)[0]
+    assert "--sketch-" not in root_tokens
+    for selector in (
+        ".sketch-board > .project-header",
+        ".sketch-board > .project-navigation",
+        ".sketch-board > .board-filters",
+        ".sketch-board .board-workspace",
+    ):
+        assert selector in css
+    for forbidden_selector in (
+        ".sketch-board .app-dialog",
+        ".sketch-board .app-form",
+        ".sketch-board .app-primary-button",
+    ):
+        assert forbidden_selector not in css
+
+    assert "radial-gradient(circle, var(--sketch-erased) 1px, transparent 1px)" in css
+    assert "background-size: var(--sketch-dot-size) var(--sketch-dot-size);" in css
+    assert "grid-template-columns: repeat(4, minmax(240px, 1fr));" in css
+    assert ".sketch-board .board-workspace .board-scroll {" in css
+    assert "overflow-x: auto;" in css
+    for index, angle in enumerate(("-0.25deg", "0.35deg", "-0.15deg", "0.2deg"), 1):
+        rule = css.split(
+            f".sketch-board .ticket-card:nth-child(4n + {index}) {{", 1
+        )[1].split("}", 1)[0]
+        assert f"transform: rotate({angle});" in rule
+    assert ".sketch-board .ticket-card:hover {" in css
+    hover_rule = css.split(".sketch-board .ticket-card:hover {", 1)[1].split("}", 1)[0]
+    assert "border-color: var(--sketch-blue-ink);" in hover_rule
+    assert "transform:" not in hover_rule
+
+    mobile = css.split("@media (max-width: 767px)", 1)[1]
+    reduced = css.split("@media (prefers-reduced-motion: reduce)", 1)[1]
+    assert ".sketch-board { padding: var(--space-4); }" in mobile
+    assert ".sketch-board .ticket-card { transform: none; }" in mobile
+    assert ".sketch-board .ticket-card { transform: none; }" in reduced
+
+
 def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
     client, active_sprint_world, login_as
 ):

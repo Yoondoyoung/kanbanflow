@@ -277,6 +277,311 @@ button, input, select, textarea { font: inherit; }
   --sketch-font-hand: "Patrick Hand", cursive;
 }
 
+.sketch-board {
+  background-color: var(--sketch-paper);
+  background-image: radial-gradient(circle, var(--sketch-erased) 1px, transparent 1px);
+  background-size: var(--sketch-dot-size) var(--sketch-dot-size);
+  color: var(--sketch-pencil);
+  padding: var(--space-6);
+}
+
+.sketch-board > .project-header {
+  background: transparent;
+}
+
+.sketch-board > .project-header .project-title {
+  color: var(--sketch-pencil);
+  font-family: var(--sketch-font-heading);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.sketch-board > .project-header .sprint-title {
+  font-family: var(--sketch-font-heading);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sketch-board > .project-header .sprint-meta,
+.sketch-board > .project-header .sprint-status {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sketch-board > .project-header .sprint-status {
+  font-weight: 600;
+}
+
+.sketch-board > .project-header .sprint-selector,
+.sketch-board > .board-filters {
+  background: var(--sketch-paper);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-panel);
+  padding: var(--space-2) var(--space-3);
+}
+
+.sketch-board > .project-header .sprint-selector label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sketch-board > .project-navigation .project-tabs {
+  border-bottom: 2px solid var(--sketch-pencil);
+}
+
+.sketch-board > .project-navigation .project-tab {
+  color: var(--sketch-pencil);
+  font-family: var(--sketch-font-hand);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.2;
+  min-height: 44px;
+}
+
+.sketch-board > .project-navigation .project-tab.is-active {
+  border-bottom: 2px solid var(--sketch-blue-ink);
+  color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-navigation .project-tab:hover,
+.sketch-board > .project-navigation .project-settings-link:hover {
+  color: var(--sketch-blue-ink);
+  text-decoration-color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-navigation .project-settings-link {
+  min-height: 44px;
+}
+
+.sketch-board > .board-filters label,
+.sketch-board > .board-filters .board-filter-summary {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sketch-board > .board-filters .board-filter-check {
+  min-height: 44px;
+}
+
+.sketch-board > .board-filters .board-filter-summary {
+  background: var(--sketch-post-it);
+  border: 2px solid var(--sketch-pencil);
+  border-radius: var(--sketch-radius-control);
+  color: var(--sketch-pencil);
+  padding: var(--space-1) var(--space-2);
+}
+
+.sketch-board > .project-header .sprint-selector select,
+.sketch-board > .board-filters select {
+  background: var(--sketch-erased);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-control);
+  color: var(--sketch-pencil);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  min-height: 44px;
+}
+
+.sketch-board > .project-header .sprint-selector select:hover,
+.sketch-board > .board-filters select:hover {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-header .sprint-selector select:disabled,
+.sketch-board > .board-filters select:disabled {
+  background: var(--sketch-erased);
+  color: var(--sketch-pencil);
+}
+
+.sketch-board > .project-header .app-primary-button,
+.sketch-board > .project-header .app-secondary-button,
+.sketch-board > .project-header .app-ghost-button,
+.sketch-board > .project-header .app-danger-button,
+.sketch-board > .board-filters .app-primary-button,
+.sketch-board > .board-filters .app-secondary-button,
+.sketch-board > .board-filters .app-ghost-button,
+.sketch-board > .board-filters .app-danger-button {
+  border-radius: var(--sketch-radius-control);
+  font-family: var(--sketch-font-hand);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.2;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.sketch-board > .project-header .app-primary-button,
+.sketch-board > .board-filters .app-primary-button {
+  background: var(--sketch-blue-ink);
+  border: 2px solid var(--sketch-blue-ink);
+  color: var(--sketch-paper);
+}
+
+.sketch-board > .project-header .app-secondary-button,
+.sketch-board > .board-filters .app-secondary-button {
+  background: var(--sketch-paper);
+  border: 2px solid var(--sketch-pencil);
+  color: var(--sketch-pencil);
+}
+
+.sketch-board > .project-header .app-ghost-button,
+.sketch-board > .board-filters .app-ghost-button {
+  background: transparent;
+  border: 2px solid transparent;
+  color: var(--sketch-pencil);
+}
+
+.sketch-board > .project-header .app-danger-button,
+.sketch-board > .board-filters .app-danger-button {
+  background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper));
+  border: 2px solid var(--sketch-correction);
+  color: var(--sketch-pencil);
+}
+
+.sketch-board > .project-header :is(.app-primary-button, .app-secondary-button, .app-ghost-button):hover,
+.sketch-board > .board-filters :is(.app-primary-button, .app-secondary-button, .app-ghost-button):hover {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-header .app-ghost-button:hover,
+.sketch-board > .board-filters .app-ghost-button:hover {
+  background: var(--sketch-erased);
+}
+
+.sketch-board > .project-header .app-danger-button:hover,
+.sketch-board > .board-filters .app-danger-button:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-header :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):active,
+.sketch-board > .board-filters :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):active {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-board > .project-header :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):disabled,
+.sketch-board > .project-header :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button)[aria-disabled="true"],
+.sketch-board > .board-filters :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):disabled,
+.sketch-board > .board-filters :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button)[aria-disabled="true"] {
+  background: var(--sketch-erased);
+  border: var(--sketch-border);
+  color: var(--sketch-pencil);
+}
+
+.sketch-board > .project-header :is(select, .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):focus-visible,
+.sketch-board > .project-navigation :is(.project-tab, .project-settings-link):focus-visible,
+.sketch-board > .board-filters :is(select, input, .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):focus-visible {
+  outline: 3px solid var(--sketch-blue-ink);
+  outline-offset: 2px;
+}
+
+.sketch-board .board-workspace .board-scroll {
+  overflow-x: auto;
+}
+
+.sketch-board .board-workspace .board-columns {
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  min-width: 1000px;
+}
+
+.sketch-board .board-workspace .board-column {
+  background: var(--sketch-erased);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-panel);
+  box-shadow: none;
+}
+
+.sketch-board .board-workspace .board-column h2 {
+  color: var(--sketch-pencil);
+  font-family: var(--sketch-font-heading);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.sketch-board .board-workspace .board-column h2 span {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sketch-board .board-workspace .ticket-card {
+  background: var(--sketch-paper);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-card);
+  box-shadow: var(--sketch-shadow);
+}
+
+.sketch-board .ticket-card:hover {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-board .ticket-card:active {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-board .board-workspace .ticket-card-title {
+  font-family: var(--sketch-font-hand);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sketch-board .board-workspace .ticket-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.sketch-board .board-workspace .ticket-card-meta {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sketch-board .board-workspace .board-empty-state {
+  border: 2px dashed var(--sketch-pencil);
+  border-radius: var(--sketch-radius-panel);
+  color: var(--sketch-pencil);
+  min-width: 100%;
+  padding: var(--space-4);
+}
+
+.sketch-board .board-workspace .board-truncated {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sketch-board .board-workspace .ticket-card-open {
+  min-height: 44px;
+}
+
+.sketch-board .board-workspace .ticket-card-open:focus-visible {
+  outline: 3px solid var(--sketch-blue-ink);
+  outline-offset: 2px;
+}
+
+.sketch-board .ticket-card:nth-child(4n + 1) { transform: rotate(-0.25deg); }
+.sketch-board .ticket-card:nth-child(4n + 2) { transform: rotate(0.35deg); }
+.sketch-board .ticket-card:nth-child(4n + 3) { transform: rotate(-0.15deg); }
+.sketch-board .ticket-card:nth-child(4n + 4) { transform: rotate(0.2deg); }
+
 @media (max-width: 767px) {
   .app-shell { display: block; }
   .app-mobile-header { align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); display: flex; gap: var(--space-3); min-height: 56px; padding: 0 var(--space-4); }
@@ -303,8 +608,16 @@ button, input, select, textarea { font: inherit; }
   .settings-member-controls select, .settings-member-controls .app-secondary-button { flex: 1; }
   .auth-main { padding-top: var(--space-6); }
   .auth-card { padding: var(--space-5); }
+  .sketch-board { padding: var(--space-4); }
+  .sketch-board > .project-header,
+  .sketch-board > .board-filters,
+  .sketch-board > .board-filters .board-filter-controls {
+    align-items: stretch;
+  }
+  .sketch-board .ticket-card { transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+  .sketch-board .ticket-card { transform: none; }
 }
