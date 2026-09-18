@@ -231,6 +231,54 @@ async def test_project_tools_delegate_to_the_api(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_ticket_tools_delegate_to_the_api(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return {} if method != "DELETE" else None
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        await client.call_tool("create_ticket", {"slug": "mcp-check", "title": "MCP ticket"})
+        await client.call_tool("list_tickets", {"slug": "mcp-check", "status": "BACKLOG", "limit": 10})
+        await client.call_tool("get_ticket", {"ticket_id": "ticket-1"})
+        await client.call_tool("update_ticket", {"ticket_id": "ticket-1", "changes": {"title": "Renamed"}})
+        await client.call_tool(
+            "update_ticket_status",
+            {"ticket_id": "ticket-1", "status": "IN_PROGRESS"},
+        )
+        await client.call_tool("delete_ticket", {"ticket_id": "ticket-1"})
+
+    assert calls == [
+        (
+            "POST",
+            "/api/v1/tickets",
+            {
+                "slug": "mcp-check",
+                "title": "MCP ticket",
+                "description": "",
+                "type": "TASK",
+                "priority": "MEDIUM",
+                "story_points": None,
+                "sprint_id": None,
+                "assignee_id": None,
+            },
+        ),
+        ("GET", "/api/v1/projects/mcp-check/tickets?status=BACKLOG&limit=10", None),
+        ("GET", "/api/v1/tickets/ticket-1", None),
+        ("PATCH", "/api/v1/tickets/ticket-1", {"title": "Renamed"}),
+        (
+            "PATCH",
+            "/api/v1/tickets/ticket-1/status",
+            {"status": "IN_PROGRESS", "resolution_notes": None},
+        ),
+        ("DELETE", "/api/v1/tickets/ticket-1", None),
+    ]
+
+
+@pytest.mark.anyio
 async def test_sprint_tools_expose_typed_input_schemas():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
@@ -245,6 +293,12 @@ async def test_sprint_tools_expose_typed_input_schemas():
         "create_sprint",
         "start_sprint",
         "close_sprint",
+        "create_ticket",
+        "list_tickets",
+        "get_ticket",
+        "update_ticket",
+        "update_ticket_status",
+        "delete_ticket",
     }
     assert tools["create_project"].input_schema["required"] == ["name"]
     assert tools["list_sprints"].input_schema["required"] == ["slug"]
@@ -259,6 +313,12 @@ async def test_sprint_tools_expose_typed_input_schemas():
     assert tools["create_sprint"].input_schema["properties"]["end_date"]["format"] == "date"
     assert tools["start_sprint"].input_schema["required"] == ["sprint_id"]
     assert tools["close_sprint"].input_schema["required"] == ["sprint_id", "next_sprint_id"]
+    assert tools["create_ticket"].input_schema["required"] == ["slug", "title"]
+    assert tools["list_tickets"].input_schema["required"] == ["slug"]
+    assert tools["get_ticket"].input_schema["required"] == ["ticket_id"]
+    assert tools["update_ticket"].input_schema["required"] == ["ticket_id", "changes"]
+    assert tools["update_ticket_status"].input_schema["required"] == ["ticket_id", "status"]
+    assert tools["delete_ticket"].input_schema["required"] == ["ticket_id"]
 
 
 @pytest.mark.anyio

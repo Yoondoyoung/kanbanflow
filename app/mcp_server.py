@@ -6,6 +6,8 @@ from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.models import Priority, TicketStatus, TicketType
+
 
 class MCPSettings(BaseSettings):
     api_token: str
@@ -121,6 +123,89 @@ async def delete_project(slug: str, confirm_slug: str) -> None:
         "DELETE",
         _with_query(f"/api/v1/projects/{_path_segment(slug)}", confirm=confirm_slug),
     )
+
+
+@mcp.tool()
+async def create_ticket(
+    slug: str,
+    title: str,
+    description: str = "",
+    type: TicketType = TicketType.TASK,
+    priority: Priority = Priority.MEDIUM,
+    story_points: int | None = None,
+    sprint_id: str | None = None,
+    assignee_id: str | None = None,
+) -> dict[str, object]:
+    return await _tool_request(
+        "POST",
+        "/api/v1/tickets",
+        {
+            "slug": slug,
+            "title": title,
+            "description": description,
+            "type": type.value,
+            "priority": priority.value,
+            "story_points": story_points,
+            "sprint_id": sprint_id,
+            "assignee_id": assignee_id,
+        },
+    )
+
+
+@mcp.tool()
+async def list_tickets(
+    slug: str,
+    status: TicketStatus | None = None,
+    type: TicketType | None = None,
+    priority: Priority | None = None,
+    sprint_id: str | None = None,
+    assignee_id: str | None = None,
+    cursor: int | None = None,
+    limit: int | None = None,
+) -> dict[str, object]:
+    return await _tool_request(
+        "GET",
+        _with_query(
+            f"/api/v1/projects/{_path_segment(slug)}/tickets",
+            status=status.value if status else None,
+            type=type.value if type else None,
+            priority=priority.value if priority else None,
+            sprint_id=sprint_id,
+            assignee_id=assignee_id,
+            cursor=cursor,
+            limit=limit,
+        ),
+    )
+
+
+@mcp.tool()
+async def get_ticket(ticket_id: str) -> dict[str, object]:
+    return await _tool_request("GET", f"/api/v1/tickets/{_path_segment(ticket_id)}")
+
+
+@mcp.tool()
+async def update_ticket(ticket_id: str, changes: dict[str, object]) -> dict[str, object]:
+    return await _tool_request(
+        "PATCH", f"/api/v1/tickets/{_path_segment(ticket_id)}", changes
+    )
+
+
+@mcp.tool()
+async def update_ticket_status(
+    ticket_id: str,
+    status: TicketStatus,
+    resolution_notes: str | None = None,
+) -> dict[str, object]:
+    return await _tool_request(
+        "PATCH",
+        f"/api/v1/tickets/{_path_segment(ticket_id)}/status",
+        {"status": status.value, "resolution_notes": resolution_notes},
+    )
+
+
+@mcp.tool()
+async def delete_ticket(ticket_id: str) -> None:
+    return await _tool_request("DELETE", f"/api/v1/tickets/{_path_segment(ticket_id)}")
 
 
 @mcp.tool()
