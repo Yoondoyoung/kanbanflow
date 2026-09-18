@@ -4,12 +4,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi import HTTPException
 from itsdangerous import URLSafeTimedSerializer
-from sqlalchemy import delete, update
+from sqlalchemy import update
 from sqlmodel import select
 
 from app.config import settings
 from app.github import consume_github_state, issue_github_state, read_github_state
 from app.models import GitHubConnectState, ProjectMember, Role
+from app.services import delete_project
 
 NOW = datetime(2026, 9, 17, 12, 0, tzinfo=UTC)
 
@@ -123,23 +124,15 @@ def test_state_rejects_owner_who_lost_ownership(session, make_user, make_project
     )
 
 
-def test_state_rejects_deleted_project(session, engine, make_user, make_project):
+def test_state_is_invalid_after_project_deletion(session, make_user, make_project):
     owner = make_user()
     project = make_project(owner)
     signed = issue_github_state(session, project.id, owner.id, now=NOW)
-    session.exec(delete(ProjectMember).where(ProjectMember.project_id == project.id))
-    session.commit()
 
-    raw = engine.raw_connection()
-    try:
-        raw.execute("PRAGMA foreign_keys=OFF")
-        raw.execute("DELETE FROM project WHERE id = ?", (project.id,))
-        raw.commit()
-    finally:
-        raw.close()
+    delete_project(session, project, project.slug)
 
     _assert_http_error(
-        404,
-        "Project not found",
+        400,
+        "Invalid GitHub state",
         lambda: read_github_state(session, signed, owner.id, now=NOW),
     )
