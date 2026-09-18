@@ -6,7 +6,12 @@ from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.models import Priority, Role, TicketStatus, TicketType
+try:
+    from app.models import Priority, Role, TicketStatus, TicketType
+except ModuleNotFoundError as error:
+    if error.name != "app":
+        raise
+    from models import Priority, Role, TicketStatus, TicketType
 
 
 class MCPSettings(BaseSettings):

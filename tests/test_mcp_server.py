@@ -1,9 +1,23 @@
+import subprocess
+
 import httpx
 import pytest
 from mcp.client import Client
 
 from app import mcp_server
 from app.mcp_server import MCPSettings, api_request, mcp
+
+
+def test_mcp_server_loads_from_documented_cli_command():
+    result = subprocess.run(
+        ["mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.anyio
