@@ -132,8 +132,24 @@ def test_ci_failure_outranks_pending():
     ) is GitHubCIState.FAILED
 
 
-def test_ci_malformed_check_is_none():
-    assert aggregate_ci_state([{}]) is GitHubCIState.NONE
+@pytest.mark.parametrize(
+    "check",
+    [
+        {},
+        {"status": "completed", "conclusion": None},
+        {"status": "unknown", "conclusion": "success"},
+        {"status": "", "conclusion": ""},
+    ],
+)
+def test_ci_malformed_or_unknown_check_is_none(check):
+    assert aggregate_ci_state([check]) is GitHubCIState.NONE
+
+
+@pytest.mark.parametrize("conclusion", ["success", "neutral", "skipped"])
+def test_ci_completed_successful_conclusions_are_passed(conclusion):
+    assert aggregate_ci_state(
+        [{"status": "completed", "conclusion": conclusion}]
+    ) is GitHubCIState.PASSED
 
 
 def _pull(title="PAY-1 PAY-2", body="", branch="feature/pay-1"):

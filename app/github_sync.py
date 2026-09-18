@@ -178,6 +178,7 @@ def aggregate_ci_state(check_runs: Sequence[dict]) -> GitHubCIState:
         "startup_failure",
         "stale",
     }
+    successful_conclusions = {"success", "neutral", "skipped"}
     checks = [
         check
         for check in check_runs
@@ -193,7 +194,13 @@ def aggregate_ci_state(check_runs: Sequence[dict]) -> GitHubCIState:
         return GitHubCIState.FAILED
     if any(check.get("status") in pending_statuses for check in checks):
         return GitHubCIState.PENDING
-    return GitHubCIState.PASSED
+    if all(
+        check.get("status") == "completed"
+        and check.get("conclusion") in successful_conclusions
+        for check in checks
+    ):
+        return GitHubCIState.PASSED
+    return GitHubCIState.NONE
 
 
 def _validated_github_url(value: object, config: Settings) -> str:
