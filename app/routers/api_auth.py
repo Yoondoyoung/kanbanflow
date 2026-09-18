@@ -38,7 +38,9 @@ def register(body: RegisterRequest, response: Response, session: Session = Depen
 
 @router.post("/login", response_model=UserOut)
 def login(body: LoginRequest, response: Response, session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.email == body.email.lower())).first()
+    user = session.exec(
+        select(User).where(User.email == body.email.lower(), User.deleted_at.is_(None))
+    ).first()
     hashed = user.password_hash if user else DUMMY_HASH
     if not verify_password(body.password, hashed) or user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")

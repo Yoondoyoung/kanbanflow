@@ -11,12 +11,15 @@ from fastapi import (
 )
 from fastapi.responses import RedirectResponse
 from pydantic import EmailStr, TypeAdapter, ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.auth import (
     DUMMY_HASH,
     SESSION_COOKIE,
     current_user,
+    hash_password,
+    issue_api_token,
     load_project_and_membership,
     make_csrf_token,
     optional_user,
@@ -28,6 +31,8 @@ from app.auth import (
 from app.db import get_session
 from app.github_sync import branch_command, ticket_development, ticket_reference
 from app.models import (
+    ApiToken,
+    GitHubConnectState,
     Priority,
     Project,
     ProjectMember,
@@ -91,6 +96,14 @@ def render(
                 session.exec(select(Sprint).where(Sprint.project_id == project.id)).all(),
                 key=lambda sprint: (status_order[sprint.status], sprint.start_date),
             )
+            shell_context["current_sprint"] = next(
+                (
+                    sprint
+                    for sprint in shell_context["sprint_options"]
+                    if sprint.status in (SprintStatus.ACTIVE, SprintStatus.PLANNING)
+                ),
+                None,
+            )
     context = {
         **shell_context,
         "request": request,
@@ -120,7 +133,9 @@ def login_submit(
     password: str = Form(...),
     session: Session = Depends(get_session),
 ) -> Response:
-    user = session.exec(select(User).where(User.email == email.lower())).first()
+    user = session.exec(
+        select(User).where(User.email == email.lower(), User.deleted_at.is_(None))
+    ).first()
     # Mirror api_auth.login exactly: run verify_password on a real hash even for an unknown
     # email, so bcrypt's cost lands on both branches. Short-circuiting on `user is None` (as
     # the earlier version of this route did) kept the message identical but not the timing --
@@ -202,6 +217,256 @@ def register_submit(
 
 @router.post("/logout", dependencies=[Depends(verify_csrf)])
 def logout_submit() -> Response:
+    response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    return response
+
+
+def _user_settings(
+    request: Request,
+    session: Session,
+    user: User,
+    *,
+    error: str | None = None,
+    status_code: int = 200,
+    issued_token: str | None = None,
+    profile_saved: bool = False,
+    password_saved: bool = False,
+) -> Response:
+    tokens = session.exec(
+        select(ApiToken).where(ApiToken.user_id == user.id).order_by(ApiToken.created_at.desc())
+    ).all()
+    return render(
+        request,
+        "user_settings.html",
+        {
+            "user": user,
+            "tokens": tokens,
+            "error": error,
+            "issued_token": issued_token,
+            "base_url": str(request.base_url).rstrip("/"),
+            "profile_saved": profile_saved,
+            "password_saved": password_saved,
+            "account_settings": True,
+        },
+        status_code=status_code,
+        session=session,
+    )
+
+
+@router.get("/settings")
+def user_settings(
+    request: Request,
+    profile_saved: bool = False,
+    password_saved: bool = False,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    return _user_settings(
+        request,
+        session,
+        user,
+        profile_saved=profile_saved,
+        password_saved=password_saved,
+    )
+
+
+@router.post("/settings/profile", dependencies=[Depends(verify_csrf)])
+def update_profile(
+    request: Request,
+    name: str = Form(""),
+    email: str = Form(""),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    name = name.strip()
+    if not name or len(name) > 50:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Name must be between 1 and 50 characters",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    try:
+        normalized_email = str(_email_adapter.validate_python(email)).lower()
+    except ValidationError:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Enter a valid email address",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    existing = session.exec(
+        select(User).where(User.email == normalized_email, User.id != user.id)
+    ).first()
+    if existing is not None:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="That email is already registered",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    user.name = name
+    user.email = normalized_email
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="That email is already registered",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+    return RedirectResponse("/settings?profile_saved=1", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/password", dependencies=[Depends(verify_csrf)])
+def update_password(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    confirm_password: str = Form(""),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    if not verify_password(current_password, user.password_hash):
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Current password is incorrect",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    if new_password != confirm_password:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="New passwords do not match",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    if len(new_password) < 8:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Password must be at least 8 characters",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    if len(new_password.encode("utf-8")) > 72:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Password must be at most 72 bytes",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    user.password_hash = hash_password(new_password)
+    session.add(user)
+    session.commit()
+    return RedirectResponse("/settings?password_saved=1", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/tokens", dependencies=[Depends(verify_csrf)])
+def create_user_token(
+    request: Request,
+    label: str = Form(""),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    label = label.strip()
+    if not label or len(label) > 100:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Token label must be between 1 and 100 characters",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    _, plaintext = issue_api_token(session, user, label)
+    return _user_settings(
+        request,
+        session,
+        user,
+        issued_token=plaintext,
+        status_code=status.HTTP_201_CREATED,
+    )
+
+
+@router.post("/settings/tokens/{token_id}/revoke", dependencies=[Depends(verify_csrf)])
+def revoke_user_token(
+    token_id: str,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    token = session.exec(
+        select(ApiToken).where(ApiToken.id == token_id, ApiToken.user_id == user.id)
+    ).first()
+    if token is not None and token.revoked_at is None:
+        token.revoked_at = utcnow()
+        session.add(token)
+        session.commit()
+    return RedirectResponse("/settings", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/settings/delete", dependencies=[Depends(verify_csrf)])
+def delete_user_account(
+    request: Request,
+    current_password: str = Form(""),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    if not verify_password(current_password, user.password_hash):
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Current password is incorrect",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    owned_memberships = session.exec(
+        select(ProjectMember).where(
+            ProjectMember.user_id == user.id, ProjectMember.role == Role.OWNER
+        )
+    ).all()
+    # ponytail: one lookup per owned project; use NOT EXISTS if ownership counts grow.
+    for membership in owned_memberships:
+        other_owner = session.exec(
+            select(ProjectMember).where(
+                ProjectMember.project_id == membership.project_id,
+                ProjectMember.user_id != user.id,
+                ProjectMember.role == Role.OWNER,
+            )
+        ).first()
+        if other_owner is None:
+            project = session.get(Project, membership.project_id)
+            return _user_settings(
+                request,
+                session,
+                user,
+                error=f"Add another owner or delete {project.name} before deleting your account",
+                status_code=status.HTTP_409_CONFLICT,
+            )
+    for row in session.exec(select(ApiToken).where(ApiToken.user_id == user.id)).all():
+        session.delete(row)
+    for row in session.exec(select(ProjectMember).where(ProjectMember.user_id == user.id)).all():
+        session.delete(row)
+    for row in session.exec(
+        select(GitHubConnectState).where(GitHubConnectState.user_id == user.id)
+    ).all():
+        session.delete(row)
+    user.name = "Deleted user"
+    user.email = f"deleted-{user.id}@deleted.invalid"
+    user.password_hash = "!"
+    user.deleted_at = utcnow()
+    session.add(user)
+    session.commit()
     response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response

@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Kanban Flow{% endblock %}</title>
+  <link rel="preload" href="/static/fonts/Kalam-Bold.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/static/fonts/PatrickHand-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
@@ -32,9 +34,10 @@
             <a href="/projects/{{ sidebar_project.slug }}" class="app-project-link{% if project and project.id == sidebar_project.id %} is-active{% endif %}"{% if project and project.id == sidebar_project.id %} aria-current="page"{% endif %}>{{ sidebar_project.name }}</a>
           {% endfor %}
         </nav>
-        <div class="app-user-menu">
-          <span class="app-user-name">{{ user.name }}</span>
-          <form method="post" action="/logout">
+      <div class="app-user-menu">
+        <span class="app-user-name">{{ user.name }}</span>
+        <a href="/settings" class="app-settings-link{% if account_settings %} is-active{% endif %}"{% if account_settings %} aria-current="page"{% endif %}>Settings</a>
+        <form method="post" action="/logout">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
             <button class="app-sign-out">Sign out</button>
           </form>

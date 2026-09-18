@@ -5,7 +5,13 @@
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
+      {% if current_sprint %}
+      <p class="sprint-title">{{ current_sprint.name }} <span class="sprint-status">{{ current_sprint.status.value|capitalize }}</span></p>
+      <p class="sprint-meta">{{ current_sprint.start_date.strftime('%b %-d') }} – {{ current_sprint.end_date.strftime('%b %-d, %Y') }}{% if current_sprint.goal %} · {{ current_sprint.goal }}{% endif %}</p>
+      {% else %}
+      <p class="sprint-title" aria-hidden="true">&nbsp;</p>
       <p class="sprint-meta">Backlog</p>
+      {% endif %}
       {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
@@ -43,7 +49,7 @@
       <button class="app-secondary-button" type="submit" x-show="selectedCount > 0" x-cloak :disabled="selectedCount === 0">Add selected</button>
     </form>
     {% else %}
-      {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% else %}<p class="sprint-meta">No unassigned tickets.</p>{% endfor %}
+      {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% else %}<p class="app-empty-state">No unassigned tickets.</p>{% endfor %}
     {% endif %}
     </div>
   </section>

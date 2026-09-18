@@ -94,6 +94,7 @@ class User(SQLModel, table=True):
     email: str = Field(max_length=255, unique=True, index=True)
     password_hash: str = Field(max_length=255)
     created_at: datetime = Field(default_factory=utcnow)
+    deleted_at: datetime | None = None
 
 
 class ApiToken(SQLModel, table=True):

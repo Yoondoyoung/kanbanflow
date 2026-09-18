@@ -89,7 +89,7 @@ def optional_user(request: Request, session: Session = Depends(get_session)) -> 
         if token is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
         user = session.get(User, token.user_id)
-        if user is None:
+        if user is None or user.deleted_at is not None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
         if _is_older_than_an_hour(token.last_used_at):
             token.last_used_at = utcnow()
@@ -103,7 +103,8 @@ def optional_user(request: Request, session: Session = Depends(get_session)) -> 
     user_id = read_session_cookie(raw)
     if user_id is None:
         return None
-    return session.get(User, user_id)
+    user = session.get(User, user_id)
+    return user if user is not None and user.deleted_at is None else None
 
 
 def current_user(user: User | None = Depends(optional_user)) -> User:
