@@ -1,5 +1,5 @@
 {% if detail_drawer %}
-<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('#ticket-detail-heading').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
+<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal sketch-ticket-detail" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('#ticket-detail-heading').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
 {% else %}
 <section id="ticket-detail-panel" class="ticket-detail-page" aria-labelledby="ticket-detail-heading">
 {% endif %}
@@ -31,7 +31,7 @@
     <div class="ticket-development-badges" aria-label="Linked development status">
       {% for row in development_rows %}{% if row.kind.value == 'PULL_REQUEST' %}
       <span class="ticket-development-badge">PR #{{ row.number }} · {{ row.state.value|replace('_', ' ')|title }}</span>
-      {% if row.ci_state.value != 'NONE' %}<span class="ticket-development-badge">CI {{ row.ci_state.value|title }}</span>{% endif %}
+ {% if row.ci_state.value != 'NONE' %}<span class="ticket-development-badge{% if row.ci_state.value == 'FAILED' %} is-failed{% endif %}">CI {{ row.ci_state.value|title }}</span>{% endif %}
       {% endif %}{% endfor %}
     </div>
     {% endif %}
@@ -129,7 +129,7 @@
             <span>by {{ row.author_login }}</span>
             {% if row.state %}<span>{{ row.state.value|replace('_', ' ')|title }}</span>{% endif %}
             {% if row.review_state %}<span>{{ row.review_state.value|replace('_', ' ')|title }}</span>{% endif %}
-            {% if row.ci_state.value != 'NONE' %}<span>{{ row.ci_state.value|title }}</span>{% endif %}
+ {% if row.ci_state.value != 'NONE' %}<span class="ticket-development-state{% if row.ci_state.value == 'FAILED' %} is-failed{% endif %}">{{ row.ci_state.value|title }}</span>{% endif %}
           </p>
         </article>
         {% else %}

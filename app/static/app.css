@@ -582,6 +582,263 @@ button, input, select, textarea { font: inherit; }
 .sketch-board .ticket-card:nth-child(4n + 3) { transform: rotate(-0.15deg); }
 .sketch-board .ticket-card:nth-child(4n + 4) { transform: rotate(0.2deg); }
 
+.sketch-ticket-detail {
+  background: var(--sketch-paper);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-panel);
+  box-shadow: var(--sketch-shadow);
+  color: var(--sketch-pencil);
+  max-width: 1120px;
+}
+
+.sketch-ticket-detail::before {
+  background: var(--sketch-post-it);
+  content: "";
+  height: 22px;
+  left: 50%;
+  position: absolute;
+  top: -2px;
+  transform: translateX(-50%);
+  width: 88px;
+}
+
+.sketch-ticket-detail .ticket-detail-layout {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+}
+
+.sketch-ticket-detail .ticket-comments {
+  border-left: 2px dashed var(--sketch-erased);
+  border-top: 0;
+  margin-top: 0;
+  padding-left: var(--space-5);
+  padding-top: 0;
+}
+
+.sketch-ticket-detail .ticket-detail-header h2 {
+  font-family: var(--sketch-font-heading);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sketch-ticket-detail .ticket-development h3,
+.sketch-ticket-detail .ticket-comments-header h3,
+.sketch-ticket-detail .ticket-description-label {
+  font-family: var(--sketch-font-heading);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.sketch-ticket-detail .ticket-description,
+.sketch-ticket-detail .ticket-comment-body,
+.sketch-ticket-detail .ticket-development-title {
+  font-family: var(--sketch-font-hand);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.sketch-ticket-detail code,
+.sketch-ticket-detail .ticket-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.sketch-ticket-detail .app-form label,
+.sketch-ticket-detail .ticket-copy-status,
+.sketch-ticket-detail .ticket-branch-command > span:first-child,
+.sketch-ticket-detail .ticket-comments-header > span,
+.sketch-ticket-detail .ticket-comment header,
+.sketch-ticket-detail .ticket-comment header strong,
+.sketch-ticket-detail .ticket-comment-actions,
+.sketch-ticket-detail .ticket-comment-mentions,
+.sketch-ticket-detail .ticket-comments-empty,
+.sketch-ticket-detail .ticket-development-row header,
+.sketch-ticket-detail .ticket-development-row p,
+.sketch-ticket-detail .ticket-development-title > span:first-child,
+.sketch-ticket-detail .ticket-development-empty,
+.sketch-ticket-detail .ticket-mention-menu span {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.sketch-ticket-detail .ticket-development-badge,
+.sketch-ticket-detail .ticket-development-state {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button) {
+  border-radius: var(--sketch-radius-control);
+  font-family: var(--sketch-font-hand);
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.2;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.sketch-ticket-detail .app-primary-button {
+  background: var(--sketch-blue-ink);
+  border: 2px solid var(--sketch-blue-ink);
+  color: var(--sketch-paper);
+}
+
+.sketch-ticket-detail .app-secondary-button {
+  background: var(--sketch-paper);
+  border: 2px solid var(--sketch-pencil);
+  color: var(--sketch-pencil);
+}
+
+.sketch-ticket-detail :is(.app-ghost-button, .app-icon-button) {
+  background: transparent;
+  border: 2px solid transparent;
+  color: var(--sketch-pencil);
+}
+
+.sketch-ticket-detail .app-danger-button {
+  background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper));
+  border: 2px solid var(--sketch-correction);
+  color: var(--sketch-pencil);
+}
+
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-icon-button):hover {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-ticket-detail :is(.app-ghost-button, .app-icon-button):hover {
+  background: var(--sketch-erased);
+}
+
+.sketch-ticket-detail .app-danger-button:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--sketch-blue-ink);
+}
+
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button):active {
+  border-color: var(--sketch-blue-ink);
+}
+
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button):disabled,
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button)[aria-disabled="true"] {
+  background: var(--sketch-erased);
+  border: var(--sketch-border);
+  color: var(--sketch-pencil);
+}
+
+.sketch-ticket-detail :is(.app-input, input:not([type="hidden"]), textarea, select) {
+  background: var(--sketch-erased);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-control);
+  caret-color: var(--sketch-pencil);
+  color: var(--sketch-pencil);
+  min-height: 44px;
+}
+
+.sketch-ticket-detail :is(input:not([type="checkbox"]):not([type="hidden"]), textarea) {
+  font-family: var(--sketch-font-hand);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.sketch-ticket-detail :is(select, option) {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.sketch-ticket-detail .ticket-mentions label,
+.sketch-ticket-detail .ticket-mentions summary,
+.sketch-ticket-detail .ticket-mention-menu button {
+  min-height: 44px;
+}
+
+.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-input, input, textarea, select, summary, .ticket-mention-menu button):focus-visible {
+  outline: 3px solid var(--sketch-blue-ink);
+  outline-offset: 2px;
+}
+
+.sketch-ticket-detail .form-error {
+  background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper));
+  border-left: 2px solid var(--sketch-correction);
+  color: var(--sketch-pencil);
+  padding: var(--space-2);
+}
+
+.sketch-ticket-detail .form-status {
+  border-left: 2px solid var(--sketch-blue-ink);
+  color: var(--sketch-pencil);
+  padding: var(--space-2);
+}
+
+.sketch-ticket-detail .ticket-development-row + .ticket-development-row {
+  border-top: 1px solid var(--sketch-erased);
+}
+
+.sketch-ticket-detail .ticket-development-badge,
+.sketch-ticket-detail .ticket-development-state {
+  background: var(--sketch-erased);
+  color: var(--sketch-pencil);
+}
+
+.sketch-ticket-detail .ticket-development-badge.is-failed,
+.sketch-ticket-detail .ticket-development-state.is-failed {
+  border: 2px solid var(--sketch-correction);
+  color: var(--sketch-pencil);
+  text-decoration: underline;
+  text-decoration-color: var(--sketch-correction);
+}
+
+.sketch-ticket-detail .ticket-development-title a {
+  color: var(--sketch-blue-ink);
+}
+
+.sketch-ticket-detail .ticket-comment {
+  background: var(--sketch-erased);
+  border: 2px solid var(--sketch-pencil);
+  border-radius: var(--sketch-radius-card);
+  box-shadow: none;
+  transform: none;
+}
+
+.sketch-ticket-detail .ticket-mention-menu {
+  background: var(--sketch-paper);
+  border: var(--sketch-border);
+  border-radius: var(--sketch-radius-control);
+  box-shadow: var(--sketch-shadow);
+  transform: none;
+}
+
+.sketch-ticket-detail .ticket-mention-menu button:hover,
+.sketch-ticket-detail .ticket-mention-menu button[aria-selected="true"],
+.sketch-ticket-detail .ticket-mention-menu button:focus-visible {
+  background: var(--sketch-erased);
+  color: var(--sketch-blue-ink);
+}
+
+.sketch-ticket-detail .ticket-description-fields[hidden] { display: none; }
+
+.sketch-ticket-detail .ticket-branch-command code,
+.sketch-ticket-detail .ticket-comment-body,
+.sketch-ticket-detail .ticket-comment-mentions span,
+.sketch-ticket-detail .ticket-development-row header > span,
+.sketch-ticket-detail .ticket-development-title,
+.sketch-ticket-detail .ticket-development-row p,
+.sketch-ticket-detail .ticket-mention-menu button,
+.sketch-ticket-detail .ticket-mentions label {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 767px) {
   .app-shell { display: block; }
   .app-mobile-header { align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); display: flex; gap: var(--space-3); min-height: 56px; padding: 0 var(--space-4); }
@@ -599,6 +856,16 @@ button, input, select, textarea { font: inherit; }
   .ticket-detail-modal .ticket-comments { border-left: 0; border-top: 1px solid var(--line); margin-top: var(--space-6); padding-left: 0; padding-top: var(--space-5); }
   .ticket-detail-grid { grid-template-columns: 1fr; }
   .ticket-mentions > div { grid-template-columns: 1fr; }
+  .sketch-ticket-detail { border-width: 0; }
+  .sketch-ticket-detail::before { display: none; }
+  .sketch-ticket-detail .ticket-detail-layout { display: block; }
+  .sketch-ticket-detail .ticket-comments {
+    border-left: 0;
+    border-top: 2px dashed var(--sketch-erased);
+    margin-top: var(--space-6);
+    padding-left: 0;
+    padding-top: var(--space-5);
+  }
   .backlog-planning-sprint { align-items: stretch; flex-direction: column; }
   .backlog-planning-sprint .app-primary-button { width: 100%; }
   .sprint-history-row { grid-template-columns: 1fr; }
@@ -615,9 +882,11 @@ button, input, select, textarea { font: inherit; }
     align-items: stretch;
   }
   .sketch-board .ticket-card { transform: none; }
+  .sketch-board .ticket-card:nth-child(n) { transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
   .sketch-board .ticket-card { transform: none; }
+  .sketch-board .ticket-card:nth-child(n) { transform: none; }
 }

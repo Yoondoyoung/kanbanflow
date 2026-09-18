@@ -113,6 +113,12 @@ def test_detail_fragment_renders_sanitized_markdown_and_project_members(
     assert f'value="{ticket_world.planning_id}"' in response.text
     assert ticket_world.closed_id not in response.text
 
+    standalone = client.get(f"/projects/{ticket_world.project.slug}/tickets/1")
+    assert standalone.status_code == 200
+    assert 'class="ticket-detail-page"' in standalone.text
+    assert "sketch-ticket-detail" not in standalone.text
+    assert 'class="project-board sketch-board"' not in standalone.text
+
 
 def test_owner_updates_every_ticket_detail_field_and_requests_card_refresh(
     client, ticket_world, login_as, session

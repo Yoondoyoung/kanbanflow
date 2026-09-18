@@ -175,6 +175,8 @@ def test_ticket_detail_renders_safe_active_development_for_every_reader_and_mode
     assert "Commit" in response.text
     assert "Approved" in response.text
     assert "Passed" in response.text
+    assert '<span class="ticket-development-badge is-failed">CI Failed</span>' in response.text
+    assert '<span class="ticket-development-state is-failed">Failed</span>' in response.text
     assert "octocat" in response.text
     assert '<time datetime="2026-09-17T12:00:00+00:00" data-local-time>' in response.text
     assert "Archived hidden work" not in response.text

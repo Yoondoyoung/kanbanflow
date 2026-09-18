@@ -192,11 +192,12 @@ def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
 
     assert fragment.status_code == 200
     assert (
-        '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal"'
+        '<dialog id="ticket-detail-panel" '
+        'class="app-dialog ticket-detail-modal sketch-ticket-detail"'
         in fragment.text
     )
-    assert "$el.showModal()" in fragment.text
-    assert 'id="ticket-detail-heading" tabindex="-1"' in fragment.text
+    assert 'aria-labelledby="ticket-detail-heading"' in fragment.text
+    assert '@cancel="$event.preventDefault(); $el.close()"' in fragment.text
     assert "$el.querySelector('#ticket-detail-heading').focus()" in fragment.text
     assert 'class="ticket-detail-layout"' in fragment.text
 

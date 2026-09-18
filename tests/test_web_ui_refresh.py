@@ -111,7 +111,8 @@ def test_ticket_detail_partial_is_an_accessible_centered_modal():
     from fastapi.templating import Jinja2Templates
 
     templates = Jinja2Templates(directory="app/templates")
-    source = templates.get_template("partials/ticket_detail.html").render(
+    template = templates.get_template("partials/ticket_detail.html")
+    context = dict(
         ticket=type("Ticket", (), {"ticket_number": 1})(),
         project=type("Project", (), {"slug": "project"})(),
         form_values={
@@ -132,12 +133,17 @@ def test_ticket_detail_partial_is_an_accessible_centered_modal():
         sprints=[],
         csrf_token="token",
         error=None,
-        detail_drawer=True,
     )
+    dialog_source = template.render(**context, detail_drawer=True)
+    page_source = template.render(**context, detail_drawer=False)
 
-    assert '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal"' in source
-    assert "$el.showModal()" in source
-    assert "ticket-drawer-closed" in source
+    assert (
+        'class="app-dialog ticket-detail-modal sketch-ticket-detail"' in dialog_source
+    )
+    assert "$el.showModal()" in dialog_source
+    assert "ticket-drawer-closed" in dialog_source
+    assert 'class="ticket-detail-page"' in page_source
+    assert "sketch-ticket-detail" not in page_source
 
 
 def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
@@ -151,8 +157,25 @@ def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
         in desktop_css
     )
     assert ".ticket-detail-modal .ticket-comments { border-left:" in desktop_css
+    assert ".sketch-ticket-detail {" in desktop_css
+    assert "max-width: 1120px;" in desktop_css
+    assert "grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);" in desktop_css
+    assert "border-left: 2px dashed var(--sketch-erased);" in desktop_css
+    assert ".sketch-ticket-detail::before {" in desktop_css
+    assert "height: 22px;" in desktop_css
+    assert "width: 88px;" in desktop_css
+    assert ".sketch-ticket-detail .ticket-comment {" in desktop_css
+    assert ".sketch-ticket-detail .ticket-mention-menu {" in desktop_css
+    assert (
+        ".sketch-ticket-detail .ticket-description-fields[hidden] { display: none; }"
+        in desktop_css
+    )
     assert ".ticket-detail-modal .ticket-detail-layout { display: block; }" in mobile_css
     assert ".ticket-detail-modal .ticket-comments { border-left: 0; border-top:" in mobile_css
+    assert ".sketch-ticket-detail { border-width: 0;" in mobile_css
+    assert ".sketch-ticket-detail::before { display: none; }" in mobile_css
+    assert "border-left: 0;" in mobile_css
+    assert "border-top: 2px dashed var(--sketch-erased);" in mobile_css
     assert ".sprint-history-row" in mobile_css
     assert ".settings-member" in mobile_css
     assert ".auth-card" in mobile_css
