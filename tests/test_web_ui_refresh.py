@@ -166,6 +166,12 @@ def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
     assert "width: 88px;" in desktop_css
     assert ".sketch-ticket-detail .ticket-comment {" in desktop_css
     assert ".sketch-ticket-detail .ticket-mention-menu {" in desktop_css
+    assert ".sketch-ticket-detail :focus-visible {" in desktop_css
+    focus_rule = desktop_css.split(
+        ".sketch-ticket-detail :focus-visible {", 1
+    )[1].split("}", 1)[0]
+    assert "outline: 3px solid var(--sketch-blue-ink);" in focus_rule
+    assert "outline-offset: 2px;" in focus_rule
     assert (
         ".sketch-ticket-detail .ticket-description-fields[hidden] { display: none; }"
         in desktop_css

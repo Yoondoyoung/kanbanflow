@@ -124,6 +124,9 @@ def main() -> None:
                 _step("creating ticket")
                 page.get_by_role("button", name="New ticket").click()
                 page.locator("#ticket-title").fill("Keep focus")
+                page.locator("#ticket-description").fill(
+                    "[Focus link](https://example.com)"
+                )
                 page.locator("#ticket-modal .app-primary-button").click()
                 card = page.locator(".ticket-card-open").first
                 card.wait_for()
@@ -139,9 +142,19 @@ def main() -> None:
                     panel.get_attribute("class")
                     == "app-dialog ticket-detail-modal sketch-ticket-detail"
                 )
-                assert page.locator("#ticket-detail-heading").evaluate(
+                heading = page.locator("#ticket-detail-heading")
+                assert heading.evaluate(
                     "el => el === document.activeElement"
                 )
+                focus_style = """el => {
+                    const style = getComputedStyle(el);
+                    return [style.outlineWidth, style.outlineColor, style.outlineOffset];
+                }"""
+                expected_focus = ["3px", "rgb(45, 93, 161)", "2px"]
+                assert heading.evaluate(focus_style) == expected_focus
+                modal_link = page.locator("#ticket-detail-panel .ticket-description a")
+                modal_link.focus()
+                assert modal_link.evaluate(focus_style) == expected_focus
                 box = panel.bounding_box()
                 viewport = page.viewport_size
                 assert box is not None and viewport is not None

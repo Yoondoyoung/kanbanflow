@@ -763,7 +763,7 @@ button, input, select, textarea { font: inherit; }
   min-height: 44px;
 }
 
-.sketch-ticket-detail :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-input, input, textarea, select, summary, .ticket-mention-menu button):focus-visible {
+.sketch-ticket-detail :focus-visible {
   outline: 3px solid var(--sketch-blue-ink);
   outline-offset: 2px;
 }
