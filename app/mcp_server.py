@@ -260,3 +260,38 @@ async def close_sprint(sprint_id: str, next_sprint_id: str) -> dict[str, object]
         f"/api/v1/sprints/{_path_segment(sprint_id)}/close",
         {"next_sprint_id": next_sprint_id},
     )
+
+
+@mcp.tool()
+async def get_sprint(sprint_id: str) -> dict[str, object]:
+    return await _tool_request("GET", f"/api/v1/sprints/{_path_segment(sprint_id)}")
+
+
+@mcp.tool()
+async def update_sprint(
+    sprint_id: str,
+    name: str | None = None,
+    goal: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> dict[str, object]:
+    changes = {
+        key: value.isoformat() if isinstance(value, date) else value
+        for key, value in {
+            "name": name,
+            "goal": goal,
+            "start_date": start_date,
+            "end_date": end_date,
+        }.items()
+        if value is not None
+    }
+    return await _tool_request(
+        "PATCH", f"/api/v1/sprints/{_path_segment(sprint_id)}", changes
+    )
+
+
+@mcp.tool()
+async def get_sprint_history(sprint_id: str) -> list[dict[str, object]]:
+    return await _tool_request(
+        "GET", f"/api/v1/sprints/{_path_segment(sprint_id)}/history"
+    )

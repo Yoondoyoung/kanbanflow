@@ -293,6 +293,9 @@ async def test_sprint_tools_expose_typed_input_schemas():
         "create_sprint",
         "start_sprint",
         "close_sprint",
+        "get_sprint",
+        "update_sprint",
+        "get_sprint_history",
         "create_ticket",
         "list_tickets",
         "get_ticket",
@@ -313,6 +316,9 @@ async def test_sprint_tools_expose_typed_input_schemas():
     assert tools["create_sprint"].input_schema["properties"]["end_date"]["format"] == "date"
     assert tools["start_sprint"].input_schema["required"] == ["sprint_id"]
     assert tools["close_sprint"].input_schema["required"] == ["sprint_id", "next_sprint_id"]
+    assert tools["get_sprint"].input_schema["required"] == ["sprint_id"]
+    assert tools["update_sprint"].input_schema["required"] == ["sprint_id"]
+    assert tools["get_sprint_history"].input_schema["required"] == ["sprint_id"]
     assert tools["create_ticket"].input_schema["required"] == ["slug", "title"]
     assert tools["list_tickets"].input_schema["required"] == ["slug"]
     assert tools["get_ticket"].input_schema["required"] == ["ticket_id"]
@@ -393,6 +399,44 @@ async def test_sprint_tools_delegate_to_the_api_and_limit_list_fields(monkeypatc
             }
         ]
     }
+
+
+@pytest.mark.anyio
+async def test_remaining_sprint_tools_delegate_to_the_api(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return {}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        await client.call_tool("get_sprint", {"sprint_id": "sprint-1"})
+        await client.call_tool(
+            "update_sprint",
+            {
+                "sprint_id": "sprint-1",
+                "name": "Sprint 2",
+                "start_date": "2026-10-06",
+                "end_date": "2026-10-13",
+            },
+        )
+        await client.call_tool("get_sprint_history", {"sprint_id": "sprint-1"})
+
+    assert calls == [
+        ("GET", "/api/v1/sprints/sprint-1", None),
+        (
+            "PATCH",
+            "/api/v1/sprints/sprint-1",
+            {
+                "name": "Sprint 2",
+                "start_date": "2026-10-06",
+                "end_date": "2026-10-13",
+            },
+        ),
+        ("GET", "/api/v1/sprints/sprint-1/history", None),
+    ]
 
 
 @pytest.mark.anyio
