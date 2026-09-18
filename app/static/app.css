@@ -1,3 +1,19 @@
+@font-face {
+  font-family: "Kalam";
+  src: url("/static/fonts/Kalam-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Patrick Hand";
+  src: url("/static/fonts/PatrickHand-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   --canvas: #f7f7f5;
   --surface: #ffffff;
@@ -242,6 +258,24 @@ button, input, select, textarea { font: inherit; }
 .auth-submit { width: 100%; }
 .auth-prompt { color: var(--text-secondary); font-size: 12px; margin: var(--space-4) 0 0; }
 .auth-prompt a { color: var(--text); font-weight: 650; }
+
+.sketch-board,
+.sketch-ticket-detail {
+  --sketch-paper: #fdfbf7;
+  --sketch-pencil: #2d2d2d;
+  --sketch-erased: #e5e0d8;
+  --sketch-correction: #ff4d4d;
+  --sketch-blue-ink: #2d5da1;
+  --sketch-post-it: #fff9c4;
+  --sketch-dot-size: 24px;
+  --sketch-border: 2px solid var(--sketch-pencil);
+  --sketch-radius-control: 6px 9px 7px 5px / 7px 5px 9px 6px;
+  --sketch-radius-card: 8px 12px 7px 10px / 10px 8px 11px 7px;
+  --sketch-radius-panel: 12px 9px 14px 10px / 10px 13px 9px 12px;
+  --sketch-shadow: 3px 3px 0 var(--sketch-pencil);
+  --sketch-font-heading: "Kalam", cursive;
+  --sketch-font-hand: "Patrick Hand", cursive;
+}
 
 @media (max-width: 767px) {
   .app-shell { display: block; }
