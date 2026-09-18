@@ -70,6 +70,12 @@
           <button class="app-secondary-button" type="submit"{% if not github_configured %} disabled{% endif %}>Connect GitHub</button>
         </form>
         {% if not github_configured %}<p>GitHub App settings not configured</p>{% endif %}
+        {% if github_repository_names %}
+        <form action="/projects/{{ project.slug }}/settings/integrations/github/sync" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <button class="app-secondary-button" type="submit">Retry sync</button>
+        </form>
+        {% endif %}
         {% if github_has_repositories and github_status != 'Disconnected' %}
         <form class="app-form" action="/projects/{{ project.slug }}/settings/integrations/github/disconnect" method="post" data-testid="owner-settings-controls">
           <input type="hidden" name="_csrf" value="{{ csrf_token }}">

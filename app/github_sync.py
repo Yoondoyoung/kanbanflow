@@ -351,6 +351,50 @@ def reconcile_pull_request_links(
         session.add(TicketGitLink(ticket_id=ticket_id, artifact_id=artifact.id))
 
 
+def sync_open_pull_requests(
+    session: Session,
+    connection: ProjectGitHubRepository,
+    github: GitHubClient,
+) -> int:
+    installation = session.get(GitHubInstallation, connection.installation_id)
+    if installation is None:
+        raise ValueError("GitHub repository installation not found")
+
+    imported = 0
+    pulls = github.open_pull_requests(
+        installation.github_installation_id,
+        connection.full_name,
+    )
+    for pull in pulls:
+        if not isinstance(pull, dict) or pull.get("state") != "open":
+            continue
+        head = pull.get("head")
+        head_ref = head.get("ref") if isinstance(head, dict) else None
+        texts = [pull.get("title"), pull.get("body"), head_ref]
+        if not _matching_tickets(session, connection, texts):
+            continue
+        artifact = upsert_pull_request(session, connection, pull)
+        reconcile_pull_request_links(session, connection, artifact, texts)
+        artifact.review_state = aggregate_review_state(
+            github.pull_request_reviews(
+                installation.github_installation_id,
+                connection.full_name,
+                artifact.number,
+            )
+        )
+        artifact.ci_state = aggregate_ci_state(
+            github.check_runs(
+                installation.github_installation_id,
+                connection.full_name,
+                artifact.head_sha,
+            )
+        )
+        artifact.updated_at = utcnow()
+        session.add(artifact)
+        imported += 1
+    return imported
+
+
 def insert_linked_commit(
     session: Session,
     connection: ProjectGitHubRepository,

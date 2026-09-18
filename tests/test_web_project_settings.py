@@ -13,6 +13,10 @@ from app.config import settings
 from app.github import AvailableRepository, issue_github_state, read_github_state
 from app.github import GitHubClient as RealGitHubClient
 from app.models import (
+    GitHubArtifact,
+    GitHubArtifactKind,
+    GitHubArtifactState,
+    GitHubCIState,
     GitHubInstallation,
     Project,
     ProjectGitHubConnection,
@@ -88,6 +92,8 @@ def github_selection(
     def handler(request):
         if request.url.path == "/app/installations/7001/access_tokens":
             return httpx.Response(201, json={"token": "ghs_selection_token"})
+        if request.url.path.startswith("/repos/") and request.url.path.endswith("/pulls"):
+            return httpx.Response(200, json=[])
         assert request.url.path == "/installation/repositories"
         repository_calls.append(request)
         return httpx.Response(
@@ -633,6 +639,71 @@ def test_github_repository_selection_post_refetches_and_trusts_only_server_metad
     assert omitted.active is True and omitted.disconnected_at is None
 
 
+def test_selection_commits_before_independent_repository_sync(
+    client, engine, settings_world, login_as, github_selection, monkeypatch
+):
+    seen = []
+
+    def fake_sync(session, connection, github):
+        with Session(engine) as observer:
+            assert observer.get(ProjectGitHubRepository, connection.id).active is True
+        seen.append(connection.github_repository_id)
+        if connection.github_repository_id == 502:
+            raise httpx.ConnectError("repository unavailable")
+        session.add(
+            GitHubArtifact(
+                repository_connection_id=connection.id,
+                kind=GitHubArtifactKind.PULL_REQUEST,
+                external_id="pr-501",
+                number=17,
+                title="PAY-1",
+                html_url="https://github.com/acme/api/pull/17",
+                author_login="sam",
+                state=GitHubArtifactState.OPEN,
+                ci_state=GitHubCIState.NONE,
+                occurred_at=utcnow(),
+            )
+        )
+
+    monkeypatch.setattr(web_sprints, "sync_open_pull_requests", fake_sync, raising=False)
+    login_as(settings_world.owner.email)
+    response = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["501", "502"],
+            **_csrf(settings_world.owner),
+        },
+    )
+    assert response.status_code == 200
+    assert seen == [501, 502]
+    assert "Retry sync" in response.text and "acme/web" in response.text
+    with Session(engine) as observer:
+        assert len(observer.exec(select(ProjectGitHubRepository)).all()) == 2
+        assert len(observer.exec(select(GitHubArtifact)).all()) == 1
+
+
+def test_selection_does_not_swallow_internal_sync_errors(
+    client, engine, settings_world, login_as, github_selection, monkeypatch
+):
+    def explode(session, connection, github):
+        raise RuntimeError("sync invariant failed")
+
+    monkeypatch.setattr(web_sprints, "sync_open_pull_requests", explode, raising=False)
+    login_as(settings_world.owner.email)
+    with pytest.raises(RuntimeError, match="sync invariant failed"):
+        client.post(
+            f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+            data={
+                "state": github_selection.state,
+                "repository_ids": ["501", "502"],
+                **_csrf(settings_world.owner),
+            },
+        )
+    with Session(engine) as observer:
+        assert len(observer.exec(select(ProjectGitHubRepository)).all()) == 2
+
+
 def test_github_repository_selection_rejects_forged_id_and_consumes_state(
     client, settings_world, session, login_as, github_selection
 ):
@@ -810,6 +881,92 @@ def test_github_disconnect_requires_owner_csrf_and_confirmation(
     assert connected_github.disconnected_at is not None
 
 
+def test_retry_sync_requires_owner_and_csrf(
+    client, settings_world, login_as, connected_github, monkeypatch
+):
+    monkeypatch.setattr(
+        web_sprints,
+        "sync_open_pull_requests",
+        lambda session, connection, github: 0,
+        raising=False,
+    )
+    url = f"/projects/{settings_world.project.slug}/settings/integrations/github/sync"
+    login_as(settings_world.member.email)
+    assert client.post(url, data=_csrf(settings_world.member)).status_code == 403
+    login_as(settings_world.owner.email)
+    assert client.post(url, data={}).status_code == 403
+    response = client.post(
+        url, data=_csrf(settings_world.owner), follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?github_synced=1")
+
+
+def test_retry_syncs_active_repositories_independently_without_reactivating_inactive(
+    client, engine, settings_world, session, login_as, connected_github, monkeypatch
+):
+    second = ProjectGitHubRepository(
+        project_id=settings_world.project.id,
+        installation_id=connected_github.installation_id,
+        github_repository_id=502,
+        full_name="acme/web",
+        html_url="https://github.com/acme/web",
+        default_branch="trunk",
+    )
+    inactive = ProjectGitHubRepository(
+        project_id=settings_world.project.id,
+        installation_id=connected_github.installation_id,
+        github_repository_id=503,
+        full_name="acme/retired",
+        html_url="https://github.com/acme/retired",
+        default_branch="main",
+        active=False,
+        disconnected_at=utcnow(),
+    )
+    session.add_all([second, inactive])
+    session.commit()
+    seen = []
+
+    def fake_sync(sync_session, connection, github):
+        seen.append(connection.github_repository_id)
+        sync_session.add(
+            GitHubArtifact(
+                repository_connection_id=connection.id,
+                kind=GitHubArtifactKind.PULL_REQUEST,
+                external_id=f"pr-{connection.github_repository_id}",
+                number=17,
+                title="PAY-1",
+                html_url=f"{connection.html_url}/pull/17",
+                author_login="sam",
+                state=GitHubArtifactState.OPEN,
+                ci_state=GitHubCIState.NONE,
+                occurred_at=utcnow(),
+            )
+        )
+        if connection.github_repository_id == 501:
+            raise httpx.ConnectError("repository unavailable")
+
+    monkeypatch.setattr(web_sprints, "sync_open_pull_requests", fake_sync, raising=False)
+    login_as(settings_world.owner.email)
+    response = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/sync",
+        data=_csrf(settings_world.owner),
+    )
+
+    assert response.status_code == 200
+    assert seen == [501, 502]
+    assert "Retry sync" in response.text
+    with Session(engine) as observer:
+        repositories = observer.exec(
+            select(ProjectGitHubRepository).order_by(
+                ProjectGitHubRepository.github_repository_id
+            )
+        ).all()
+        assert [row.active for row in repositories] == [True, True, False]
+        artifacts = observer.exec(select(GitHubArtifact)).all()
+        assert [artifact.external_id for artifact in artifacts] == ["pr-502"]
+
+
 def test_github_attention_and_owner_disconnected_states_are_distinct(
     client, settings_world, session, login_as, connected_github
 ):
@@ -865,7 +1022,11 @@ def test_github_attention_card_shows_owner_account_and_connection_controls(
         f'action="/projects/{settings_world.project.slug}/settings/integrations/github/disconnect"'
         in page.text
     )
-    assert "Retry" not in page.text
+    assert (
+        f'action="/projects/{settings_world.project.slug}/settings/integrations/github/sync"'
+        in page.text
+    )
+    assert "Retry sync" in page.text
 
 
 def test_github_attention_page_maps_error_codes_without_echoing_raw_values(
