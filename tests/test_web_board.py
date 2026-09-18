@@ -136,8 +136,8 @@ def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
     root_tokens = css.split(":root {", 1)[1].split("}", 1)[0]
     assert "--sketch-paper: #fdfbf7;" in root_tokens
     for selector in (
-        ".sketch-board > .project-header",
-        ".sketch-board > .project-navigation",
+        ".project-board > .project-header",
+        ".project-board > .project-navigation",
         ".sketch-board > .board-filters",
         ".sketch-board .board-workspace",
     ):
@@ -166,7 +166,7 @@ def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
 
     mobile = css.split("@media (max-width: 767px)", 1)[1]
     reduced = css.split("@media (prefers-reduced-motion: reduce)", 1)[1]
-    assert ".sketch-board { padding: var(--space-4); }" in mobile
+    assert ".project-board { padding: var(--space-4); }" in mobile
     assert ".sketch-board .ticket-card { transform: none; }" in mobile
     assert ".sketch-board .ticket-card { transform: none; }" in reduced
 

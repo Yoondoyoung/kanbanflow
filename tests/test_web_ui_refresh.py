@@ -266,3 +266,28 @@ def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
     assert ".sprint-history-row" in mobile_css
     assert ".settings-member" in mobile_css
     assert ".auth-card" in mobile_css
+
+
+def test_project_board_shares_chrome_without_leaking_board_effects(client):
+    css = client.get("/static/app.css").text
+    project_board = css.split(".project-board {", 1)[1].split("}", 1)[0]
+    mobile_css = css.split("@media (max-width: 767px)", 1)[1]
+
+    assert "padding: var(--space-6);" in project_board
+    assert ".project-board { padding: var(--space-4); }" in mobile_css
+    for selector in (
+        ".project-board > .project-header .project-title",
+        ".project-board > .project-header .sprint-selector",
+        ".project-board > .project-navigation .project-tabs",
+        ".project-board > .project-navigation .project-tab",
+        ".project-board > .project-navigation .project-settings-link",
+    ):
+        assert selector in css
+
+    assert ".sketch-board {\n  background-color: var(--sketch-paper);" in css
+    assert (
+        "background-image: radial-gradient(circle, var(--sketch-erased) 1px, transparent 1px);"
+        in css
+    )
+    assert ".sketch-board .ticket-card:nth-child(4n + 1)" in css
+    assert ".project-board .ticket-card:nth-child" not in css
