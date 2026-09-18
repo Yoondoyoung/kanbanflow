@@ -6,6 +6,56 @@ from sqlmodel import Session
 from app.models import Sprint, SprintStatus
 
 
+def test_global_sketch_theme_covers_shared_and_non_board_product_surfaces(client):
+    css = client.get("/static/app.css").text
+    root = css.split(":root {", 1)[1].split("}", 1)[0]
+
+    for declaration in (
+        "--sketch-paper: #fdfbf7;",
+        "--sketch-pencil: #2d2d2d;",
+        "--sketch-erased: #e5e0d8;",
+        "--sketch-correction: #ff4d4d;",
+        "--sketch-blue-ink: #2d5da1;",
+        "--sketch-post-it: #fff9c4;",
+        "--canvas: var(--sketch-paper);",
+        "--surface: #ffffff;",
+        "--focus: var(--sketch-blue-ink);",
+    ):
+        assert declaration in root
+
+    for selector in (
+        ".app-shell",
+        ".app-sidebar",
+        ".app-mobile-header",
+        ".auth-header",
+        ".auth-card",
+        ".app-surface, .surface",
+        ".app-row",
+        ".app-empty-state",
+        ".app-dialog",
+        ".app-form",
+        ".app-input",
+        ".app-primary-button",
+        ".app-secondary-button",
+        ".app-ghost-button",
+        ".app-danger-button",
+        ".backlog-planning-sprint",
+        ".backlog-list",
+        ".sprint-history-row",
+        ".settings-section",
+        ".integration-card",
+        ".settings-member",
+    ):
+        assert selector in css
+
+    global_focus = css.split(":focus-visible {", 1)[1].split("}", 1)[0]
+    assert "outline: 3px solid var(--sketch-blue-ink);" in global_focus
+    assert "outline-offset: 2px;" in global_focus
+    assert "@media (max-width: 767px)" in css
+    assert ".sketch-ticket-detail::before" in css
+    assert ".sketch-board .ticket-card:nth-child(4n + 2)" in css
+
+
 def test_project_shell_marks_the_open_project(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     project = make_project(owner)

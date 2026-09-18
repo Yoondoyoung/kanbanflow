@@ -18,7 +18,7 @@ def test_app_stylesheet_is_served(client):
     response = client.get("/static/app.css")
 
     assert response.status_code == 200
-    assert "--canvas: #f7f7f5" in response.text
+    assert "--canvas: var(--sketch-paper);" in response.text
 
 
 def test_sketch_fonts_and_tokens_are_local_served_artifacts(client):
@@ -37,7 +37,7 @@ def test_sketch_fonts_and_tokens_are_local_served_artifacts(client):
     assert "fonts.gstatic.com" not in css
 
     root_tokens = css.split(":root {", 1)[1].split("}", 1)[0]
-    assert "--sketch-" not in root_tokens
+    assert "--sketch-paper: #fdfbf7;" in root_tokens
     scope = css.split(".sketch-board,\n.sketch-ticket-detail {", 1)[1].split("}", 1)[0]
     for declaration in (
         "--sketch-paper: #fdfbf7;",

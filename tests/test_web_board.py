@@ -134,7 +134,7 @@ def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
     css = response.text
 
     root_tokens = css.split(":root {", 1)[1].split("}", 1)[0]
-    assert "--sketch-" not in root_tokens
+    assert "--sketch-paper: #fdfbf7;" in root_tokens
     for selector in (
         ".sketch-board > .project-header",
         ".sketch-board > .project-navigation",

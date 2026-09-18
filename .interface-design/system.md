@@ -51,9 +51,10 @@
 - Show external text as escaped text. Only configured GitHub HTTPS-origin URLs become links,
   and those links open in a new tab with `noopener noreferrer`.
 
-### Board-only restrained hand-drawn exception
+### Restrained hand-drawn system
 
-- Scope the warm paper treatment only to `.sketch-board` on the active sprint board and `.sketch-ticket-detail` on its opened native dialog. The global calm system remains the fallback; removing those classes is a complete visual rollback.
+- Global shell, auth, dashboard, backlog, history, settings, common forms, dialogs, tables, rows, and empty states use shared paper/pencil tokens and local Kalam/Patrick Hand typography. The canvas is warm paper while cards and dialogs remain white for hierarchy.
+- Board dot grid, card rotation, and ticket-detail tape remain limited to their current `.sketch-board` and `.sketch-ticket-detail` scopes.
 - Use `#fdfbf7` paper, `#2d2d2d` pencil, `#e5e0d8` erased structure, `#2d5da1` action/focus ink, `#ff4d4d` correction borders for error/destructive/failed states, and `#fff9c4` only for active-filter context and modal tape.
 - Use one 24px dot-grid layer, 2px pencil borders, shared asymmetric control/card/panel radii, and one 3px 3px zero-blur pencil shadow. Do not add soft shadows or decorative textures inside the exception.
 - Use local Kalam 700 at 32px for the board title, 24px for the modal title, 20px for section headings, 18px for the sprint title, and 16px for lane headings. Use local Patrick Hand 400 at 18px for prose/card titles/inputs and 17px for actions; preserve system sans for dense metadata and monospace for references/branch commands.
