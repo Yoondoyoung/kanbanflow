@@ -1,6 +1,6 @@
 import os
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import inspect, text
@@ -9,7 +9,22 @@ from sqlmodel import Session, SQLModel
 
 from app import models  # noqa: F401  — imported for its side effect of registering tables
 from app.db import make_engine
-from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus, User
+from app.models import (
+    GitHubArtifact,
+    GitHubArtifactKind,
+    GitHubCIState,
+    GitHubInstallation,
+    IntegrationDelivery,
+    ProjectGitHubConnection,
+    ProjectGitHubRepository,
+    Sprint,
+    SprintStatus,
+    SprintTicketHistory,
+    Ticket,
+    TicketGitLink,
+    TicketStatus,
+    User,
+)
 
 
 def test_key_migration_backfills_existing_projects(tmp_path):
@@ -245,6 +260,240 @@ def test_sprint_migration_enforces_status_and_history_constraints(tmp_path):
                 ticket_id=ticket.id,
                 status_at_close=TicketStatus.BACKLOG,
                 was_completed=False,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+
+def test_github_migration_creates_tables_constraints_and_indexes(tmp_path):
+    db = tmp_path / "github-migrated.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+
+    inspector = inspect(make_engine(f"sqlite:///{db}"))
+    github_tables = {
+        "github_installation",
+        "project_github_connection",
+        "github_connect_state",
+        "project_github_repository",
+        "github_artifact",
+        "ticket_git_link",
+        "integration_delivery",
+    }
+    assert github_tables <= set(inspector.get_table_names())
+
+    expected_unique_columns = {
+        "github_installation": {("github_installation_id",)},
+        "project_github_connection": {("project_id", "installation_id")},
+        "project_github_repository": {("project_id", "github_repository_id")},
+        "github_artifact": {
+            ("repository_connection_id", "kind", "external_id")
+        },
+        "integration_delivery": {("provider", "delivery_id")},
+    }
+    for table_name, expected in expected_unique_columns.items():
+        actual = {
+            tuple(constraint["column_names"])
+            for constraint in inspector.get_unique_constraints(table_name)
+        }
+        assert expected <= actual
+
+    assert inspector.get_pk_constraint("ticket_git_link")["constrained_columns"] == [
+        "ticket_id",
+        "artifact_id",
+    ]
+    assert any(
+        foreign_key["constrained_columns"] == ["project_id", "installation_id"]
+        and foreign_key["referred_table"] == "project_github_connection"
+        and foreign_key["referred_columns"] == ["project_id", "installation_id"]
+        for foreign_key in inspector.get_foreign_keys("project_github_repository")
+    )
+
+    expected_indexes = {
+        "project_github_connection": {"ix_project_github_connection_installation_id"},
+        "github_connect_state": {
+            "ix_github_connect_state_project_id",
+            "ix_github_connect_state_user_id",
+        },
+        "project_github_repository": {
+            "ix_project_github_repository_project_id",
+            "ix_project_github_repository_installation_id",
+            "ix_project_github_repository_github_repository_id",
+        },
+        "github_artifact": {"ix_github_artifact_repository_connection_id"},
+    }
+    for table_name, expected in expected_indexes.items():
+        assert expected <= {
+            index["name"] for index in inspector.get_indexes(table_name)
+        }
+
+
+def test_github_migration_downgrade_and_upgrade_are_safe(tmp_path):
+    db = tmp_path / "github-round-trip.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    engine = make_engine(f"sqlite:///{db}")
+    assert "github_installation" in inspect(engine).get_table_names()
+
+    subprocess.run(
+        ["uv", "run", "alembic", "downgrade", "e4b9c52d8fa1"],
+        check=True,
+        env=env,
+    )
+    assert "github_installation" not in inspect(engine).get_table_names()
+
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    assert "github_installation" in inspect(engine).get_table_names()
+
+
+def test_github_migration_rejects_duplicate_rows(tmp_path):
+    db = tmp_path / "github-constraints.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    engine = make_engine(f"sqlite:///{db}")
+
+    with Session(engine) as session:
+        owner = User(
+            name="Owner",
+            email="github-owner@example.com",
+            password_hash="hash",
+        )
+        project = models.Project(name="GitHub", slug="github", key="GIT")
+        ticket = Ticket(
+            ticket_number=1,
+            project_id=project.id,
+            title="GitHub ticket",
+            creator_id=owner.id,
+        )
+        installation = GitHubInstallation(
+            github_installation_id=7001,
+            account_id=91,
+            account_login="acme",
+            connected_by_id=owner.id,
+        )
+        binding = ProjectGitHubConnection(
+            project_id=project.id,
+            installation_id=installation.id,
+        )
+        repository = ProjectGitHubRepository(
+            project_id=project.id,
+            installation_id=installation.id,
+            github_repository_id=501,
+            full_name="acme/api",
+            html_url="https://github.com/acme/api",
+            default_branch="main",
+        )
+        artifact = GitHubArtifact(
+            repository_connection_id=repository.id,
+            kind=GitHubArtifactKind.PULL_REQUEST,
+            external_id="PR_kwDO1",
+            number=12,
+            title="GIT-1",
+            html_url="https://github.com/acme/api/pull/12",
+            author_login="octocat",
+            ci_state=GitHubCIState.NONE,
+            occurred_at=datetime(2026, 9, 17, tzinfo=UTC),
+        )
+        session.add_all([owner, project])
+        session.commit()
+        session.add_all([ticket, installation])
+        session.commit()
+        session.add(binding)
+        session.commit()
+        session.add(repository)
+        session.commit()
+        session.add(artifact)
+        session.commit()
+        session.add_all(
+            [
+                TicketGitLink(ticket_id=ticket.id, artifact_id=artifact.id),
+                IntegrationDelivery(
+                    provider="GITHUB",
+                    delivery_id="delivery-1",
+                    event_type="pull_request",
+                ),
+            ]
+        )
+        session.commit()
+        owner_id = owner.id
+        project_id = project.id
+        installation_id = installation.id
+        repository_id = repository.id
+        artifact_id = artifact.id
+        ticket_id = ticket.id
+        session.expunge_all()
+
+        session.add(
+            GitHubInstallation(
+                github_installation_id=7001,
+                account_id=92,
+                account_login="duplicate",
+                connected_by_id=owner_id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        second_installation = GitHubInstallation(
+            github_installation_id=7002,
+            account_id=92,
+            account_login="other",
+            connected_by_id=owner_id,
+        )
+        session.add(second_installation)
+        session.commit()
+        session.add(
+            ProjectGitHubConnection(
+                project_id=project_id,
+                installation_id=second_installation.id,
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add(
+            ProjectGitHubRepository(
+                project_id=project_id,
+                installation_id=installation_id,
+                github_repository_id=501,
+                full_name="acme/api-copy",
+                html_url="https://github.com/acme/api-copy",
+                default_branch="main",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add(
+            GitHubArtifact(
+                repository_connection_id=repository_id,
+                kind=GitHubArtifactKind.PULL_REQUEST,
+                external_id="PR_kwDO1",
+                title="Duplicate",
+                html_url="https://github.com/acme/api/pull/12",
+                author_login="octocat",
+                ci_state=GitHubCIState.NONE,
+                occurred_at=datetime(2026, 9, 17, tzinfo=UTC),
+            )
+        )
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add(TicketGitLink(ticket_id=ticket_id, artifact_id=artifact_id))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+        session.add(
+            IntegrationDelivery(
+                provider="GITHUB",
+                delivery_id="delivery-1",
+                event_type="push",
             )
         )
         with pytest.raises(IntegrityError):

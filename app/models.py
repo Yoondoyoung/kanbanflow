@@ -2,7 +2,15 @@ import uuid
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, CheckConstraint, Column, Index, UniqueConstraint, text
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Column,
+    ForeignKeyConstraint,
+    Index,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, SQLModel
 
 
@@ -24,6 +32,31 @@ class WebhookType(StrEnum):
     TEAMS = "TEAMS"
     SLACK = "SLACK"
     DISCORD = "DISCORD"
+
+
+class GitHubArtifactKind(StrEnum):
+    PULL_REQUEST = "PULL_REQUEST"
+    COMMIT = "COMMIT"
+
+
+class GitHubArtifactState(StrEnum):
+    DRAFT = "DRAFT"
+    OPEN = "OPEN"
+    MERGED = "MERGED"
+    CLOSED = "CLOSED"
+
+
+class GitHubReviewState(StrEnum):
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    APPROVED = "APPROVED"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+
+
+class GitHubCIState(StrEnum):
+    PENDING = "PENDING"
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    NONE = "NONE"
 
 
 class TicketType(StrEnum):
@@ -200,3 +233,126 @@ class SprintTicketHistory(SQLModel, table=True):
     story_points_at_close: int | None = None
     was_completed: bool
     recorded_at: datetime = Field(default_factory=utcnow)
+
+
+class GitHubInstallation(SQLModel, table=True):
+    __tablename__ = "github_installation"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    github_installation_id: int = Field(unique=True)
+    account_id: int
+    account_login: str = Field(max_length=255)
+    connected_by_id: str = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class ProjectGitHubConnection(SQLModel, table=True):
+    __tablename__ = "project_github_connection"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "installation_id",
+            name="uq_project_github_connection_installation",
+        ),
+    )
+
+    project_id: str = Field(foreign_key="project.id", primary_key=True)
+    installation_id: str = Field(foreign_key="github_installation.id", index=True)
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GitHubConnectState(SQLModel, table=True):
+    __tablename__ = "github_connect_state"
+
+    id: str = Field(max_length=64, primary_key=True)
+    project_id: str = Field(foreign_key="project.id", index=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    pending_installation_id: int | None = None
+    expires_at: datetime
+    consumed_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class ProjectGitHubRepository(SQLModel, table=True):
+    __tablename__ = "project_github_repository"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "github_repository_id",
+            name="uq_project_github_repository",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "installation_id"],
+            [
+                "project_github_connection.project_id",
+                "project_github_connection.installation_id",
+            ],
+            name="fk_project_github_repository_connection",
+        ),
+    )
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    project_id: str = Field(foreign_key="project.id", index=True)
+    installation_id: str = Field(foreign_key="github_installation.id", index=True)
+    github_repository_id: int = Field(index=True)
+    full_name: str = Field(max_length=255)
+    html_url: str = Field(max_length=500)
+    default_branch: str = Field(max_length=255)
+    active: bool = Field(default=True)
+    disconnected_at: datetime | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class GitHubArtifact(SQLModel, table=True):
+    __tablename__ = "github_artifact"
+    __table_args__ = (
+        UniqueConstraint(
+            "repository_connection_id",
+            "kind",
+            "external_id",
+            name="uq_github_artifact_external",
+        ),
+    )
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    repository_connection_id: str = Field(
+        foreign_key="project_github_repository.id", index=True
+    )
+    kind: GitHubArtifactKind
+    external_id: str = Field(max_length=255)
+    number: int | None = None
+    title: str = Field(max_length=500)
+    html_url: str = Field(max_length=500)
+    author_login: str = Field(max_length=255)
+    state: GitHubArtifactState | None = None
+    review_state: GitHubReviewState | None = None
+    ci_state: GitHubCIState = Field(default=GitHubCIState.NONE)
+    head_sha: str | None = Field(default=None, max_length=64)
+    occurred_at: datetime
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
+class TicketGitLink(SQLModel, table=True):
+    __tablename__ = "ticket_git_link"
+
+    ticket_id: str = Field(foreign_key="ticket.id", primary_key=True)
+    artifact_id: str = Field(foreign_key="github_artifact.id", primary_key=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class IntegrationDelivery(SQLModel, table=True):
+    __tablename__ = "integration_delivery"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "delivery_id", name="uq_integration_delivery_provider"
+        ),
+    )
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    provider: str = Field(default="GITHUB", max_length=20)
+    delivery_id: str = Field(max_length=255)
+    event_type: str = Field(max_length=100)
+    received_at: datetime = Field(default_factory=utcnow)

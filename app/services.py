@@ -12,9 +12,14 @@ from sqlmodel import Session, select
 
 from app.auth import hash_password
 from app.models import (
+    GitHubArtifact,
+    GitHubConnectState,
+    GitHubInstallation,
     Priority,
     Project,
     ProjectChatWebhook,
+    ProjectGitHubConnection,
+    ProjectGitHubRepository,
     ProjectMember,
     Role,
     Sprint,
@@ -22,6 +27,7 @@ from app.models import (
     SprintTicketHistory,
     Ticket,
     TicketComment,
+    TicketGitLink,
     TicketStatus,
     TicketType,
     User,
@@ -335,6 +341,36 @@ def remove_project_member(session: Session, project: Project, user_id: str) -> N
 def delete_project(session: Session, project: Project, confirm: str) -> None:
     if confirm != project.slug:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")
+    repository_ids = select(ProjectGitHubRepository.id).where(
+        ProjectGitHubRepository.project_id == project.id
+    )
+    artifact_ids = select(GitHubArtifact.id).where(
+        GitHubArtifact.repository_connection_id.in_(repository_ids)
+    )
+    installation_ids = session.exec(
+        select(ProjectGitHubConnection.installation_id).where(
+            ProjectGitHubConnection.project_id == project.id
+        )
+    ).all()
+    session.execute(
+        delete(GitHubConnectState).where(GitHubConnectState.project_id == project.id)
+    )
+    session.execute(delete(TicketGitLink).where(TicketGitLink.artifact_id.in_(artifact_ids)))
+    session.execute(
+        delete(GitHubArtifact).where(
+            GitHubArtifact.repository_connection_id.in_(repository_ids)
+        )
+    )
+    session.execute(
+        delete(ProjectGitHubRepository).where(
+            ProjectGitHubRepository.project_id == project.id
+        )
+    )
+    session.execute(
+        delete(ProjectGitHubConnection).where(
+            ProjectGitHubConnection.project_id == project.id
+        )
+    )
     sprint_ids = select(Sprint.id).where(Sprint.project_id == project.id)
     session.execute(
         delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
@@ -349,6 +385,16 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
     )
     session.flush()
     session.delete(project)
+    session.flush()
+    for installation_id in installation_ids:
+        if not session.exec(
+            select(ProjectGitHubConnection.project_id).where(
+                ProjectGitHubConnection.installation_id == installation_id
+            )
+        ).first():
+            installation = session.get(GitHubInstallation, installation_id)
+            if installation:
+                session.delete(installation)
     session.commit()
 
 
