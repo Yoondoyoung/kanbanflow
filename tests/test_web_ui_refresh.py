@@ -1,5 +1,6 @@
 import re
 from datetime import date
+from pathlib import Path
 
 from sqlmodel import Session
 
@@ -55,13 +56,35 @@ def test_global_sketch_theme_covers_shared_and_non_board_product_surfaces(client
         rule = global_theme.split(f"{selector} {{", 1)[1].split("}", 1)[0]
         assert "min-height: 44px;" in rule
 
+    danger_hover = global_theme.split(".app-danger-button:hover {", 1)[1].split("}", 1)[0]
+    for declaration in (
+        "background: color-mix(in srgb, var(--sketch-correction) 20%, var(--sketch-paper));",
+        "border-color: var(--sketch-correction);",
+        "color: var(--sketch-pencil);",
+        "text-decoration: underline;",
+    ):
+        assert declaration in danger_hover
+
+    mention_menu = global_theme.split(".ticket-mention-menu {", 1)[1].split("}", 1)[0]
+    assert "border: var(--sketch-border);" in mention_menu
+    assert "border-radius: var(--sketch-radius-control);" in mention_menu
+    assert "box-shadow: var(--sketch-shadow);" in mention_menu
+
     global_focus = css.split(":focus-visible {", 1)[1].split("}", 1)[0]
     assert "outline: 3px solid var(--sketch-blue-ink);" in global_focus
     assert "outline-offset: 2px;" in global_focus
     mobile = css.split("@media (max-width: 767px)", 1)[1]
     assert ".app-mobile-header { border-bottom: 2px solid var(--sketch-pencil); }" in mobile
+    drawer = mobile.rsplit(".app-sidebar.is-open {", 1)[1].split("}", 1)[0]
+    assert "box-shadow: var(--sketch-shadow);" in drawer
     assert ".sketch-ticket-detail::before" in css
     assert ".sketch-board .ticket-card:nth-child(4n + 2)" in css
+
+    system = Path(".interface-design/system.md").read_text()
+    assert "warm paper canvas and white surfaces" in system
+    assert "3px hard shadow" in system
+    assert "asymmetric control/card/panel radii" in system
+    assert "44px minimum" in system
 
 
 def test_project_shell_marks_the_open_project(client, make_user, make_project, login_as):

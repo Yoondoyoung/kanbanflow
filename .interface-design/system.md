@@ -8,11 +8,11 @@
 
 ## Foundations
 
-- Depth: bordered white surfaces on a warm gray canvas; shadows only for modal elevation.
+- Depth: warm paper canvas and white surfaces; 3px hard shadow only for elevated dialogs and actionable controls, never soft shadows.
 - Spacing: 4px base unit using the existing `--space-1` through `--space-6` tokens.
-- Corners: 4px controls, 8px surfaces and dialogs.
-- Typography: system sans-serif, 14px body, 18px section headings, 12px supporting metadata.
-- Controls: 40px minimum height with a visible `:focus-visible` outline.
+- Corners: shared asymmetric control/card/panel radii.
+- Typography: local Kalam headings and Patrick Hand prose/actions; system sans and monospace retain dense metadata and references.
+- Controls: 44px minimum height with a visible `:focus-visible` outline.
 
 ## Hierarchy
 

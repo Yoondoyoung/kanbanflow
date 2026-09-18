@@ -303,6 +303,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .app-danger-button { background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper)); border: 2px solid var(--sketch-correction); box-shadow: var(--sketch-shadow); color: var(--sketch-pencil); }
 :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-menu-button):hover { border-color: var(--sketch-blue-ink); color: var(--sketch-blue-ink); }
 .app-primary-button:hover { background: var(--sketch-blue-ink); color: var(--sketch-paper); }
+.app-danger-button:hover { background: color-mix(in srgb, var(--sketch-correction) 20%, var(--sketch-paper)); border-color: var(--sketch-correction); color: var(--sketch-pencil); text-decoration: underline; text-decoration-color: var(--sketch-correction); }
 :is(.app-ghost-button, .app-icon-button, .app-menu-button):hover { background: var(--sketch-erased); }
 :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-menu-button):disabled, :is(.app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-menu-button)[aria-disabled="true"] { background: var(--sketch-erased); border: var(--sketch-border); box-shadow: none; color: var(--sketch-pencil); }
 .form-error, .settings-danger-zone { background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper)); border-color: var(--sketch-correction); color: var(--sketch-pencil); }
@@ -310,6 +311,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .settings-danger-zone h2 { text-decoration: underline; text-decoration-color: var(--sketch-correction); text-decoration-thickness: 2px; }
 .integration-card .integration-status { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
 .board-filters, .sprint-selector { background: var(--surface); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); }
+.ticket-mention-menu { background: var(--surface); border: var(--sketch-border); border-radius: var(--sketch-radius-control); box-shadow: var(--sketch-shadow); }
 
 .sketch-board,
 .sketch-ticket-detail {
@@ -898,6 +900,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
   .app-menu-button { background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text); cursor: pointer; font-size: 20px; min-height: 44px; min-width: 44px; }
   .app-sidebar { bottom: 0; left: 0; position: fixed; top: 0; transform: translateX(-100%); transition: transform 160ms cubic-bezier(.23, 1, .32, 1); z-index: 20; }
   .app-sidebar.is-open { box-shadow: 8px 0 24px rgb(55 53 47 / 14%); transform: translateX(0); }
+  .app-sidebar.is-open { box-shadow: var(--sketch-shadow); }
   .app-drawer-backdrop { background: rgb(55 53 47 / 25%); bottom: 0; display: block; left: 0; position: fixed; right: 0; top: 0; z-index: 10; }
   .app-main, .auth-main { padding: var(--space-5) var(--space-4); }
   .app-page, .auth-page { padding-left: 0; padding-right: 0; }
