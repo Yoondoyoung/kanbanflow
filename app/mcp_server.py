@@ -173,6 +173,7 @@ async def create_ticket(
     story_points: int | None = None,
     sprint_id: str | None = None,
     assignee_id: str | None = None,
+    due_date: date | None = None,
 ) -> dict[str, object]:
     """Create a ticket in a project."""
     return await _tool_request(
@@ -187,6 +188,7 @@ async def create_ticket(
             "story_points": story_points,
             "sprint_id": sprint_id,
             "assignee_id": assignee_id,
+            "due_date": due_date.isoformat() if due_date else None,
         },
     )
 

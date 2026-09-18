@@ -1,3 +1,4 @@
+from datetime import date
 import subprocess
 
 import httpx
@@ -255,7 +256,11 @@ async def test_ticket_tools_delegate_to_the_api(monkeypatch):
     monkeypatch.setattr(mcp_server, "api_request", fake_request)
 
     async with Client(mcp) as client:
-        await client.call_tool("create_ticket", {"slug": "mcp-check", "title": "MCP ticket"})
+        await mcp_server.create_ticket(
+            "mcp-check",
+            "MCP ticket",
+            due_date=date(2026, 9, 30),
+        )
         await client.call_tool(
             "list_tickets", {"slug": "mcp-check", "status": "BACKLOG", "limit": 10}
         )
@@ -282,6 +287,7 @@ async def test_ticket_tools_delegate_to_the_api(monkeypatch):
                 "story_points": None,
                 "sprint_id": None,
                 "assignee_id": None,
+                "due_date": "2026-09-30",
             },
         ),
         ("GET", "/api/v1/projects/mcp-check/tickets?status=BACKLOG&limit=10", None),
@@ -381,6 +387,10 @@ async def test_sprint_tools_expose_typed_input_schemas():
     assert tools["update_sprint"].input_schema["required"] == ["sprint_id"]
     assert tools["get_sprint_history"].input_schema["required"] == ["sprint_id"]
     assert tools["create_ticket"].input_schema["required"] == ["slug", "title"]
+    assert (
+        tools["create_ticket"].input_schema["properties"]["due_date"]["anyOf"][0]["format"]
+        == "date"
+    )
     assert tools["list_tickets"].input_schema["required"] == ["slug"]
     assert tools["get_ticket"].input_schema["required"] == ["ticket_id"]
     assert tools["update_ticket"].input_schema["required"] == ["ticket_id", "changes"]
