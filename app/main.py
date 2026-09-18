@@ -14,6 +14,7 @@ from app.routers import (
     api_sprints,
     api_tickets,
     api_tokens,
+    github_webhook,
     web,
     web_sprints,
 )
@@ -25,6 +26,7 @@ app.include_router(api_tokens.router)
 app.include_router(api_projects.router)
 app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
+app.include_router(github_webhook.router)
 
 UNSAFE_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 

@@ -1,14 +1,16 @@
+import logging
 import re
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.config import Settings, settings
-from app.github import AvailableRepository
+from app.github import AvailableRepository, GitHubClient
 from app.models import (
     GitHubArtifact,
     GitHubArtifactKind,
@@ -16,6 +18,7 @@ from app.models import (
     GitHubCIState,
     GitHubInstallation,
     GitHubReviewState,
+    IntegrationDelivery,
     Project,
     ProjectGitHubConnection,
     ProjectGitHubRepository,
@@ -23,6 +26,8 @@ from app.models import (
     TicketGitLink,
     utcnow,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def save_project_repositories(
@@ -406,3 +411,259 @@ def insert_linked_commit(
     for ticket in tickets:
         session.add(TicketGitLink(ticket_id=ticket.id, artifact_id=artifact.id))
     return artifact
+
+
+_PULL_REQUEST_ACTIONS = {
+    "opened",
+    "edited",
+    "synchronize",
+    "reopened",
+    "ready_for_review",
+    "converted_to_draft",
+    "closed",
+}
+_REVIEW_ACTIONS = {"submitted", "edited", "dismissed"}
+_CHECK_RUN_ACTIONS = {"created", "rerequested", "completed", "requested_action"}
+
+
+def _github_id(payload: dict, key: str) -> int | None:
+    value = payload.get(key)
+    value = value.get("id") if isinstance(value, dict) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def _repository_connections(session: Session, payload: dict) -> list[ProjectGitHubRepository]:
+    repository_id = _github_id(payload, "repository")
+    installation_id = _github_id(payload, "installation")
+    if repository_id is None or installation_id is None:
+        return []
+    return list(
+        session.exec(
+            select(ProjectGitHubRepository)
+            .join(
+                GitHubInstallation,
+                GitHubInstallation.id == ProjectGitHubRepository.installation_id,
+            )
+            .where(
+                ProjectGitHubRepository.github_repository_id == repository_id,
+                GitHubInstallation.github_installation_id == installation_id,
+                ProjectGitHubRepository.active.is_(True),
+            )
+        ).all()
+    )
+
+
+def _pull_number(payload: dict) -> int | None:
+    pull = payload.get("pull_request")
+    number = pull.get("number") if isinstance(pull, dict) else None
+    valid = isinstance(number, int) and not isinstance(number, bool) and number > 0
+    return number if valid else None
+
+
+def _existing_pull(
+    session: Session,
+    connection: ProjectGitHubRepository,
+    number: int,
+) -> GitHubArtifact | None:
+    return session.exec(
+        select(GitHubArtifact).where(
+            GitHubArtifact.repository_connection_id == connection.id,
+            GitHubArtifact.kind == GitHubArtifactKind.PULL_REQUEST,
+            GitHubArtifact.number == number,
+        )
+    ).first()
+
+
+def _disable_repositories(repositories: Iterable[ProjectGitHubRepository]) -> None:
+    now = utcnow()
+    for repository in repositories:
+        repository.active = False
+        repository.disconnected_at = None
+        repository.updated_at = now
+
+
+def dispatch_github_event(
+    session: Session,
+    event_type: str,
+    payload: dict,
+    github: GitHubClient,
+) -> None:
+    action = payload.get("action")
+    connections = _repository_connections(session, payload)
+    if event_type == "pull_request" and action in _PULL_REQUEST_ACTIONS:
+        pull = payload["pull_request"]
+        head = pull.get("head") if isinstance(pull, dict) else None
+        head_ref = head.get("ref") if isinstance(head, dict) else None
+        for connection in connections:
+            artifact = upsert_pull_request(session, connection, pull)
+            reconcile_pull_request_links(
+                session,
+                connection,
+                artifact,
+                [pull.get("title"), pull.get("body"), head_ref],
+            )
+        return
+    if event_type == "pull_request_review" and action in _REVIEW_ACTIONS:
+        number = _pull_number(payload)
+        if number is None:
+            return
+        for connection in connections:
+            artifact = _existing_pull(session, connection, number)
+            if artifact is None:
+                continue
+            try:
+                reviews = github.pull_request_reviews(
+                    _github_id(payload, "installation"),
+                    connection.full_name,
+                    number,
+                )
+            except httpx.HTTPError:
+                logger.warning(
+                    "GitHub review refresh failed repository=%s pull_request=%s",
+                    connection.full_name,
+                    number,
+                )
+                continue
+            artifact.review_state = aggregate_review_state(reviews)
+            artifact.updated_at = utcnow()
+            session.add(artifact)
+        return
+    if event_type == "check_run" and action in _CHECK_RUN_ACTIONS:
+        check_run = payload.get("check_run")
+        sha = check_run.get("head_sha") if isinstance(check_run, dict) else None
+        if not isinstance(sha, str) or re.fullmatch(r"[0-9a-fA-F]{40}", sha) is None:
+            return
+        installation_id = _github_id(payload, "installation")
+        for connection in connections:
+            pull_numbers: list[int] = []
+            try:
+                pulls = github.pull_requests_for_commit(
+                    installation_id,
+                    connection.full_name,
+                    sha,
+                )
+                for pull in pulls:
+                    number = pull.get("number") if isinstance(pull, dict) else None
+                    if isinstance(number, int) and not isinstance(number, bool) and number > 0:
+                        pull_numbers.append(number)
+                artifacts = [
+                    artifact
+                    for number in pull_numbers
+                    if (artifact := _existing_pull(session, connection, number)) is not None
+                ]
+                if not artifacts:
+                    continue
+                checks = github.check_runs(installation_id, connection.full_name, sha)
+            except httpx.HTTPError:
+                logger.warning(
+                    "GitHub check refresh failed repository=%s pull_request=%s",
+                    connection.full_name,
+                    ",".join(map(str, pull_numbers)) or "unknown",
+                )
+                continue
+            ci_state = aggregate_ci_state(checks)
+            for artifact in artifacts:
+                artifact.ci_state = ci_state
+                artifact.updated_at = utcnow()
+                session.add(artifact)
+        return
+    if event_type == "push":
+        commits = payload.get("commits")
+        if not isinstance(commits, list):
+            return
+        for connection in connections:
+            for commit in commits:
+                insert_linked_commit(session, connection, commit)
+        return
+    if event_type == "installation_repositories" and action == "removed":
+        removed = payload.get("repositories_removed")
+        if not isinstance(removed, list):
+            return
+        repository_ids = {
+            repository_id
+            for repository in removed
+            if isinstance(repository, dict)
+            and isinstance((repository_id := repository.get("id")), int)
+            and not isinstance(repository_id, bool)
+            and repository_id > 0
+        }
+        installation_id = _github_id(payload, "installation")
+        if installation_id is None or not repository_ids:
+            return
+        repositories = session.exec(
+            select(ProjectGitHubRepository)
+            .join(
+                GitHubInstallation,
+                GitHubInstallation.id == ProjectGitHubRepository.installation_id,
+            )
+            .where(
+                GitHubInstallation.github_installation_id == installation_id,
+                ProjectGitHubRepository.github_repository_id.in_(repository_ids),
+            )
+        ).all()
+        _disable_repositories(repositories)
+        return
+    if event_type == "installation" and action in {"deleted", "suspend"}:
+        installation_id = _github_id(payload, "installation")
+        if installation_id is None:
+            return
+        repositories = session.exec(
+            select(ProjectGitHubRepository)
+            .join(
+                GitHubInstallation,
+                GitHubInstallation.id == ProjectGitHubRepository.installation_id,
+            )
+            .where(GitHubInstallation.github_installation_id == installation_id)
+        ).all()
+        _disable_repositories(repositories)
+
+
+def claim_github_delivery(session: Session, delivery: IntegrationDelivery) -> bool:
+    try:
+        with session.begin_nested():
+            session.add(delivery)
+            session.flush()
+    except IntegrityError as exc:
+        constraint = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+        sqlite_columns = "integration_delivery.provider, integration_delivery.delivery_id"
+        if constraint not in {
+            "uq_integration_delivery_provider_delivery_id",
+            "uq_integration_delivery_provider",
+        } and sqlite_columns not in str(exc.orig):
+            raise
+        return False
+    return True
+
+
+def _begin_sqlite_transaction(session: Session) -> None:
+    connection = session.connection()
+    if (
+        connection.dialect.name == "sqlite"
+        and not connection.connection.dbapi_connection.in_transaction
+    ):
+        connection.exec_driver_sql("BEGIN")
+
+
+def process_github_delivery(
+    session: Session,
+    delivery_id: str,
+    event_type: str,
+    payload: dict,
+    github: GitHubClient,
+) -> bool:
+    delivery = IntegrationDelivery(
+        provider="GITHUB",
+        delivery_id=delivery_id,
+        event_type=event_type,
+    )
+    try:
+        _begin_sqlite_transaction(session)
+        if not claim_github_delivery(session, delivery):
+            session.rollback()
+            return False
+        dispatch_github_event(session, event_type, payload, github)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return True
