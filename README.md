@@ -143,10 +143,16 @@ Equivalently, after loading those variables in your shell, run:
 uv run mcp run app/mcp_server.py:mcp --transport stdio
 ```
 
-The tools list sprints available to the token's user and let project **OWNER**s
-create, start, and close sprints. Revoke a lost or unused token with
-`DELETE /api/v1/tokens/{token_id}`; deletion is idempotent and immediately
-prevents further bearer-token use.
+The MCP tools cover:
+
+- project create, list, read, rename, and delete
+- ticket create, list, read, update, status change, and delete
+- sprint list, create, start, close, read, update, and history
+- project-member list, add, role update, and removal
+
+Destructive tools retain the API's owner checks; sprint deletion is not
+available. Revoke a lost or unused token with `DELETE /api/v1/tokens/{token_id}`;
+deletion is idempotent and immediately prevents further bearer-token use.
 
 ## Out of scope for this slice
 

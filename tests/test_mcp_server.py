@@ -242,9 +242,13 @@ async def test_ticket_tools_delegate_to_the_api(monkeypatch):
 
     async with Client(mcp) as client:
         await client.call_tool("create_ticket", {"slug": "mcp-check", "title": "MCP ticket"})
-        await client.call_tool("list_tickets", {"slug": "mcp-check", "status": "BACKLOG", "limit": 10})
+        await client.call_tool(
+            "list_tickets", {"slug": "mcp-check", "status": "BACKLOG", "limit": 10}
+        )
         await client.call_tool("get_ticket", {"ticket_id": "ticket-1"})
-        await client.call_tool("update_ticket", {"ticket_id": "ticket-1", "changes": {"title": "Renamed"}})
+        await client.call_tool(
+            "update_ticket", {"ticket_id": "ticket-1", "changes": {"title": "Renamed"}}
+        )
         await client.call_tool(
             "update_ticket_status",
             {"ticket_id": "ticket-1", "status": "IN_PROGRESS"},
@@ -279,6 +283,44 @@ async def test_ticket_tools_delegate_to_the_api(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_membership_tools_delegate_to_the_api(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return {} if method != "DELETE" else None
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        await client.call_tool("list_project_members", {"slug": "mcp-check"})
+        await client.call_tool(
+            "add_project_member",
+            {"slug": "mcp-check", "email": "member@example.com"},
+        )
+        await client.call_tool(
+            "update_project_member",
+            {"slug": "mcp-check", "user_id": "user-1", "role": "OWNER"},
+        )
+        await client.call_tool("remove_project_member", {"slug": "mcp-check", "user_id": "user-1"})
+
+    assert calls == [
+        ("GET", "/api/v1/projects/mcp-check/members", None),
+        (
+            "POST",
+            "/api/v1/projects/mcp-check/members",
+            {"email": "member@example.com", "role": "MEMBER"},
+        ),
+        (
+            "PATCH",
+            "/api/v1/projects/mcp-check/members/user-1",
+            {"role": "OWNER"},
+        ),
+        ("DELETE", "/api/v1/projects/mcp-check/members/user-1", None),
+    ]
+
+
+@pytest.mark.anyio
 async def test_sprint_tools_expose_typed_input_schemas():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
@@ -302,6 +344,10 @@ async def test_sprint_tools_expose_typed_input_schemas():
         "update_ticket",
         "update_ticket_status",
         "delete_ticket",
+        "list_project_members",
+        "add_project_member",
+        "update_project_member",
+        "remove_project_member",
     }
     assert tools["create_project"].input_schema["required"] == ["name"]
     assert tools["list_sprints"].input_schema["required"] == ["slug"]
@@ -325,6 +371,14 @@ async def test_sprint_tools_expose_typed_input_schemas():
     assert tools["update_ticket"].input_schema["required"] == ["ticket_id", "changes"]
     assert tools["update_ticket_status"].input_schema["required"] == ["ticket_id", "status"]
     assert tools["delete_ticket"].input_schema["required"] == ["ticket_id"]
+    assert tools["list_project_members"].input_schema["required"] == ["slug"]
+    assert tools["add_project_member"].input_schema["required"] == ["slug", "email"]
+    assert tools["update_project_member"].input_schema["required"] == [
+        "slug",
+        "user_id",
+        "role",
+    ]
+    assert tools["remove_project_member"].input_schema["required"] == ["slug", "user_id"]
 
 
 @pytest.mark.anyio

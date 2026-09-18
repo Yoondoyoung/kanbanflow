@@ -6,7 +6,7 @@ from mcp.server import MCPServer
 from mcp.types import CallToolResult, TextContent
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from app.models import Priority, TicketStatus, TicketType
+from app.models import Priority, Role, TicketStatus, TicketType
 
 
 class MCPSettings(BaseSettings):
@@ -111,9 +111,7 @@ async def get_project(slug: str) -> dict[str, object]:
 @mcp.tool()
 async def update_project(slug: str, name: str) -> dict[str, object]:
     """Rename a project. Owner-only."""
-    return await _tool_request(
-        "PATCH", f"/api/v1/projects/{_path_segment(slug)}", {"name": name}
-    )
+    return await _tool_request("PATCH", f"/api/v1/projects/{_path_segment(slug)}", {"name": name})
 
 
 @mcp.tool()
@@ -122,6 +120,37 @@ async def delete_project(slug: str, confirm_slug: str) -> None:
     return await _tool_request(
         "DELETE",
         _with_query(f"/api/v1/projects/{_path_segment(slug)}", confirm=confirm_slug),
+    )
+
+
+@mcp.tool()
+async def list_project_members(slug: str) -> list[dict[str, object]]:
+    return await _tool_request("GET", f"/api/v1/projects/{_path_segment(slug)}/members")
+
+
+@mcp.tool()
+async def add_project_member(slug: str, email: str, role: Role = Role.MEMBER) -> dict[str, object]:
+    return await _tool_request(
+        "POST",
+        f"/api/v1/projects/{_path_segment(slug)}/members",
+        {"email": email, "role": role.value},
+    )
+
+
+@mcp.tool()
+async def update_project_member(slug: str, user_id: str, role: Role) -> dict[str, object]:
+    return await _tool_request(
+        "PATCH",
+        f"/api/v1/projects/{_path_segment(slug)}/members/{_path_segment(user_id)}",
+        {"role": role.value},
+    )
+
+
+@mcp.tool()
+async def remove_project_member(slug: str, user_id: str) -> None:
+    return await _tool_request(
+        "DELETE",
+        f"/api/v1/projects/{_path_segment(slug)}/members/{_path_segment(user_id)}",
     )
 
 
@@ -185,9 +214,7 @@ async def get_ticket(ticket_id: str) -> dict[str, object]:
 
 @mcp.tool()
 async def update_ticket(ticket_id: str, changes: dict[str, object]) -> dict[str, object]:
-    return await _tool_request(
-        "PATCH", f"/api/v1/tickets/{_path_segment(ticket_id)}", changes
-    )
+    return await _tool_request("PATCH", f"/api/v1/tickets/{_path_segment(ticket_id)}", changes)
 
 
 @mcp.tool()
@@ -285,13 +312,9 @@ async def update_sprint(
         }.items()
         if value is not None
     }
-    return await _tool_request(
-        "PATCH", f"/api/v1/sprints/{_path_segment(sprint_id)}", changes
-    )
+    return await _tool_request("PATCH", f"/api/v1/sprints/{_path_segment(sprint_id)}", changes)
 
 
 @mcp.tool()
 async def get_sprint_history(sprint_id: str) -> list[dict[str, object]]:
-    return await _tool_request(
-        "GET", f"/api/v1/sprints/{_path_segment(sprint_id)}/history"
-    )
+    return await _tool_request("GET", f"/api/v1/sprints/{_path_segment(sprint_id)}/history")
