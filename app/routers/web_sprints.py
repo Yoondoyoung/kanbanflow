@@ -586,7 +586,13 @@ def save_github_repository_selection(
         available = github.repositories(installation.github_installation_id)
     if any(not value.isascii() or not value.isdecimal() for value in repository_ids):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid repository selection")
-    selected_ids = {int(value) for value in repository_ids}
+    try:
+        selected_ids = {int(value) for value in repository_ids}
+    except ValueError:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Invalid repository selection",
+        ) from None
     available_by_id = {repository.id: repository for repository in available}
     if not selected_ids.issubset(available_by_id):
         raise HTTPException(

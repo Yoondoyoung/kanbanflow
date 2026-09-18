@@ -660,6 +660,25 @@ def test_github_repository_selection_rejects_forged_id_and_consumes_state(
     ).status_code == 400
 
 
+def test_github_repository_selection_rejects_oversized_decimal_id(
+    client, settings_world, session, login_as, github_selection
+):
+    login_as(settings_world.owner.email)
+
+    response = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["9" * 5_000],
+            **_csrf(settings_world.owner),
+        },
+    )
+
+    assert response.status_code == 422
+    _assert_state_used(session, github_selection.state, settings_world.owner)
+    assert session.exec(select(ProjectGitHubRepository)).all() == []
+
+
 def test_github_repository_selection_requires_owner_and_csrf_without_consuming_state(
     client, settings_world, session, login_as, github_selection
 ):
