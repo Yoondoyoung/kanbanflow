@@ -276,7 +276,7 @@ button, input, select, textarea { font: inherit; }
 /* Shared sketch system. Board texture, rotations, and detail tape remain scoped below. */
 .app-shell, .app-sidebar, .app-mobile-header, .auth-header { background: var(--sketch-paper); border-color: var(--sketch-pencil); }
 .app-sidebar, .auth-header, .app-mobile-header { border-width: 2px; }
-.app-page-title, .project-title, .app-dialog-header h2, .backlog-planning-sprint h2, .backlog-list h2, .sprint-history-header h2, .settings-section h2, .integration-card h3 { font-family: var(--sketch-font-heading); font-weight: 700; letter-spacing: 0; }
+.app-page-title, .project-title, .app-dialog-header h2, .backlog-planning-sprint h2, .backlog-list h2, .sprint-history-header h2, .settings-section h2, .integration-card h3, .ticket-detail-header h2, .ticket-development h3, .ticket-comments-header h3, .ticket-description-label { font-family: var(--sketch-font-heading); font-weight: 700; letter-spacing: 0; }
 .app-surface, .surface, .auth-card, .backlog-planning-sprint, .backlog-list, .sprint-history, .settings-section, .integration-card, .ticket-detail-page { background: var(--surface); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); }
 .app-row, .app-empty-state, .backlog-ticket, .sprint-history-row, .integration-card p, .settings-member, .ticket-description, .ticket-comment-body { font-family: var(--sketch-font-hand); font-size: 18px; font-weight: 400; line-height: 1.35; }
 .app-row > span, .app-empty-state, .sprint-meta, .section-eyebrow, .sprint-history-metrics dt, .sprint-history-metrics dd, .app-form label, .app-user-name, .ticket-number, code, select, option { font-family: ui-sans-serif, system-ui, sans-serif; }
@@ -284,11 +284,18 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .app-row + .app-row, .backlog-ticket, .sprint-history-row + .sprint-history-row, .settings-member, .settings-add-member { border-color: var(--sketch-pencil); border-width: 2px; }
 .app-row:hover, .sprint-history-row:hover { background: var(--sketch-erased); }
 .app-row-link, .project-tab, .project-settings-link, .auth-prompt a, .ticket-development-title a { color: var(--sketch-blue-ink); font-family: var(--sketch-font-hand); }
+.app-brand:hover, .app-brand:focus-visible, .app-projects-link:hover, .app-project-link:hover, .app-sign-out:hover, .app-projects-link:focus-visible, .app-project-link:focus-visible, .app-sign-out:focus-visible { color: var(--sketch-blue-ink); }
 .project-tabs { border-color: var(--sketch-pencil); border-width: 2px; }
 .project-tab.is-active, .project-settings-link.is-active { border-color: var(--sketch-blue-ink); color: var(--sketch-blue-ink); }
+.app-projects-link, .app-project-link, .app-sign-out { min-height: 44px; }
+.project-tab, .project-settings-link { min-height: 44px; }
 .app-dialog { background: var(--surface); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); box-shadow: var(--sketch-shadow); }
 .app-input, .app-form input, .app-form select, .app-form textarea, .board-filters select, .sprint-selector select, .settings-member-controls select { background: var(--sketch-erased); border: var(--sketch-border); border-radius: var(--sketch-radius-control); caret-color: var(--sketch-pencil); color: var(--sketch-pencil); min-height: 44px; }
 .app-input, .app-form input:not([type="checkbox"]):not([type="hidden"]), .app-form textarea { font-family: var(--sketch-font-hand); font-size: 18px; line-height: 1.35; }
+.integration-card input, .integration-card button { min-height: 44px; }
+.ticket-copy-row .app-ghost-button { min-height: 44px; }
+.ticket-mentions summary, .ticket-mention-menu button, .ticket-mentions label { min-height: 44px; }
+.github-repository-option, .board-filter-check { min-height: 44px; }
 .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button, .app-icon-button, .app-menu-button { border-radius: var(--sketch-radius-control); font-family: var(--sketch-font-hand); font-size: 17px; font-weight: 400; line-height: 1.2; min-height: 44px; min-width: 44px; }
 .app-primary-button { background: var(--sketch-blue-ink); border: 2px solid var(--sketch-blue-ink); box-shadow: var(--sketch-shadow); color: var(--sketch-paper); }
 .app-secondary-button { background: var(--sketch-paper); border: var(--sketch-border); box-shadow: var(--sketch-shadow); color: var(--sketch-pencil); }
@@ -301,6 +308,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 .form-error, .settings-danger-zone { background: color-mix(in srgb, var(--sketch-correction) 12%, var(--sketch-paper)); border-color: var(--sketch-correction); color: var(--sketch-pencil); }
 .form-error { border-left: 2px solid var(--sketch-correction); padding: var(--space-2); }
 .settings-danger-zone h2 { text-decoration: underline; text-decoration-color: var(--sketch-correction); text-decoration-thickness: 2px; }
+.integration-card .integration-status { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
 .board-filters, .sprint-selector { background: var(--surface); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); }
 
 .sketch-board,
@@ -886,6 +894,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 @media (max-width: 767px) {
   .app-shell { display: block; }
   .app-mobile-header { align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); display: flex; gap: var(--space-3); min-height: 56px; padding: 0 var(--space-4); }
+  .app-mobile-header { border-bottom: 2px solid var(--sketch-pencil); }
   .app-menu-button { background: transparent; border: 0; border-radius: var(--radius-sm); color: var(--text); cursor: pointer; font-size: 20px; min-height: 44px; min-width: 44px; }
   .app-sidebar { bottom: 0; left: 0; position: fixed; top: 0; transform: translateX(-100%); transition: transform 160ms cubic-bezier(.23, 1, .32, 1); z-index: 20; }
   .app-sidebar.is-open { box-shadow: 8px 0 24px rgb(55 53 47 / 14%); transform: translateX(0); }

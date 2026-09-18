@@ -23,35 +23,43 @@ def test_global_sketch_theme_covers_shared_and_non_board_product_surfaces(client
     ):
         assert declaration in root
 
-    for selector in (
-        ".app-shell",
-        ".app-sidebar",
-        ".app-mobile-header",
-        ".auth-header",
-        ".auth-card",
-        ".app-surface, .surface",
-        ".app-row",
-        ".app-empty-state",
-        ".app-dialog",
-        ".app-form",
-        ".app-input",
-        ".app-primary-button",
-        ".app-secondary-button",
-        ".app-ghost-button",
-        ".app-danger-button",
-        ".backlog-planning-sprint",
-        ".backlog-list",
-        ".sprint-history-row",
-        ".settings-section",
-        ".integration-card",
-        ".settings-member",
+    global_theme = css.split("/* Shared sketch system.", 1)[1].split(
+        ".sketch-board,\n.sketch-ticket-detail {", 1
+    )[0]
+    for declaration in (
+        "background: var(--sketch-paper);",
+        "border: var(--sketch-border);",
+        "border-radius: var(--sketch-radius-panel);",
+        "font-family: var(--sketch-font-heading);",
+        "font-family: var(--sketch-font-hand);",
+        "color: var(--sketch-blue-ink);",
+        "box-shadow: var(--sketch-shadow);",
     ):
-        assert selector in css
+        assert declaration in global_theme
+    assert ".ticket-detail-header h2" in global_theme
+    assert ".ticket-development h3" in global_theme
+    assert ".ticket-comments-header h3" in global_theme
+    assert ".integration-card .integration-status" in global_theme
+    assert "font-family: ui-sans-serif, system-ui, sans-serif;" in global_theme
+
+    controls = global_theme.split(".app-primary-button, .app-secondary-button", 1)[1]
+    assert "min-height: 44px;" in controls
+    for selector in (
+        ".app-projects-link, .app-project-link, .app-sign-out",
+        ".project-tab, .project-settings-link",
+        ".integration-card input, .integration-card button",
+        ".ticket-copy-row .app-ghost-button",
+        ".ticket-mentions summary, .ticket-mention-menu button, .ticket-mentions label",
+        ".github-repository-option, .board-filter-check",
+    ):
+        rule = global_theme.split(f"{selector} {{", 1)[1].split("}", 1)[0]
+        assert "min-height: 44px;" in rule
 
     global_focus = css.split(":focus-visible {", 1)[1].split("}", 1)[0]
     assert "outline: 3px solid var(--sketch-blue-ink);" in global_focus
     assert "outline-offset: 2px;" in global_focus
-    assert "@media (max-width: 767px)" in css
+    mobile = css.split("@media (max-width: 767px)", 1)[1]
+    assert ".app-mobile-header { border-bottom: 2px solid var(--sketch-pencil); }" in mobile
     assert ".sketch-ticket-detail::before" in css
     assert ".sketch-board .ticket-card:nth-child(4n + 2)" in css
 
