@@ -1,7 +1,7 @@
 # Restrained Hand-Drawn Board Theme
 
 **Date:** 2026-09-17
-**Status:** Approved
+**Status:** Proposed
 **Scope:** Visual treatment for the active project board and its centered ticket-detail modal only.
 
 ## Intent
@@ -135,7 +135,7 @@ The dialog reads as one paper sheet:
 - comment cards use paper/erased surfaces without rotation; author/actions/time retain their positions, mentions stay explicit, and edit/delete forms stay in normal flow when opened;
 - the mention listbox remains a stable, unrotated overlay with visible selected, hover, and keyboard-focus states.
 
-Preserve initial focus on `#ticket-detail-heading`, native Escape/cancel, backdrop close, focus return to the originating ticket, local-time rendering, clipboard status announcements, form errors/saved messages, and every existing HTMX target and swap boundary. The new-ticket dialog is not themed.
+Preserve initial focus on `#ticket-detail-heading`, native cancel/Escape close, the explicit Close button, focus return to the originating ticket, local-time rendering, clipboard status announcements, form errors/saved messages, and every existing HTMX target and swap boundary. The backdrop remains visual only; no backdrop-click close behavior is added. The new-ticket dialog is not themed.
 
 ## Responsive and Accessibility Requirements
 
@@ -169,7 +169,7 @@ Do not update `.interface-design/system.md` in the spec commit. During implement
 4. Kalam 700 and Patrick Hand 400 load from local WOFF2 files with attribution and no runtime Google Fonts requests; fallback fonts keep content usable.
 5. Ticket angles are deterministic, card-only, no greater than ±0.35deg, and removed on mobile/reduced-motion. No randomization code exists.
 6. Color is semantic: blue for action/focus/links, red for errors/destructive/failed states, yellow for active-filter context/tape, and no decorative status rainbow.
-7. Native dialog focus, Escape/backdrop close, opener focus return, Markdown edit/view, local time, copy announcements, comment/mention actions, and HTMX swaps behave exactly as before.
+7. Native dialog focus, cancel/Escape close, the explicit Close button, opener focus return, Markdown edit/view, local time, copy announcements, comment/mention actions, and HTMX swaps behave exactly as before; the backdrop remains visual only.
 8. Controls meet 44px targets, focus is visible, labels and status are not color-only, content wraps, and the board remains keyboard-scrollable horizontally.
 9. Desktop modal remains centered at 60/40; mobile modal is full-screen and stacked without rotated or clipped text.
 10. No route, model, data, authorization, label, dependency, framework, or build-step change is introduced.
