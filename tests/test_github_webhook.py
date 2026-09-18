@@ -705,6 +705,59 @@ def test_unknown_event_or_action_records_only(
     assert len(session.exec(select(IntegrationDelivery)).all()) == 1
 
 
+@pytest.mark.parametrize(
+    ("event", "event_object"),
+    [
+        ("pull_request", {"pull_request": _pull("PAY")}),
+        ("pull_request_review", {"pull_request": {"number": 17}}),
+        ("check_run", {"check_run": {"head_sha": "a" * 40}}),
+        ("installation", {}),
+    ],
+)
+def test_malformed_action_type_records_only(
+    event, event_object, signed_webhook, connected_repo, session
+):
+    response = signed_webhook(
+        event,
+        {
+            "action": [],
+            "installation": {"id": 7001},
+            "repository": {"id": 501},
+            **event_object,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(session.exec(select(IntegrationDelivery)).all()) == 1
+    assert session.exec(select(GitHubArtifact)).all() == []
+    session.refresh(connected_repo.connection)
+    assert connected_repo.connection.active is True
+    assert signed_webhook.github.calls == []
+
+
+@pytest.mark.parametrize(
+    "event_object",
+    [{}, {"pull_request": []}],
+    ids=["missing", "wrong-shaped"],
+)
+def test_malformed_pull_request_object_records_only(
+    event_object, signed_webhook, connected_repo, session
+):
+    response = signed_webhook(
+        "pull_request",
+        {
+            "action": "opened",
+            "installation": {"id": 7001},
+            "repository": {"id": 501},
+            **event_object,
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(session.exec(select(IntegrationDelivery)).all()) == 1
+    assert session.exec(select(GitHubArtifact)).all() == []
+
+
 def test_delivery_unique_conflict_is_treated_as_duplicate(session):
     session.add(
         IntegrationDelivery(

@@ -489,10 +489,14 @@ def dispatch_github_event(
     github: GitHubClient,
 ) -> None:
     action = payload.get("action")
+    if action is not None and not isinstance(action, str):
+        return
     connections = _repository_connections(session, payload)
     if event_type == "pull_request" and action in _PULL_REQUEST_ACTIONS:
-        pull = payload["pull_request"]
-        head = pull.get("head") if isinstance(pull, dict) else None
+        pull = payload.get("pull_request")
+        if not isinstance(pull, dict):
+            return
+        head = pull.get("head")
         head_ref = head.get("ref") if isinstance(head, dict) else None
         for connection in connections:
             artifact = upsert_pull_request(session, connection, pull)
