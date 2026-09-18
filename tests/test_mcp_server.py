@@ -199,12 +199,48 @@ async def test_create_project_delegates_to_the_api(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_project_tools_delegate_to_the_api(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return {"slug": "mcp-check"}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        tools = {tool.name for tool in (await client.list_tools()).tools}
+        for name, arguments in (
+            ("list_projects", {}),
+            ("get_project", {"slug": "mcp-check"}),
+            ("update_project", {"slug": "mcp-check", "name": "Renamed"}),
+            (
+                "delete_project",
+                {"slug": "mcp-check", "confirm_slug": "mcp-check"},
+            ),
+        ):
+            assert name in tools
+            await client.call_tool(name, arguments)
+
+    assert calls == [
+        ("GET", "/api/v1/projects", None),
+        ("GET", "/api/v1/projects/mcp-check", None),
+        ("PATCH", "/api/v1/projects/mcp-check", {"name": "Renamed"}),
+        ("DELETE", "/api/v1/projects/mcp-check?confirm=mcp-check", None),
+    ]
+
+
+@pytest.mark.anyio
 async def test_sprint_tools_expose_typed_input_schemas():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
     assert set(tools) == {
         "create_project",
+        "list_projects",
+        "get_project",
+        "update_project",
+        "delete_project",
         "list_sprints",
         "create_sprint",
         "start_sprint",

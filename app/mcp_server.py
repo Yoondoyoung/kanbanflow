@@ -1,5 +1,5 @@
 from datetime import date
-from urllib.parse import quote, unquote, urlsplit
+from urllib.parse import quote, unquote, urlencode, urlsplit
 
 import httpx
 from mcp.server import MCPServer
@@ -46,6 +46,11 @@ def _path_segment(value: str) -> str:
     return quote(value, safe="")
 
 
+def _with_query(path: str, **params: object) -> str:
+    query = urlencode({key: value for key, value in params.items() if value is not None})
+    return f"{path}?{query}" if query else path
+
+
 def _status_detail(status: int) -> str:
     return {
         401: "Unauthorized",
@@ -87,6 +92,35 @@ async def _tool_request(method: str, path: str, json=None):
 async def create_project(name: str) -> dict[str, object]:
     """Create a project owned by the token's user."""
     return await _tool_request("POST", "/api/v1/projects", {"name": name})
+
+
+@mcp.tool()
+async def list_projects() -> list[dict[str, object]]:
+    """List projects available to the token's user."""
+    return await _tool_request("GET", "/api/v1/projects")
+
+
+@mcp.tool()
+async def get_project(slug: str) -> dict[str, object]:
+    """Get a project available to the token's user."""
+    return await _tool_request("GET", f"/api/v1/projects/{_path_segment(slug)}")
+
+
+@mcp.tool()
+async def update_project(slug: str, name: str) -> dict[str, object]:
+    """Rename a project. Owner-only."""
+    return await _tool_request(
+        "PATCH", f"/api/v1/projects/{_path_segment(slug)}", {"name": name}
+    )
+
+
+@mcp.tool()
+async def delete_project(slug: str, confirm_slug: str) -> None:
+    """Delete a project and its contents. Owner-only; confirmation must match slug."""
+    return await _tool_request(
+        "DELETE",
+        _with_query(f"/api/v1/projects/{_path_segment(slug)}", confirm=confirm_slug),
+    )
 
 
 @mcp.tool()
