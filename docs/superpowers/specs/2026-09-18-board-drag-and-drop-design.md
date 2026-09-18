@@ -13,6 +13,7 @@ Keep sprint work on the board: filters stay on the board, cards move directly be
 - Ticket cards can be dragged between the existing `BACKLOG`, `TODO`, `IN_PROGRESS`, and `DONE` lanes. A drop uses the existing status-change route and its transition, notification, CSRF, and permission rules.
 - Successful drops move the card and update both lane counts. Failed drops leave the board recoverable and show an error; the ticket detail status control remains the keyboard-accessible fallback.
 - The New Ticket Destination select lists active and planning sprints only. It keeps the displayed sprint selected, and the ticket starts in that sprint's `BACKLOG` status.
+- When no active or planning sprint exists, the backlog page hides New Ticket until a sprint is added.
 - Existing unscheduled tickets, API support for `sprint_id=None`, and the sprint-planning project backlog queue remain unchanged for compatibility.
 
 ## Implementation Boundary
@@ -33,6 +34,6 @@ Keep sprint work on the board: filters stay on the board, cards move directly be
 1. A filter request containing blank select values returns the board as `text/html` and applies any non-blank filters.
 2. Dropping a card in another lane persists the status through the existing endpoint and updates the visible card placement/counts without a full-page navigation.
 3. A failed status update does not silently move the card and exposes an actionable error.
-4. New Ticket has no standalone `Backlog` destination; the displayed sprint is selected and receives the ticket in `BACKLOG`.
+4. New Ticket has no standalone `Backlog` destination; the displayed sprint is selected and receives the ticket in `BACKLOG`, while projects without an open sprint show no New Ticket action.
 5. Existing unscheduled-ticket and sprint-planning behavior remains intact.
 6. Focused tests and the full test suite pass; the board is smoke-checked in Chromium at desktop and mobile widths.

@@ -2,7 +2,7 @@
 
 **Goal:** Keep filter submissions on the HTML board, move cards between status lanes by drag-and-drop, and remove the unscheduled Backlog choice from New Ticket.
 
-**Architecture:** Normalize web-only filter strings at the board route boundary. Reuse the existing status POST route from a small native drag handler. Keep `sprint_id=None` in the model/API/planning queue, but require the web New Ticket form to submit an active or planning sprint.
+**Architecture:** Normalize web-only filter strings at the board route boundary. Reuse the existing status POST route from a small native drag handler. Keep `sprint_id=None` in the model/API/planning queue, while the visible New Ticket UI lists only active or planning sprints.
 
 **Tech:** FastAPI, Jinja, vanilla JavaScript, CSS, pytest, Playwright/Chromium smoke check.
 
@@ -21,9 +21,9 @@
 
 **Files:** `tests/test_web_ticket_create.py`, `app/templates/partials/ticket_modal.html`, `app/routers/web.py`
 
-- [ ] Change focused tests to require sprint destinations, assert no empty/Backlog option, and assert a missing sprint is rejected without creating a ticket.
+- [ ] Change focused tests to assert no empty/Backlog option and hide New Ticket when no open sprint exists.
 - [ ] Run the focused tests and confirm they fail.
-- [ ] Remove the standalone Backlog option, make Destination required, retain the displayed sprint selection, and reject missing `sprint_id` at the web route before calling the shared service.
+- [ ] Remove the standalone Backlog option, retain the displayed sprint selection, and hide the backlog-page action when no destination sprint exists.
 - [ ] Leave API creation and the sprint-planning unscheduled queue unchanged.
 - [ ] Run ticket-creation tests.
 
