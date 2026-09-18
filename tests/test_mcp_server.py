@@ -182,11 +182,35 @@ def test_mcp_settings_defaults_and_server_are_importable(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_create_project_delegates_to_the_api(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None):
+        calls.append((method, path, json))
+        return {"id": "project-1", "name": "MCP Check", "slug": "mcp-check"}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("create_project", {"name": "MCP Check"})
+
+    assert calls == [("POST", "/api/v1/projects", {"name": "MCP Check"})]
+    assert result.structured_content["slug"] == "mcp-check"
+
+
+@pytest.mark.anyio
 async def test_sprint_tools_expose_typed_input_schemas():
     async with Client(mcp) as client:
         tools = {tool.name: tool for tool in (await client.list_tools()).tools}
 
-    assert set(tools) == {"list_sprints", "create_sprint", "start_sprint", "close_sprint"}
+    assert set(tools) == {
+        "create_project",
+        "list_sprints",
+        "create_sprint",
+        "start_sprint",
+        "close_sprint",
+    }
+    assert tools["create_project"].input_schema["required"] == ["name"]
     assert tools["list_sprints"].input_schema["required"] == ["slug"]
     assert tools["create_sprint"].input_schema["required"] == [
         "slug",

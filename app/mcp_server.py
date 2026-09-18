@@ -84,6 +84,12 @@ async def _tool_request(method: str, path: str, json=None):
 
 
 @mcp.tool()
+async def create_project(name: str) -> dict[str, object]:
+    """Create a project owned by the token's user."""
+    return await _tool_request("POST", "/api/v1/projects", {"name": name})
+
+
+@mcp.tool()
 async def list_sprints(slug: str) -> list[dict[str, object]]:
     """List a project's sprints; sprint changes are owner-only."""
     sprints = await _tool_request("GET", f"/api/v1/projects/{_path_segment(slug)}/sprints")
