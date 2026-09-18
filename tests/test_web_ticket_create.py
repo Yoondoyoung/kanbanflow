@@ -37,6 +37,30 @@ def test_modal_redirects_after_a_successful_htmx_submission(client, active_sprin
     assert ">Backlog</option>" not in page
 
 
+def test_web_ticket_create_accepts_due_date(client, active_sprint, engine, login_as):
+    owner, project, sprint = active_sprint
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}").text
+    response = client.post(
+        f"/projects/{project.slug}/tickets",
+        data={
+            "_csrf": make_csrf_token(owner.id),
+            "title": "Deadline",
+            "type": "TASK",
+            "sprint_id": sprint.id,
+            "due_date": "2026-09-30",
+        },
+        follow_redirects=False,
+    )
+
+    assert 'type="date" name="due_date"' in page
+    assert response.status_code == 303
+    with Session(engine) as session:
+        ticket = session.exec(select(Ticket).where(Ticket.title == "Deadline")).one()
+    assert ticket.due_date == date(2026, 9, 30)
+
+
 def test_submitting_the_modal_redirects_after_an_htmx_success(
     client, make_user, make_project, login_as
 ):

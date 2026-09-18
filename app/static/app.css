@@ -224,6 +224,7 @@ button, input, select, textarea { font: inherit; }
 .ticket-card-title { align-items: baseline; display: flex; font-weight: 650; gap: var(--space-2); }
 .ticket-number { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 400; }
 .ticket-card-meta { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: var(--space-2); margin-top: var(--space-1); }
+.ticket-due-date.is-overdue { color: var(--danger); font-weight: 700; }
 .ticket-card[draggable="true"] { cursor: grab; }
 .ticket-card.is-dragging { cursor: grabbing; opacity: .45; }
 [data-drop-status].is-drag-over { outline: 3px solid var(--focus); outline-offset: 2px; }

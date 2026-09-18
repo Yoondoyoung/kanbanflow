@@ -15,6 +15,9 @@
       <span>{{ ticket.priority.value|capitalize }}</span>
       <span>{% if ticket.assignee_id %}{{ (assignee_names|default({})).get(ticket.assignee_id, "Unassigned") }}{% else %}Unassigned{% endif %}</span>
       {% if ticket.story_points %}<span>{{ ticket.story_points }} pts</span>{% endif %}
+      {% if ticket.due_date %}
+      <time datetime="{{ ticket.due_date.isoformat() }}" class="ticket-due-date{% if ticket.status.value != 'DONE' and ticket.due_date < today %} is-overdue{% endif %}">Due {{ ticket.due_date.strftime('%b %-d') }}</time>
+      {% endif %}
     </span>
   </button>
 </article>

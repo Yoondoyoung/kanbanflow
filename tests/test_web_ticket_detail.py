@@ -170,6 +170,36 @@ def test_owner_updates_every_ticket_detail_field_and_requests_card_refresh(
     )
 
 
+def test_detail_due_date_input_persists_and_clears(client, ticket_world, login_as, session):
+    login_as(ticket_world.owner.email)
+    url = f"/projects/{ticket_world.project.slug}/tickets/1"
+    fields = {
+        "title": "Unsafe details",
+        "description": "Text",
+        "type": "BUG",
+        "priority": "HIGH",
+        "status": "SELECTED",
+        "_csrf": make_csrf_token(ticket_world.owner.id),
+    }
+
+    form = client.get(url, headers={"HX-Request": "true"})
+    saved = client.post(
+        url, data={**fields, "due_date": "2026-09-30"}, headers={"HX-Request": "true"}
+    )
+    session.expire_all()
+
+    assert 'type="date" name="due_date"' in form.text
+    assert saved.status_code == 200
+    assert 'value="2026-09-30"' in saved.text
+    assert _ticket(session, ticket_world).due_date == date(2026, 9, 30)
+
+    cleared = client.post(url, data={**fields, "due_date": ""}, headers={"HX-Request": "true"})
+    session.expire_all()
+
+    assert cleared.status_code == 200
+    assert _ticket(session, ticket_world).due_date is None
+
+
 def test_member_can_update_ticket_details(client, ticket_world, login_as, session):
     login_as(ticket_world.member.email)
 

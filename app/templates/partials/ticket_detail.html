@@ -87,6 +87,10 @@
         </select>
       </div>
       <div>
+        <label for="detail-due-date">Due date</label>
+        <input id="detail-due-date" type="date" name="due_date" value="{{ form_values['due_date'] }}">
+      </div>
+      <div>
         <label for="detail-assignee">Owner</label>
         <select id="detail-assignee" name="assignee_id">
           {% if form_values['assignee_id'] and form_values['assignee_id'] not in member_ids %}<option value="{{ form_values['assignee_id'] }}" selected>{{ form_values['assignee_id'] }}</option>{% endif %}

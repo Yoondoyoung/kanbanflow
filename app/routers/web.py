@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -70,6 +72,7 @@ _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 _STATUS_FORM_FIELD = Form(..., alias="status")
 _TYPE_FILTER_QUERY = Query(None, alias="type")
 _MENTION_IDS_FORM = Form(None)
+_DUE_DATE_FORM = Form(None)
 
 
 def render(
@@ -632,6 +635,7 @@ def _ticket_detail(
         "type": ticket.type.value,
         "priority": ticket.priority.value,
         "story_points": str(ticket.story_points or ""),
+        "due_date": ticket.due_date.isoformat() if ticket.due_date else "",
         "assignee_id": ticket.assignee_id or "",
         "status": ticket.status.value,
         "resolution_notes": ticket.resolution_notes or "",
@@ -816,6 +820,7 @@ def board(
                 )
                 .order_by(Sprint.start_date)
             ).all(),
+            "today": date.today(),
         },
         session=session,
     )
@@ -848,6 +853,7 @@ def ticket_detail(
                 "project": project,
                 "ticket": ticket,
                 "assignee_names": assignee_names,
+                "today": date.today(),
             },
         )
     return _ticket_detail(
@@ -1019,6 +1025,7 @@ def update_ticket_form(
     type: str = Form(""),
     priority: str = Form(""),
     story_points: str = Form(""),
+    due_date: date | None = _DUE_DATE_FORM,
     assignee_id: str = Form(""),
     status_value: str = Form("", alias="status"),
     resolution_notes: str = Form(""),
@@ -1038,6 +1045,7 @@ def update_ticket_form(
         "type": type,
         "priority": priority,
         "story_points": story_points,
+        "due_date": due_date.isoformat() if due_date else "",
         "assignee_id": assignee_id,
         "status": status_value,
         "resolution_notes": resolution_notes,
@@ -1051,6 +1059,7 @@ def update_ticket_form(
             type=type,
             priority=priority,
             story_points=points,
+            due_date=due_date,
             assignee_id=assignee_id or None,
             resolution_notes=resolution_notes or None,
             sprint_id=sprint_id or None,
@@ -1115,6 +1124,7 @@ def create_ticket_form(
     type: TicketType = _DEFAULT_TICKET_TYPE,
     description: str = Form(""),
     sprint_id: str | None = Form(None),
+    due_date: date | None = _DUE_DATE_FORM,
     project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -1133,6 +1143,7 @@ def create_ticket_form(
             description=description,
             type=type,
             priority=Priority.MEDIUM,
+            due_date=due_date,
             sprint_id=sprint_id,
             tasks=tasks,
         )
@@ -1183,5 +1194,6 @@ def change_status_form(
             "ticket": ticket,
             "columns": COLUMNS,
             "assignee_names": assignee_names,
+            "today": date.today(),
         },
     )

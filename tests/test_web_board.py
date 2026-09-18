@@ -76,6 +76,45 @@ def test_board_keeps_markdown_descriptions_out_of_compact_cards(
     assert "alert" not in card
 
 
+def test_board_marks_only_open_past_due_tickets_overdue(
+    client, active_sprint_world, engine, login_as
+):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Ticket(
+                    ticket_number=1,
+                    project_id=project.id,
+                    title="Open overdue",
+                    status=TicketStatus.BACKLOG,
+                    sprint_id=active_sprint_world.sprint.id,
+                    creator_id=owner.id,
+                    due_date=date(2026, 9, 17),
+                ),
+                Ticket(
+                    ticket_number=2,
+                    project_id=project.id,
+                    title="Done overdue",
+                    status=TicketStatus.DONE,
+                    sprint_id=active_sprint_world.sprint.id,
+                    creator_id=owner.id,
+                    due_date=date(2026, 9, 17),
+                ),
+            ]
+        )
+        session.commit()
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}").text
+    open_card = page.split("Open overdue", 1)[1].split("</article>", 1)[0]
+    done_card = page.split("Done overdue", 1)[1].split("</article>", 1)[0]
+
+    assert '<time datetime="2026-09-17" class="ticket-due-date is-overdue">' in open_card
+    assert '<time datetime="2026-09-17" class="ticket-due-date">' in done_card
+
+
 def test_non_member_gets_404_for_the_board(client, make_user, make_project, login_as):
     owner = make_user(email="ada@example.com")
     make_user(email="bob@example.com")
