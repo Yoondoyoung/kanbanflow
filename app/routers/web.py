@@ -392,6 +392,7 @@ def _ticket_detail(
             "priorities": Priority,
             "columns": COLUMNS,
             "error": error,
+            "description_editing": error is not None,
             "saved": saved,
             "form_values": form_values,
             "active_tab": "board",

@@ -49,10 +49,19 @@
       <label for="detail-title">Work item title</label>
       <input id="detail-title" name="title" value="{{ form_values['title'] }}" required>
     </div>
-    <div>
-      <label for="detail-description">Details</label>
-      <textarea id="detail-description" name="description" rows="6">{{ form_values['description'] }}</textarea>
-      {% if form_values['description'] %}<div class="ticket-description">{{ form_values['description'] | markdown | safe }}</div>{% endif %}
+    <div class="ticket-description-editor" data-description-editor>
+      <div class="ticket-description-header">
+        <span class="ticket-description-label">Details</span>
+        <button type="button" class="app-icon-button" data-description-edit aria-label="Edit details" title="Edit details"{% if description_editing %} hidden{% endif %}>
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
+      </div>
+      <div class="ticket-description" data-description-view{% if description_editing %} hidden{% endif %}>{% if form_values['description'] %}{{ form_values['description'] | markdown | safe }}{% else %}<p>No details provided.</p>{% endif %}</div>
+      <div class="ticket-description-fields" data-description-fields{% if not description_editing %} hidden{% endif %}>
+        <label class="sr-only" for="detail-description">Details</label>
+        <textarea id="detail-description" name="description" rows="6">{{ form_values['description'] }}</textarea>
+        <button type="button" class="app-ghost-button" data-description-cancel>Cancel</button>
+      </div>
     </div>
     <div class="ticket-detail-grid">
       <div>

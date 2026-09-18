@@ -105,6 +105,27 @@
   });
 
   document.addEventListener("click", (event) => {
+    const editDescription = event.target.closest("[data-description-edit]");
+    if (editDescription) {
+      const editor = editDescription.closest("[data-description-editor]");
+      editDescription.hidden = true;
+      editor.querySelector("[data-description-view]").hidden = true;
+      editor.querySelector("[data-description-fields]").hidden = false;
+      editor.querySelector("textarea").focus();
+      return;
+    }
+    const cancelDescription = event.target.closest("[data-description-cancel]");
+    if (cancelDescription) {
+      const editor = cancelDescription.closest("[data-description-editor]");
+      const textarea = editor.querySelector("textarea");
+      textarea.value = textarea.defaultValue;
+      editor.querySelector("[data-description-fields]").hidden = true;
+      editor.querySelector("[data-description-view]").hidden = false;
+      const editButton = editor.querySelector("[data-description-edit]");
+      editButton.hidden = false;
+      editButton.focus();
+      return;
+    }
     const copyButton = event.target.closest("[data-copy-text]");
     if (copyButton) {
       const status = copyButton.nextElementSibling;

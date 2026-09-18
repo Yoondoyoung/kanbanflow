@@ -75,6 +75,8 @@ def test_ticket_detail_includes_the_comment_composer_and_project_members(
     assert 'role="listbox"' in response.text
     assert f'data-mention-id="{comment_world.member.id}"' in response.text
     assert "@Bob Builder" in response.text
+    assert "No details provided." in response.text
+    assert 'data-description-fields hidden>' in response.text
 
     page = client.get(f"/projects/{comment_world.project.slug}/tickets/1")
     assert '<script src="/static/app.js" defer></script>' in page.text
@@ -171,6 +173,36 @@ def test_comment_author_edits_the_comment_and_new_mentions_notify(
     assert stored.updated_at is not None
     assert stored.mentioned_user_ids == [comment_world.owner.id]
     assert sent[0]["mentioned_names"] == ["Ada Lovelace"]
+
+
+def test_comment_permissions_render_accessible_icon_actions(
+    client, comment_world, login_as, session
+):
+    comment = TicketComment(
+        ticket_id=comment_world.ticket.id,
+        author_id=comment_world.member.id,
+        body="Owned by Bob",
+    )
+    session.add(comment)
+    session.commit()
+
+    login_as(comment_world.member.email)
+    author_view = client.get(
+        f"/projects/{comment_world.project.slug}/tickets/1",
+        headers={"HX-Request": "true"},
+    )
+    login_as(comment_world.owner.email)
+    owner_view = client.get(
+        f"/projects/{comment_world.project.slug}/tickets/1",
+        headers={"HX-Request": "true"},
+    )
+
+    assert 'aria-label="Edit comment" title="Edit comment"' in author_view.text
+    assert 'aria-label="Delete comment" title="Delete comment"' in author_view.text
+    assert author_view.text.count('<svg aria-hidden="true" focusable="false"') >= 3
+    assert 'hx-confirm="Delete this comment?"' in author_view.text
+    assert 'aria-label="Edit comment"' not in owner_view.text
+    assert 'aria-label="Delete comment" title="Delete comment"' in owner_view.text
 
 
 def test_member_cannot_edit_another_members_comment(client, comment_world, login_as, session):

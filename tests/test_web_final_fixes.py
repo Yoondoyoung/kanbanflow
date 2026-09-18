@@ -235,6 +235,10 @@ def test_non_htmx_ticket_detail_is_a_full_member_page_and_hx_is_a_fragment(
     assert '<div class="project-board" x-data>' in page.text
     assert fragment.status_code == 200
     assert "<html" not in fragment.text
+    assert 'data-description-view>' in page.text
+    assert 'data-description-fields hidden>' in page.text
+    assert 'data-description-view>' in fragment.text
+    assert 'data-description-fields hidden>' in fragment.text
     assert member_page.status_code == 200
     assert missing.status_code == 404
 
@@ -311,6 +315,8 @@ def test_detail_typed_validation_keeps_every_attempted_field(
     assert 'role="alert"' in response.text
     assert 'value="&lt;b&gt;Draft title&lt;/b&gt;"' in response.text
     assert "&lt;script&gt;draft()&lt;/script&gt;" in response.text
+    assert 'data-description-view hidden>' in response.text
+    assert 'data-description-fields>' in response.text
     assert '<option value="INVALID_TYPE" selected>INVALID_TYPE</option>' in response.text
     assert '<option value="INVALID_PRIORITY" selected>INVALID_PRIORITY</option>' in response.text
     assert '<option value="4" selected>4</option>' in response.text

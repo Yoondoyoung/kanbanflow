@@ -19,7 +19,9 @@
       <div class="ticket-comment-actions">
         {% if item.can_edit %}
         <details>
-          <summary>Edit</summary>
+          <summary class="app-icon-button" aria-label="Edit comment" title="Edit comment">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          </summary>
           <form class="app-form" method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/edit"
                 hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/edit" hx-target="#ticket-comments" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ csrf_token }}">
@@ -36,7 +38,9 @@
         <form method="post" action="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/delete"
               hx-post="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}/comments/{{ item.comment.id }}/delete" hx-target="#ticket-comments" hx-swap="outerHTML" hx-confirm="Delete this comment?">
           <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-          <button class="app-ghost-button" type="submit">Delete</button>
+          <button class="app-icon-button" type="submit" aria-label="Delete comment" title="Delete comment">
+            <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zm3.46-7.12 1.41-1.41L12 11.59l1.12-1.12 1.41 1.41L13.41 13l1.12 1.12-1.41 1.41L12 14.41l-1.12 1.12-1.41-1.41L10.59 13l-1.13-1.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+          </button>
         </form>
         {% endif %}
       </div>

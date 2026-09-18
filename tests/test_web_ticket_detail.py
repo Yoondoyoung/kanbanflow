@@ -101,6 +101,11 @@ def test_detail_fragment_renders_sanitized_markdown_and_project_members(
     assert "<html" not in response.text
     assert "<strong>Safe</strong>" in response.text
     assert "<script>" not in response.text
+    assert 'data-description-view>' in response.text
+    assert 'data-description-fields hidden>' in response.text
+    assert 'data-description-edit aria-label="Edit details" title="Edit details"' in response.text
+    assert 'data-description-cancel>Cancel</button>' in response.text
+    assert '<svg aria-hidden="true" focusable="false"' in response.text
     assert f'value="{ticket_world.owner.id}"' in response.text
     assert f'value="{ticket_world.member.id}"' in response.text
     assert ticket_world.outsider.id not in response.text
@@ -231,6 +236,13 @@ def test_detail_validation_errors_and_csrf_do_not_mutate_ticket(
 
     assert invalid.status_code == 422
     assert "story_points" in invalid.text
+    assert 'data-description-view hidden>' in invalid.text
+    assert 'data-description-fields>' in invalid.text
+    assert '>Text</textarea>' in invalid.text
+    assert (
+        'data-description-edit aria-label="Edit details" title="Edit details" hidden>'
+        in invalid.text
+    )
     assert missing_csrf.status_code == 403
     assert _ticket(session, ticket_world).title == "Unsafe details"
 
