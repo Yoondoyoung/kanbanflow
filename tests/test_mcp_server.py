@@ -349,6 +349,7 @@ async def test_sprint_tools_expose_typed_input_schemas():
         "update_project_member",
         "remove_project_member",
     }
+    assert all(tool.description for tool in tools.values())
     assert tools["create_project"].input_schema["required"] == ["name"]
     assert tools["list_sprints"].input_schema["required"] == ["slug"]
     assert tools["create_sprint"].input_schema["required"] == [

@@ -111,6 +111,16 @@ def test_patch_empty_body_leaves_ticket_unchanged(client, seeded):
     assert response.json() == ticket
 
 
+def test_patch_rejects_unknown_fields(client, seeded):
+    _, project = seeded
+    ticket = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]
+
+    response = client.patch(f"/api/v1/tickets/{ticket['id']}", json={"titel": "Renamed"})
+
+    assert response.status_code == 422
+    assert client.get(f"/api/v1/tickets/{ticket['id']}").json() == ticket
+
+
 def test_get_ticket_returns_ticket(client, seeded):
     _, project = seeded
     item = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]

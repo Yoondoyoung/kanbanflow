@@ -125,11 +125,13 @@ async def delete_project(slug: str, confirm_slug: str) -> None:
 
 @mcp.tool()
 async def list_project_members(slug: str) -> list[dict[str, object]]:
+    """List a project's members."""
     return await _tool_request("GET", f"/api/v1/projects/{_path_segment(slug)}/members")
 
 
 @mcp.tool()
 async def add_project_member(slug: str, email: str, role: Role = Role.MEMBER) -> dict[str, object]:
+    """Add a member to a project. Owner-only."""
     return await _tool_request(
         "POST",
         f"/api/v1/projects/{_path_segment(slug)}/members",
@@ -139,6 +141,7 @@ async def add_project_member(slug: str, email: str, role: Role = Role.MEMBER) ->
 
 @mcp.tool()
 async def update_project_member(slug: str, user_id: str, role: Role) -> dict[str, object]:
+    """Change a project member's role. Owner-only."""
     return await _tool_request(
         "PATCH",
         f"/api/v1/projects/{_path_segment(slug)}/members/{_path_segment(user_id)}",
@@ -148,6 +151,7 @@ async def update_project_member(slug: str, user_id: str, role: Role) -> dict[str
 
 @mcp.tool()
 async def remove_project_member(slug: str, user_id: str) -> None:
+    """Remove a project member. Owner-only."""
     return await _tool_request(
         "DELETE",
         f"/api/v1/projects/{_path_segment(slug)}/members/{_path_segment(user_id)}",
@@ -165,6 +169,7 @@ async def create_ticket(
     sprint_id: str | None = None,
     assignee_id: str | None = None,
 ) -> dict[str, object]:
+    """Create a ticket in a project."""
     return await _tool_request(
         "POST",
         "/api/v1/tickets",
@@ -192,6 +197,7 @@ async def list_tickets(
     cursor: int | None = None,
     limit: int | None = None,
 ) -> dict[str, object]:
+    """List tickets in a project."""
     return await _tool_request(
         "GET",
         _with_query(
@@ -209,11 +215,13 @@ async def list_tickets(
 
 @mcp.tool()
 async def get_ticket(ticket_id: str) -> dict[str, object]:
+    """Get a ticket available to the token's user."""
     return await _tool_request("GET", f"/api/v1/tickets/{_path_segment(ticket_id)}")
 
 
 @mcp.tool()
 async def update_ticket(ticket_id: str, changes: dict[str, object]) -> dict[str, object]:
+    """Update title, description, type, priority, story_points, sprint_id, assignee_id, resolution_notes, or meta; explicit null clears story_points, sprint_id, assignee_id, or resolution_notes."""  # noqa: E501
     return await _tool_request("PATCH", f"/api/v1/tickets/{_path_segment(ticket_id)}", changes)
 
 
@@ -223,6 +231,7 @@ async def update_ticket_status(
     status: TicketStatus,
     resolution_notes: str | None = None,
 ) -> dict[str, object]:
+    """Change a ticket's status and optional resolution notes."""
     return await _tool_request(
         "PATCH",
         f"/api/v1/tickets/{_path_segment(ticket_id)}/status",
@@ -232,6 +241,7 @@ async def update_ticket_status(
 
 @mcp.tool()
 async def delete_ticket(ticket_id: str) -> None:
+    """Delete a ticket. Owner-only."""
     return await _tool_request("DELETE", f"/api/v1/tickets/{_path_segment(ticket_id)}")
 
 
@@ -291,6 +301,7 @@ async def close_sprint(sprint_id: str, next_sprint_id: str) -> dict[str, object]
 
 @mcp.tool()
 async def get_sprint(sprint_id: str) -> dict[str, object]:
+    """Get a sprint available to the token's user."""
     return await _tool_request("GET", f"/api/v1/sprints/{_path_segment(sprint_id)}")
 
 
@@ -302,6 +313,7 @@ async def update_sprint(
     start_date: date | None = None,
     end_date: date | None = None,
 ) -> dict[str, object]:
+    """Update a planning sprint. Owner-only."""
     changes = {
         key: value.isoformat() if isinstance(value, date) else value
         for key, value in {
@@ -317,4 +329,5 @@ async def update_sprint(
 
 @mcp.tool()
 async def get_sprint_history(sprint_id: str) -> list[dict[str, object]]:
+    """Get a closed sprint's ticket history."""
     return await _tool_request("GET", f"/api/v1/sprints/{_path_segment(sprint_id)}/history")
