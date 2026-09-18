@@ -1,7 +1,7 @@
 # Restrained Hand-Drawn Board Theme
 
 **Date:** 2026-09-17
-**Status:** Proposed
+**Status:** Approved
 **Scope:** Visual treatment for the active project board and its centered ticket-detail modal only.
 
 ## Intent
