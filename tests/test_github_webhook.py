@@ -457,6 +457,41 @@ def test_check_run_actions_refresh_only_returned_existing_pull_requests(
     ]
 
 
+def test_check_run_for_stale_sha_commits_delivery_without_changing_current_ci(
+    signed_webhook, connected_repo, session
+):
+    artifact = _stored_pull(session, connected_repo)
+    pull = _pull(connected_repo.project.key)
+    pull["head"]["sha"] = "b" * 40
+    artifact = upsert_pull_request(session, connected_repo.connection, pull)
+    artifact.ci_state = GitHubCIState.PENDING
+    session.add(artifact)
+    session.commit()
+    signed_webhook.github.pull_requests = [_pull(connected_repo.project.key)]
+    signed_webhook.github.checks = [
+        {"status": "completed", "conclusion": "success", "head_sha": "a" * 40}
+    ]
+
+    response = signed_webhook(
+        "check_run",
+        {
+            "action": "completed",
+            "installation": {"id": 7001},
+            "repository": {"id": 501},
+            "check_run": {"head_sha": "a" * 40},
+        },
+        "stale-check",
+    )
+
+    assert response.status_code == 200
+    session.refresh(artifact)
+    assert artifact.head_sha == "b" * 40
+    assert artifact.ci_state is GitHubCIState.PENDING
+    assert session.exec(
+        select(IntegrationDelivery).where(IntegrationDelivery.delivery_id == "stale-check")
+    ).one()
+
+
 @pytest.mark.parametrize(
     ("event", "payload"),
     [

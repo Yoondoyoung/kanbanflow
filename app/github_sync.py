@@ -394,6 +394,8 @@ def upsert_pull_request(
         artifact.html_url = html_url
         artifact.author_login = author_login[:255]
         artifact.state = state
+        if artifact.head_sha != head_sha:
+            artifact.ci_state = GitHubCIState.NONE
         artifact.head_sha = head_sha
         artifact.occurred_at = occurred_at
         artifact.updated_at = utcnow()
@@ -671,6 +673,7 @@ def dispatch_github_event(
                     artifact
                     for number in pull_numbers
                     if (artifact := _existing_pull(session, connection, number)) is not None
+                    and artifact.head_sha == sha
                 ]
                 if not artifacts:
                     continue

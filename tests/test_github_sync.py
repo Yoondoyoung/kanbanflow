@@ -262,6 +262,25 @@ def test_pull_upsert_persists_mapping_and_reconciles_links(
     assert linked == [2]
 
 
+def test_pull_head_change_clears_ci_state_and_preserves_review_state(
+    session, github_sync_world
+):
+    artifact = upsert_pull_request(session, github_sync_world.connection, _pull())
+    artifact.ci_state = GitHubCIState.PASSED
+    artifact.review_state = GitHubReviewState.APPROVED
+    session.add(artifact)
+    session.commit()
+    pull = _pull()
+    pull["head"]["sha"] = "b" * 40
+
+    updated = upsert_pull_request(session, github_sync_world.connection, pull)
+
+    assert updated.id == artifact.id
+    assert updated.head_sha == "b" * 40
+    assert updated.ci_state is GitHubCIState.NONE
+    assert updated.review_state is GitHubReviewState.APPROVED
+
+
 def test_pull_link_reconciliation_does_not_change_ticket_status(
     session, github_sync_world
 ):
