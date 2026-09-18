@@ -105,6 +105,15 @@
   });
 
   document.addEventListener("click", (event) => {
+    const copyButton = event.target.closest("[data-copy-text]");
+    if (copyButton) {
+      const status = copyButton.nextElementSibling;
+      navigator.clipboard.writeText(copyButton.dataset.copyText).then(
+        () => { status.textContent = "Copied"; },
+        () => { status.textContent = "Copy failed"; },
+      );
+      return;
+    }
     const option = event.target.closest("[data-mention-id]");
     if (option) return selectMention(option.closest("form").querySelector(inputSelector), option);
     document.querySelectorAll(inputSelector).forEach(closeMenu);

@@ -39,3 +39,14 @@
 - Typing `@` in the composer opens a keyboard-accessible project-member picker below the textarea.
 - Store comment timestamps as UTC and render them in the browser's locale and time zone.
 - Preserve native form submission as a fallback; HTMX may replace only the comments region.
+
+### Ticket development activity
+
+- Keep ticket reference and branch-command copy controls in the left detail pane, using
+  native buttons with visible polite status text.
+- Render linked GitHub work as border-separated rows below the editable fields; repository
+  and timestamp are muted metadata, while the PR or commit title carries the row hierarchy.
+- Use compact neutral pills for PR and CI summaries near the header. Keep comments in the
+  existing right pane and stack both panes only at the 767px mobile breakpoint.
+- Show external text as escaped text. Only configured GitHub HTTPS-origin URLs become links,
+  and those links open in a new tab with `noopener noreferrer`.

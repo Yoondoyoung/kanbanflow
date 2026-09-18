@@ -1,6 +1,7 @@
 import logging
 import re
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import urlparse
 
@@ -26,8 +27,76 @@ from app.models import (
     TicketGitLink,
     utcnow,
 )
+from app.services import slugify
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TicketDevelopmentRow:
+    repository_full_name: str
+    kind: GitHubArtifactKind
+    number: int | None
+    title: str
+    html_url: str | None
+    author_login: str
+    state: GitHubArtifactState | None
+    review_state: GitHubReviewState | None
+    ci_state: GitHubCIState
+    occurred_at: datetime
+
+
+def ticket_reference(project: Project, ticket: Ticket) -> str:
+    return f"{project.key}-{ticket.ticket_number}"
+
+
+def branch_command(project: Project, ticket: Ticket) -> str:
+    reference = ticket_reference(project, ticket).lower()
+    return f"git checkout -b feature/{reference}-{slugify(ticket.title)}"
+
+
+def ticket_development(
+    session: Session, ticket: Ticket
+) -> list[TicketDevelopmentRow]:
+    rows = session.exec(
+        select(GitHubArtifact, ProjectGitHubRepository)
+        .join(TicketGitLink, TicketGitLink.artifact_id == GitHubArtifact.id)
+        .join(
+            ProjectGitHubRepository,
+            ProjectGitHubRepository.id == GitHubArtifact.repository_connection_id,
+        )
+        .where(
+            TicketGitLink.ticket_id == ticket.id,
+            ProjectGitHubRepository.active.is_(True),
+        )
+        .order_by(GitHubArtifact.occurred_at.desc())
+    ).all()
+    development = []
+    for artifact, repository in rows:
+        try:
+            html_url = _validated_github_url(artifact.html_url, settings)
+        except ValueError:
+            html_url = None
+        occurred_at = artifact.occurred_at
+        if occurred_at.tzinfo is None:
+            occurred_at = occurred_at.replace(tzinfo=UTC)
+        else:
+            occurred_at = occurred_at.astimezone(UTC)
+        development.append(
+            TicketDevelopmentRow(
+                repository_full_name=repository.full_name,
+                kind=artifact.kind,
+                number=artifact.number,
+                title=artifact.title,
+                html_url=html_url,
+                author_login=artifact.author_login,
+                state=artifact.state,
+                review_state=artifact.review_state,
+                ci_state=artifact.ci_state,
+                occurred_at=occurred_at,
+            )
+        )
+    return development
 
 
 def save_project_repositories(

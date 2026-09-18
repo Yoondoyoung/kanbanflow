@@ -26,6 +26,7 @@ from app.auth import (
     verify_password,
 )
 from app.db import get_session
+from app.github_sync import branch_command, ticket_development, ticket_reference
 from app.models import (
     Priority,
     Project,
@@ -349,6 +350,9 @@ def _ticket_detail(
     saved: bool = False,
 ) -> Response:
     comments, members = _ticket_comments(session, project, ticket, user)
+    reference = ticket_reference(project, ticket)
+    command = branch_command(project, ticket)
+    development = ticket_development(session, ticket)
     sprints = session.exec(
         select(Sprint)
         .where(
@@ -377,6 +381,9 @@ def _ticket_detail(
             "user": user,
             "project": project,
             "ticket": ticket,
+            "ticket_reference": reference,
+            "branch_command": command,
+            "development_rows": development,
             "members": members,
             "comments": comments,
             "comment_error": comment_error,

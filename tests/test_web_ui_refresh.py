@@ -144,7 +144,15 @@ def test_remaining_workspace_views_collapse_to_one_column_on_mobile(client):
     css = client.get("/static/app.css")
 
     assert css.status_code == 200
+    desktop_css = css.text.split("@media (max-width: 767px)", 1)[0]
     mobile_css = css.text.split("@media (max-width: 767px)", 1)[1]
+    assert (
+        "grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr)"
+        in desktop_css
+    )
+    assert ".ticket-detail-modal .ticket-comments { border-left:" in desktop_css
+    assert ".ticket-detail-modal .ticket-detail-layout { display: block; }" in mobile_css
+    assert ".ticket-detail-modal .ticket-comments { border-left: 0; border-top:" in mobile_css
     assert ".sprint-history-row" in mobile_css
     assert ".settings-member" in mobile_css
     assert ".auth-card" in mobile_css
