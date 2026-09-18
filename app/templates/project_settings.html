@@ -44,7 +44,41 @@
       </article>
       {% endfor %}
       <article class="integration-card">
-        <div><h3>GitHub</h3><p>Coming soon</p></div>
+        <div><h3>GitHub</h3><p class="integration-status">{{ github_status }}</p></div>
+        {% if github_repository_names %}
+        <ul class="github-repository-names" aria-label="Connected GitHub repositories">
+          {% for repository_name in github_repository_names %}<li>{{ repository_name }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if role == 'OWNER' %}
+        {% if github_account_login %}<p>Account: <strong>{{ github_account_login }}</strong></p>{% endif %}
+        {% if github_selection_state %}
+        <form class="app-form" action="/projects/{{ project.slug }}/settings/integrations/github/repositories" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <input type="hidden" name="state" value="{{ github_selection_state }}">
+          <fieldset class="github-repository-list">
+            <legend>Repositories</legend>
+            {% for repository in github_available_repositories %}
+            <label class="github-repository-option"><input type="checkbox" name="repository_ids" value="{{ repository.id }}"> <span>{{ repository.full_name }}</span></label>
+            {% endfor %}
+          </fieldset>
+          <button class="app-primary-button" type="submit">Save repositories</button>
+        </form>
+        {% else %}
+        <form action="/projects/{{ project.slug }}/settings/integrations/github/connect" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <button class="app-secondary-button" type="submit"{% if not github_configured %} disabled{% endif %}>Connect GitHub</button>
+        </form>
+        {% if not github_configured %}<p>GitHub App settings not configured</p>{% endif %}
+        {% if github_has_repositories and github_status != 'Disconnected' %}
+        <form class="app-form" action="/projects/{{ project.slug }}/settings/integrations/github/disconnect" method="post" data-testid="owner-settings-controls">
+          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+          <label>Type <strong>Disconnect GitHub</strong> to confirm <input name="confirm" required></label>
+          <button class="app-danger-button" type="submit">Disconnect</button>
+        </form>
+        {% endif %}
+        {% endif %}
+        {% endif %}
       </article>
     </div>
   </section>

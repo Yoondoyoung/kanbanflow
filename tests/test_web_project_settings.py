@@ -1,12 +1,27 @@
+from datetime import timedelta
 from types import SimpleNamespace
+from urllib.parse import parse_qs, quote, urlparse
 
+import httpx
 import pytest
-from fastapi import Response
+from fastapi import HTTPException, Response
 from sqlmodel import Session, select
 
 import app.routers.web_sprints as web_sprints
 from app.auth import make_csrf_token
-from app.models import Project, ProjectMember, Role, WebhookType
+from app.config import settings
+from app.github import AvailableRepository, issue_github_state, read_github_state
+from app.github import GitHubClient as RealGitHubClient
+from app.models import (
+    GitHubInstallation,
+    Project,
+    ProjectGitHubConnection,
+    ProjectGitHubRepository,
+    ProjectMember,
+    Role,
+    WebhookType,
+    utcnow,
+)
 from app.services import chat_webhooks, set_chat_webhook
 
 
@@ -24,6 +39,122 @@ def _csrf(user):
     return {"_csrf": make_csrf_token(user.id)}
 
 
+@pytest.fixture
+def configured_github(monkeypatch):
+    for name, value in {
+        "github_app_id": "12345",
+        "github_app_slug": "kanban-flow",
+        "github_client_id": "client-id",
+        "github_client_secret": "client-secret",
+        "github_private_key": "test-private-key",
+        "github_webhook_secret": "webhook-secret",
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+
+
+def _use_github_transport(monkeypatch, handler):
+    transport = httpx.Client(transport=httpx.MockTransport(handler))
+    monkeypatch.setattr(RealGitHubClient, "_app_token", lambda self: "test-app-jwt")
+    monkeypatch.setattr(
+        web_sprints,
+        "GitHubClient",
+        lambda: RealGitHubClient(settings, transport),
+        raising=False,
+    )
+    return transport
+
+
+def _assert_state_used(session, state, user):
+    session.expire_all()
+    with pytest.raises(HTTPException, match="already used"):
+        read_github_state(session, state, user.id)
+
+
+@pytest.fixture
+def github_selection(
+    settings_world, session, monkeypatch, configured_github
+):
+    installation = GitHubInstallation(
+        github_installation_id=7001,
+        account_id=91,
+        account_login="acme",
+        connected_by_id=settings_world.owner.id,
+    )
+    session.add(installation)
+    session.commit()
+    session.refresh(installation)
+    repository_calls = []
+
+    def handler(request):
+        if request.url.path == "/app/installations/7001/access_tokens":
+            return httpx.Response(201, json={"token": "ghs_selection_token"})
+        assert request.url.path == "/installation/repositories"
+        repository_calls.append(request)
+        return httpx.Response(
+            200,
+            json={
+                "repositories": [
+                    {
+                        "id": 501,
+                        "full_name": "acme/api",
+                        "html_url": "https://github.com/acme/api",
+                        "default_branch": "main",
+                    },
+                    {
+                        "id": 502,
+                        "full_name": "acme/web",
+                        "html_url": "https://github.com/acme/web",
+                        "default_branch": "trunk",
+                    },
+                ]
+            },
+        )
+
+    transport = _use_github_transport(monkeypatch, handler)
+    state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=installation.github_installation_id,
+    )
+    yield SimpleNamespace(
+        installation=installation,
+        repository_calls=repository_calls,
+        state=state,
+    )
+    transport.close()
+
+
+@pytest.fixture
+def connected_github(settings_world, session):
+    installation = GitHubInstallation(
+        github_installation_id=7001,
+        account_id=91,
+        account_login="acme-inc",
+        connected_by_id=settings_world.owner.id,
+    )
+    session.add(installation)
+    session.flush()
+    session.add(
+        ProjectGitHubConnection(
+            project_id=settings_world.project.id,
+            installation_id=installation.id,
+        )
+    )
+    repository = ProjectGitHubRepository(
+        project_id=settings_world.project.id,
+        installation_id=installation.id,
+        github_repository_id=501,
+        full_name="acme/api",
+        html_url="https://github.com/acme/api",
+        default_branch="main",
+    )
+    session.add(repository)
+    session.commit()
+    session.refresh(repository)
+    return repository
+
+
 def test_owner_sees_integration_and_member_controls(client, settings_world, login_as):
     login_as(settings_world.owner.email)
 
@@ -37,7 +168,9 @@ def test_owner_sees_integration_and_member_controls(client, settings_world, logi
     assert 'data-testid="owner-settings-controls"' in page.text
     assert 'name="url"' in page.text
     assert all(provider in page.text for provider in ("Slack", "Teams", "Discord", "GitHub"))
-    assert "Coming soon" in page.text
+    assert "GitHub App settings not configured" in page.text
+    assert "Connect GitHub" in page.text
+    assert "disabled" in page.text
     assert 'name="confirm"' in page.text
 
 
@@ -98,6 +231,638 @@ def test_member_reads_settings_without_mutation_controls_or_webhook_secret(
     assert 'name="url"' not in page.text
     assert 'data-testid="owner-settings-controls"' not in page.text
     assert f'action="/projects/{settings_world.project.slug}/settings/' not in page.text
+    assert "GitHub App settings not configured" not in page.text
+    assert "Connect GitHub" not in page.text
+
+
+def test_owner_starts_github_connect(client, settings_world, login_as, configured_github):
+    login_as(settings_world.owner.email)
+    response = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/connect",
+        data=_csrf(settings_world.owner),
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"].startswith(
+        "https://github.com/apps/kanban-flow/installations/new?state="
+    )
+
+
+def test_member_and_missing_csrf_cannot_start_github_connect(
+    client, settings_world, login_as, configured_github
+):
+    url = f"/projects/{settings_world.project.slug}/settings/integrations/github/connect"
+    login_as(settings_world.member.email)
+    assert client.post(url, data=_csrf(settings_world.member)).status_code == 403
+    login_as(settings_world.owner.email)
+    assert client.post(url, data={}).status_code == 403
+
+
+def test_github_setup_consumes_state_and_redirects_with_fresh_oauth_state(
+    client, settings_world, session, login_as, configured_github
+):
+    setup_state = issue_github_state(
+        session, settings_world.project.id, settings_world.owner.id
+    )
+    login_as(settings_world.owner.email)
+
+    response = client.get(
+        f"/integrations/github/setup?installation_id=7001&state={quote(setup_state)}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    location = urlparse(response.headers["location"])
+    assert (location.scheme, location.netloc, location.path) == (
+        "https",
+        "github.com",
+        "/login/oauth/authorize",
+    )
+    query = parse_qs(location.query)
+    assert query["client_id"] == ["client-id"]
+    oauth_state = query["state"][0]
+    _assert_state_used(session, setup_state, settings_world.owner)
+    assert (
+        read_github_state(session, oauth_state, settings_world.owner.id).pending_installation_id
+        == 7001
+    )
+
+
+def test_github_setup_consumes_cancellation_and_rejects_invalid_installation_id(
+    client, settings_world, session, login_as, configured_github
+):
+    login_as(settings_world.owner.email)
+    cancelled_state = issue_github_state(
+        session, settings_world.project.id, settings_world.owner.id
+    )
+    cancelled = client.get(
+        f"/integrations/github/setup?state={quote(cancelled_state)}",
+        follow_redirects=False,
+    )
+    assert cancelled.status_code == 303
+    assert cancelled.headers["location"].endswith("?github_error=installation_cancelled")
+    _assert_state_used(session, cancelled_state, settings_world.owner)
+
+    invalid_state = issue_github_state(session, settings_world.project.id, settings_world.owner.id)
+    invalid = client.get(
+        f"/integrations/github/setup?installation_id=nope&state={quote(invalid_state)}"
+    )
+    assert invalid.status_code == 400
+    _assert_state_used(session, invalid_state, settings_world.owner)
+
+
+def test_github_oauth_callback_verifies_then_persists_and_issues_selection_state(
+    client, settings_world, session, login_as, configured_github, monkeypatch
+):
+    requests = []
+    metadata = {"id": 7001, "account": {"id": 91, "login": "acme"}}
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path == "/login/oauth/access_token":
+            return httpx.Response(200, json={"access_token": "ghu_callback_token"})
+        if request.url.path == "/user/installations/7001/repositories":
+            assert request.headers["Authorization"] == "Bearer ghu_callback_token"
+            return httpx.Response(200, json={"repositories": []})
+        assert request.url.path == "/app/installations/7001"
+        return httpx.Response(200, json=metadata)
+
+    transport = _use_github_transport(monkeypatch, handler)
+    oauth_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    login_as(settings_world.owner.email)
+
+    response = client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(oauth_state)}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    location = urlparse(response.headers["location"])
+    assert location.path == (
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories"
+    )
+    selection_state = parse_qs(location.query)["state"][0]
+    _assert_state_used(session, oauth_state, settings_world.owner)
+    assert (
+        read_github_state(session, selection_state, settings_world.owner.id).pending_installation_id
+        == 7001
+    )
+    installation = session.exec(select(GitHubInstallation)).one()
+    session.refresh(installation)
+    assert (installation.github_installation_id, installation.account_id) == (7001, 91)
+    assert (installation.account_login, installation.connected_by_id) == (
+        "acme",
+        settings_world.owner.id,
+    )
+    assert "ghu_callback_token" not in repr(installation)
+    assert [request.url.path for request in requests] == [
+        "/login/oauth/access_token",
+        "/user/installations/7001/repositories",
+        "/app/installations/7001",
+    ]
+    metadata["account"] = {"id": 92, "login": "acme-renamed"}
+    replacement_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    assert client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(replacement_state)}",
+        follow_redirects=False,
+    ).status_code == 303
+    session.expire_all()
+    installations = session.exec(select(GitHubInstallation)).all()
+    assert len(installations) == 1
+    assert (installations[0].account_id, installations[0].account_login) == (
+        92,
+        "acme-renamed",
+    )
+    transport.close()
+
+
+def test_github_oauth_callback_consumes_denial_and_missing_code(
+    client, settings_world, session, login_as, configured_github
+):
+    login_as(settings_world.owner.email)
+    denied_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    denied = client.get(
+        f"/integrations/github/callback?error=access_denied&state={quote(denied_state)}",
+        follow_redirects=False,
+    )
+    assert denied.status_code == 303
+    assert denied.headers["location"].endswith("?github_error=oauth_denied")
+    _assert_state_used(session, denied_state, settings_world.owner)
+
+    missing_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    missing = client.get(f"/integrations/github/callback?state={quote(missing_state)}")
+    assert missing.status_code == 400
+    _assert_state_used(session, missing_state, settings_world.owner)
+
+
+def test_github_oauth_callback_rejects_replay_expiry_and_wrong_user(
+    client, settings_world, session, login_as, configured_github
+):
+    login_as(settings_world.owner.email)
+    replay_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    assert client.get(
+        f"/integrations/github/callback?error=access_denied&state={quote(replay_state)}"
+    ).status_code == 200
+    assert client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(replay_state)}"
+    ).status_code == 400
+
+    expired_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+        now=utcnow() - timedelta(minutes=11),
+    )
+    assert client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(expired_state)}"
+    ).status_code == 400
+
+    wrong_user_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    client.post("/api/v1/auth/logout")
+    login_as(settings_world.member.email)
+    assert client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(wrong_user_state)}"
+    ).status_code == 403
+
+
+def test_github_oauth_callback_verification_failure_persists_no_installation(
+    client, settings_world, session, login_as, configured_github, monkeypatch
+):
+    def handler(request):
+        if request.url.path == "/login/oauth/access_token":
+            return httpx.Response(200, json={"access_token": "ghu_rejected_token"})
+        return httpx.Response(404)
+
+    transport = _use_github_transport(monkeypatch, handler)
+    oauth_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    login_as(settings_world.owner.email)
+
+    response = client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(oauth_state)}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?github_error=verification_failed")
+    _assert_state_used(session, oauth_state, settings_world.owner)
+    assert session.exec(select(GitHubInstallation)).all() == []
+    transport.close()
+
+
+@pytest.mark.parametrize(
+    "installation_payload",
+    [
+        [],
+        {"id": "7001", "account": {"id": 91, "login": "acme"}},
+        {"id": 7001, "account": {"id": "91", "login": "acme"}},
+        {"id": 7001, "account": {"id": 91, "login": ""}},
+    ],
+)
+def test_github_oauth_callback_rejects_invalid_installation_metadata(
+    client,
+    settings_world,
+    session,
+    login_as,
+    configured_github,
+    monkeypatch,
+    installation_payload,
+):
+    def handler(request):
+        if request.url.path == "/login/oauth/access_token":
+            return httpx.Response(200, json={"access_token": "ghu_callback_token"})
+        if request.url.path == "/user/installations/7001/repositories":
+            return httpx.Response(200, json={"repositories": []})
+        return httpx.Response(200, json=installation_payload)
+
+    transport = _use_github_transport(monkeypatch, handler)
+    oauth_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    login_as(settings_world.owner.email)
+
+    response = client.get(
+        f"/integrations/github/callback?code=oauth-code&state={quote(oauth_state)}",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("?github_error=verification_failed")
+    assert session.exec(select(GitHubInstallation)).all() == []
+    transport.close()
+
+
+def test_github_repository_selection_get_keeps_state_and_renders_server_repositories(
+    client, settings_world, session, login_as, github_selection
+):
+    login_as(settings_world.owner.email)
+
+    page = client.get(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories"
+        f"?state={quote(github_selection.state)}"
+    )
+
+    assert page.status_code == 200
+    assert 'value="501"' in page.text
+    assert 'value="502"' in page.text
+    assert "acme/api" in page.text and "acme/web" in page.text
+    assert f'name="state" value="{github_selection.state}"' in page.text
+    assert (
+        read_github_state(session, github_selection.state, settings_world.owner.id).consumed_at
+        is None
+    )
+
+
+def test_github_repository_selection_post_refetches_and_trusts_only_server_metadata(
+    client, settings_world, session, login_as, github_selection
+):
+    login_as(settings_world.owner.email)
+    page_url = (
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories"
+        f"?state={quote(github_selection.state)}"
+    )
+    assert client.get(page_url).status_code == 200
+
+    saved = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["501", "502"],
+            "full_name": "attacker/forged",
+            "html_url": "javascript:alert(1)",
+            "default_branch": "evil",
+            **_csrf(settings_world.owner),
+        },
+        follow_redirects=False,
+    )
+
+    assert saved.status_code == 303
+    assert saved.headers["location"] == f"/projects/{settings_world.project.slug}/settings"
+    assert len(github_selection.repository_calls) == 2
+    _assert_state_used(session, github_selection.state, settings_world.owner)
+    session.expire_all()
+    rows = session.exec(
+        select(ProjectGitHubRepository).order_by(
+            ProjectGitHubRepository.github_repository_id
+        )
+    ).all()
+    assert [row.github_repository_id for row in rows] == [501, 502]
+    assert [(row.full_name, row.html_url, row.default_branch) for row in rows] == [
+        ("acme/api", "https://github.com/acme/api", "main"),
+        ("acme/web", "https://github.com/acme/web", "trunk"),
+    ]
+    assert all(row.active and row.disconnected_at is None for row in rows)
+
+    reduced_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    assert client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": reduced_state,
+            "repository_ids": ["501"],
+            **_csrf(settings_world.owner),
+        },
+        follow_redirects=False,
+    ).status_code == 303
+    session.expire_all()
+    omitted = session.exec(
+        select(ProjectGitHubRepository).where(
+            ProjectGitHubRepository.github_repository_id == 502
+        )
+    ).one()
+    assert omitted.active is False and omitted.disconnected_at is not None
+
+    restored_state = issue_github_state(
+        session,
+        settings_world.project.id,
+        settings_world.owner.id,
+        pending_installation_id=7001,
+    )
+    assert client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": restored_state,
+            "repository_ids": ["501", "502"],
+            **_csrf(settings_world.owner),
+        },
+        follow_redirects=False,
+    ).status_code == 303
+    session.refresh(omitted)
+    assert omitted.active is True and omitted.disconnected_at is None
+
+
+def test_github_repository_selection_rejects_forged_id_and_consumes_state(
+    client, settings_world, session, login_as, github_selection
+):
+    login_as(settings_world.owner.email)
+
+    rejected = client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["999"],
+            **_csrf(settings_world.owner),
+        },
+    )
+
+    assert rejected.status_code == 422
+    _assert_state_used(session, github_selection.state, settings_world.owner)
+    assert session.exec(select(ProjectGitHubRepository)).all() == []
+    assert client.post(
+        f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories",
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["501"],
+            **_csrf(settings_world.owner),
+        },
+    ).status_code == 400
+
+
+def test_github_repository_selection_requires_owner_and_csrf_without_consuming_state(
+    client, settings_world, session, login_as, github_selection
+):
+    url = f"/projects/{settings_world.project.slug}/settings/integrations/github/repositories"
+    login_as(settings_world.member.email)
+    assert client.get(f"{url}?state={quote(github_selection.state)}").status_code == 403
+    login_as(settings_world.owner.email)
+    assert client.post(
+        url,
+        data={"state": github_selection.state, "repository_ids": ["501"]},
+    ).status_code == 403
+    assert (
+        read_github_state(session, github_selection.state, settings_world.owner.id).consumed_at
+        is None
+    )
+
+
+def test_github_repository_selection_binds_state_to_slug_project(
+    client,
+    settings_world,
+    session,
+    login_as,
+    make_project,
+    github_selection,
+):
+    other_project = make_project(settings_world.owner, name="Other Project")
+    url = f"/projects/{other_project.slug}/settings/integrations/github/repositories"
+    login_as(settings_world.owner.email)
+
+    assert client.get(
+        f"{url}?state={quote(github_selection.state)}"
+    ).status_code == 400
+    assert (
+        read_github_state(session, github_selection.state, settings_world.owner.id).consumed_at
+        is None
+    )
+    assert client.post(
+        url,
+        data={
+            "state": github_selection.state,
+            "repository_ids": ["501"],
+            **_csrf(settings_world.owner),
+        },
+    ).status_code == 400
+    _assert_state_used(session, github_selection.state, settings_world.owner)
+
+
+def test_github_repository_selection_rejects_another_project_installation_when_inactive(
+    session, settings_world
+):
+    from app.github_sync import save_project_repositories
+
+    first = GitHubInstallation(
+        github_installation_id=7001,
+        account_id=91,
+        account_login="acme",
+        connected_by_id=settings_world.owner.id,
+    )
+    second = GitHubInstallation(
+        github_installation_id=7002,
+        account_id=92,
+        account_login="other",
+        connected_by_id=settings_world.owner.id,
+    )
+    session.add_all([first, second])
+    session.flush()
+    session.add(
+        ProjectGitHubConnection(
+            project_id=settings_world.project.id,
+            installation_id=first.id,
+        )
+    )
+    session.add(
+        ProjectGitHubRepository(
+            project_id=settings_world.project.id,
+            installation_id=first.id,
+            github_repository_id=501,
+            full_name="acme/api",
+            html_url="https://github.com/acme/api",
+            default_branch="main",
+            active=False,
+            disconnected_at=utcnow(),
+        )
+    )
+    session.commit()
+
+    with pytest.raises(HTTPException, match="already uses another GitHub installation"):
+        save_project_repositories(
+            session,
+            settings_world.project,
+            second,
+            [
+                AvailableRepository(
+                    601,
+                    "other/api",
+                    "https://github.com/other/api",
+                    "main",
+                )
+            ],
+        )
+
+
+def test_github_disconnect_requires_owner_csrf_and_confirmation(
+    client, settings_world, session, login_as, connected_github
+):
+    url = f"/projects/{settings_world.project.slug}/settings/integrations/github/disconnect"
+    login_as(settings_world.member.email)
+    assert client.post(
+        url,
+        data={"confirm": "Disconnect GitHub", **_csrf(settings_world.member)},
+    ).status_code == 403
+    login_as(settings_world.owner.email)
+    assert client.post(url, data={"confirm": "Disconnect GitHub"}).status_code == 403
+    assert client.post(
+        url,
+        data={"confirm": "wrong", **_csrf(settings_world.owner)},
+    ).status_code == 422
+    assert connected_github.active is True
+
+    response = client.post(
+        url,
+        data={"confirm": "Disconnect GitHub", **_csrf(settings_world.owner)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    session.refresh(connected_github)
+    assert connected_github.active is False
+    assert connected_github.disconnected_at is not None
+
+
+def test_github_attention_and_owner_disconnected_states_are_distinct(
+    client, settings_world, session, login_as, connected_github
+):
+    connected_github.active = False
+    connected_github.disconnected_at = None
+    session.add(connected_github)
+    session.commit()
+    login_as(settings_world.owner.email)
+
+    attention = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert "Connection needs attention" in attention.text
+    connected_github.disconnected_at = utcnow()
+    session.add(connected_github)
+    session.commit()
+    disconnected = client.get(f"/projects/{settings_world.project.slug}/settings")
+    assert "Disconnected" in disconnected.text
+
+
+def test_github_attention_card_shows_member_status_and_names_without_controls_or_setup(
+    client, settings_world, login_as, connected_github
+):
+    login_as(settings_world.member.email)
+
+    page = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert "Connected" in page.text
+    assert "acme/api" in page.text
+    assert "Connect GitHub" not in page.text
+    assert "Save repositories" not in page.text
+    assert "Disconnect GitHub" not in page.text
+    assert "GitHub App settings not configured" not in page.text
+    assert 'settings/integrations/github' not in page.text
+    assert "acme-inc" not in page.text
+    assert "https://github.com/acme/api" not in page.text
+    assert "7001" not in page.text and "501" not in page.text
+
+
+def test_github_attention_card_shows_owner_account_and_connection_controls(
+    client, settings_world, login_as, connected_github, configured_github
+):
+    login_as(settings_world.owner.email)
+
+    page = client.get(f"/projects/{settings_world.project.slug}/settings")
+
+    assert "Connected" in page.text
+    assert "acme-inc" in page.text and "acme/api" in page.text
+    assert (
+        f'action="/projects/{settings_world.project.slug}/settings/integrations/github/connect"'
+        in page.text
+    )
+    assert (
+        f'action="/projects/{settings_world.project.slug}/settings/integrations/github/disconnect"'
+        in page.text
+    )
+    assert "Retry" not in page.text
+
+
+def test_github_attention_page_maps_error_codes_without_echoing_raw_values(
+    client, settings_world, login_as
+):
+    login_as(settings_world.owner.email)
+
+    denied = client.get(
+        f"/projects/{settings_world.project.slug}/settings?github_error=oauth_denied"
+    )
+    unknown = client.get(
+        f"/projects/{settings_world.project.slug}/settings?github_error=raw-secret"
+    )
+
+    assert "GitHub authorization was denied." in denied.text
+    assert "raw-secret" not in unknown.text
 
 
 def test_settings_template_context_contains_only_chat_provider_status(

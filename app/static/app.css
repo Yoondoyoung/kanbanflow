@@ -193,6 +193,11 @@ button, input, select, textarea { font: inherit; }
 .integration-card h3, .integration-card p { margin: 0; }
 .integration-card p { color: var(--text-secondary); font-size: 12px; margin-top: var(--space-1); }
 .integration-card input, .integration-card button { min-height: 40px; }
+.github-repository-names { display: grid; gap: var(--space-1); margin: 0; padding-left: var(--space-4); }
+.github-repository-list { border: 0; display: grid; gap: var(--space-1); margin: 0; padding: 0; }
+.github-repository-list legend { font-weight: 650; margin-bottom: var(--space-1); }
+.github-repository-option { align-items: center; display: flex; gap: var(--space-2); min-height: 40px; }
+.integration-card .github-repository-option input { min-height: auto; }
 .settings-member { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-4); justify-content: space-between; padding: var(--space-3) 0; }
 .settings-member-controls, .settings-member-controls form { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .settings-member-controls select { background: var(--control); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); min-height: 40px; padding: var(--space-2); }

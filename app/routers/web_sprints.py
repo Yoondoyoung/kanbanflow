@@ -1,12 +1,29 @@
+from urllib.parse import urlencode
+
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from app.auth import current_user, project_owner, project_reader, verify_csrf
+from app.config import settings
 from app.db import get_session
+from app.github import (
+    AvailableRepository,
+    GitHubClient,
+    consume_github_state,
+    github_is_configured,
+    issue_github_state,
+    read_github_state,
+)
+from app.github_sync import disconnect_project_github, save_project_repositories
 from app.models import (
+    GitHubConnectState,
+    GitHubInstallation,
     Project,
+    ProjectGitHubConnection,
+    ProjectGitHubRepository,
     ProjectMember,
     Role,
     Sprint,
@@ -16,6 +33,7 @@ from app.models import (
     TicketStatus,
     User,
     WebhookType,
+    utcnow,
 )
 from app.routers.web import render
 from app.schemas import SprintCreate
@@ -39,6 +57,12 @@ router = APIRouter(tags=["web"])
 _TICKET_IDS_FORM = Form(...)
 _MEMBER_ROLE_FORM = Form(Role.MEMBER)
 _REQUIRED_ROLE_FORM = Form(...)
+_REPOSITORY_IDS_FORM = Form(default=[])
+_GITHUB_ERRORS = {
+    "installation_cancelled": "GitHub installation was cancelled.",
+    "oauth_denied": "GitHub authorization was denied.",
+    "verification_failed": "GitHub could not verify that installation.",
+}
 
 
 def _settings(
@@ -52,7 +76,28 @@ def _settings(
     values: dict | None = None,
     status_code: int = status.HTTP_200_OK,
     saved: bool = False,
+    github_selection_state: str | None = None,
+    github_available_repositories: list[AvailableRepository] | None = None,
 ) -> Response:
+    github_repositories = session.exec(
+        select(ProjectGitHubRepository)
+        .where(ProjectGitHubRepository.project_id == project.id)
+        .order_by(ProjectGitHubRepository.full_name)
+    ).all()
+    github_active_repositories = [row for row in github_repositories if row.active]
+    if any(not row.active and row.disconnected_at is None for row in github_repositories):
+        github_status = "Connection needs attention"
+    elif github_active_repositories:
+        github_status = "Connected"
+    elif github_repositories:
+        github_status = "Disconnected"
+    else:
+        github_status = "Not connected"
+    github_account_login = None
+    binding = session.get(ProjectGitHubConnection, project.id)
+    if binding is not None and member.role is Role.OWNER:
+        installation = session.get(GitHubInstallation, binding.installation_id)
+        github_account_login = installation.account_login if installation else None
     return render(
         request,
         "project_settings.html",
@@ -68,6 +113,15 @@ def _settings(
             "error": error,
             "saved": saved,
             "values": values or {},
+            "github_has_repositories": bool(github_repositories),
+            "github_repository_names": [row.full_name for row in github_active_repositories],
+            "github_status": github_status,
+            "github_account_login": github_account_login,
+            "github_configured": github_is_configured() if member.role is Role.OWNER else None,
+            "github_selection_state": github_selection_state,
+            "github_available_repositories": (
+                (github_available_repositories or []) if member.role is Role.OWNER else []
+            ),
         },
         status_code=status_code,
         session=session,
@@ -210,12 +264,21 @@ def backlog(
 def project_settings(
     request: Request,
     saved: bool = False,
+    github_error: str | None = None,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
-    return _settings(request, session, user, project, member, saved=saved)
+    return _settings(
+        request,
+        session,
+        user,
+        project,
+        member,
+        saved=saved,
+        error=_GITHUB_ERRORS.get(github_error) if github_error else None,
+    )
 
 
 @router.post("/projects/{slug}/settings/project", dependencies=[Depends(verify_csrf)])
@@ -283,6 +346,28 @@ def connect_chat_integration(
 
 
 @router.post(
+    "/projects/{slug}/settings/integrations/github/disconnect",
+    dependencies=[Depends(verify_csrf)],
+)
+def disconnect_github_integration(
+    confirm: str = Form(""),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    if confirm != "Disconnect GitHub":
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "confirm must equal Disconnect GitHub",
+        )
+    disconnect_project_github(session, project)
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post(
     "/projects/{slug}/settings/integrations/{provider}/disconnect",
     dependencies=[Depends(verify_csrf)],
 )
@@ -299,6 +384,220 @@ def disconnect_chat_integration(
     disconnect_chat_webhook(session, project, chat_provider)
     return RedirectResponse(
         f"/projects/{project.slug}/settings", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+@router.post(
+    "/projects/{slug}/settings/integrations/github/connect",
+    dependencies=[Depends(verify_csrf)],
+)
+def start_github_connect(
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    if not github_is_configured():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "GitHub App is not configured")
+    state = issue_github_state(session, project.id, user.id)
+    query = urlencode({"state": state})
+    return RedirectResponse(
+        f"{settings.github_web_url}/apps/{settings.github_app_slug}/installations/new?{query}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.get("/integrations/github/setup")
+def github_setup(
+    installation_id: str | None = None,
+    state: str = "",
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    connect_state = consume_github_state(session, state, user.id)
+    project = session.get(Project, connect_state.project_id)
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    if installation_id is None:
+        return RedirectResponse(
+            f"/projects/{project.slug}/settings?github_error=installation_cancelled",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if not installation_id.isascii() or not installation_id.isdecimal():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid GitHub installation")
+    pending_installation_id = int(installation_id)
+    if pending_installation_id <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid GitHub installation")
+    oauth_state = issue_github_state(
+        session,
+        project.id,
+        user.id,
+        pending_installation_id=pending_installation_id,
+    )
+    query = urlencode({"client_id": settings.github_client_id, "state": oauth_state})
+    return RedirectResponse(
+        f"{settings.github_web_url}/login/oauth/authorize?{query}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.get("/integrations/github/callback")
+def github_oauth_callback(
+    state: str = "",
+    code: str | None = None,
+    error: str | None = None,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    connect_state = consume_github_state(session, state, user.id)
+    project = session.get(Project, connect_state.project_id)
+    if project is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+    if error:
+        reason = "oauth_denied" if error == "access_denied" else "verification_failed"
+        return RedirectResponse(
+            f"/projects/{project.slug}/settings?github_error={reason}",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+    if not code:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Missing GitHub OAuth code")
+    installation_id = connect_state.pending_installation_id
+    if installation_id is None or installation_id <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid GitHub installation")
+
+    try:
+        with GitHubClient() as github:
+            user_token = github.exchange_code(code)
+            github.verify_user_installation(user_token, installation_id)
+            del user_token
+            payload = github.installation(installation_id)
+        payload_id = payload.get("id") if isinstance(payload, dict) else None
+        account = payload.get("account") if isinstance(payload, dict) else None
+        account_id = account.get("id") if isinstance(account, dict) else None
+        account_login = account.get("login") if isinstance(account, dict) else None
+        if (
+            isinstance(payload_id, bool)
+            or not isinstance(payload_id, int)
+            or payload_id != installation_id
+            or isinstance(account_id, bool)
+            or not isinstance(account_id, int)
+            or not isinstance(account_login, str)
+            or not account_login.strip()
+        ):
+            raise ValueError("Invalid GitHub installation response")
+    except (httpx.HTTPError, ValueError):
+        return RedirectResponse(
+            f"/projects/{project.slug}/settings?github_error=verification_failed",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    installation = session.exec(
+        select(GitHubInstallation).where(
+            GitHubInstallation.github_installation_id == installation_id
+        )
+    ).first()
+    if installation is None:
+        installation = GitHubInstallation(
+            github_installation_id=installation_id,
+            account_id=account_id,
+            account_login=account_login.strip(),
+            connected_by_id=user.id,
+        )
+    else:
+        installation.account_id = account_id
+        installation.account_login = account_login.strip()
+        installation.connected_by_id = user.id
+        installation.updated_at = utcnow()
+    session.add(installation)
+    session.commit()
+
+    selection_state = issue_github_state(
+        session,
+        project.id,
+        user.id,
+        pending_installation_id=installation_id,
+    )
+    query = urlencode({"state": selection_state})
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings/integrations/github/repositories?{query}",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+def _github_selection_installation(
+    session: Session,
+    project: Project,
+    connect_state: GitHubConnectState,
+) -> GitHubInstallation:
+    if connect_state.project_id != project.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "GitHub state belongs to another project")
+    installation_id = connect_state.pending_installation_id
+    if installation_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid GitHub installation")
+    installation = session.exec(
+        select(GitHubInstallation).where(
+            GitHubInstallation.github_installation_id == installation_id
+        )
+    ).first()
+    if installation is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid GitHub installation")
+    return installation
+
+
+@router.get("/projects/{slug}/settings/integrations/github/repositories")
+def github_repository_selection(
+    request: Request,
+    state: str = "",
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    connect_state = read_github_state(session, state, user.id)
+    installation = _github_selection_installation(session, project, connect_state)
+    with GitHubClient() as github:
+        repositories = github.repositories(installation.github_installation_id)
+    return _settings(
+        request,
+        session,
+        user,
+        project,
+        member,
+        github_selection_state=state,
+        github_available_repositories=repositories,
+    )
+
+
+@router.post(
+    "/projects/{slug}/settings/integrations/github/repositories",
+    dependencies=[Depends(verify_csrf)],
+)
+def save_github_repository_selection(
+    state: str = Form(""),
+    repository_ids: list[str] = _REPOSITORY_IDS_FORM,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    connect_state = consume_github_state(session, state, user.id)
+    installation = _github_selection_installation(session, project, connect_state)
+    with GitHubClient() as github:
+        available = github.repositories(installation.github_installation_id)
+    if any(not value.isascii() or not value.isdecimal() for value in repository_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid repository selection")
+    selected_ids = {int(value) for value in repository_ids}
+    available_by_id = {repository.id: repository for repository in available}
+    if not selected_ids.issubset(available_by_id):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Selected repository is not available",
+        )
+    selected = [repository for repository in available if repository.id in selected_ids]
+    save_project_repositories(session, project, installation, selected)
+    return RedirectResponse(
+        f"/projects/{project.slug}/settings",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
