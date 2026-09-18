@@ -111,6 +111,38 @@ def test_patch_empty_body_leaves_ticket_unchanged(client, seeded):
     assert response.json() == ticket
 
 
+def test_ticket_due_date_create_update_and_clear(client, seeded):
+    _, project = seeded
+    created = client.post(
+        "/api/v1/tickets",
+        json={"slug": project.slug, "title": "Ship billing", "due_date": "2026-09-30"},
+    )
+    assert created.status_code == 201
+    assert created.json()["due_date"] == "2026-09-30"
+
+    ticket_id = created.json()["id"]
+    updated = client.patch(
+        f"/api/v1/tickets/{ticket_id}", json={"due_date": "2026-10-02"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["due_date"] == "2026-10-02"
+
+    cleared = client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["due_date"] is None
+
+
+def test_ticket_due_date_rejects_invalid_dates_without_changing_ticket(client, seeded):
+    _, project = seeded
+    ticket_id = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]["id"]
+    client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": "2026-09-30"})
+
+    response = client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": "09/30/2026"})
+
+    assert response.status_code == 422
+    assert client.get(f"/api/v1/tickets/{ticket_id}").json()["due_date"] == "2026-09-30"
+
+
 def test_patch_rejects_unknown_fields(client, seeded):
     _, project = seeded
     ticket = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]

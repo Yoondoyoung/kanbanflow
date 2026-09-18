@@ -41,7 +41,13 @@ META_MAX_DEPTH = 3
 TITLE_MAX_LENGTH = 255
 DESCRIPTION_MAX_LENGTH = 20_000
 VALID_STORY_POINTS = {1, 2, 3, 5, 8, 13}
-NULLABLE_TICKET_FIELDS = {"story_points", "sprint_id", "assignee_id", "resolution_notes"}
+NULLABLE_TICKET_FIELDS = {
+    "story_points",
+    "due_date",
+    "sprint_id",
+    "assignee_id",
+    "resolution_notes",
+}
 NAME_MAX_LENGTH = 100
 USER_NAME_MAX_LENGTH = 50
 _EMAIL_TAKEN = "Email already registered"
@@ -631,6 +637,7 @@ def create_ticket(
     type: TicketType = TicketType.TASK,
     priority: Priority = Priority.MEDIUM,
     story_points: int | None = None,
+    due_date: date | None = None,
     sprint_id: str | None = None,
     assignee_id: str | None = None,
     meta: dict | None = None,
@@ -668,6 +675,7 @@ def create_ticket(
         status=TicketStatus.BACKLOG,
         priority=priority,
         story_points=story_points,
+        due_date=due_date,
         sprint_id=sprint.id if sprint else None,
         first_sprint_entered_at=utcnow() if sprint else None,
         creator_id=creator.id,

@@ -87,6 +87,7 @@ def post_ticket(
         type=body.type,
         priority=body.priority,
         story_points=body.story_points,
+        due_date=body.due_date,
         sprint_id=body.sprint_id,
         assignee_id=body.assignee_id,
         meta=body.meta,

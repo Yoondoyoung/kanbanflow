@@ -65,6 +65,7 @@ def test_created_ticket_defaults(client, make_user, make_project, login_as):
     assert body["status"] == "BACKLOG"
     assert body["priority"] == "MEDIUM"
     assert body["story_points"] is None
+    assert body["due_date"] is None
     assert body["meta"] == {}
 
 

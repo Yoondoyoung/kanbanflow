@@ -167,6 +167,7 @@ class Ticket(SQLModel, table=True):
     status: TicketStatus = Field(default=TicketStatus.BACKLOG, index=True)
     priority: Priority = Field(default=Priority.MEDIUM)
     story_points: int | None = Field(default=None)
+    due_date: date | None = Field(default=None, index=True)
     sprint_id: str | None = Field(default=None, foreign_key="sprint.id", index=True)
     first_sprint_entered_at: datetime | None = Field(default=None)
     delayed_days: int | None = Field(default=None)

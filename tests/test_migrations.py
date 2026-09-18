@@ -85,6 +85,25 @@ def test_chat_migration_round_trip(tmp_path):
         ).one() == ("SLACK", "https://hooks.example.test/legacy")
 
 
+def test_ticket_due_date_migration_round_trip(tmp_path):
+    db = tmp_path / "ticket-due-date.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "5d0b32a81e77"], check=True, env=env)
+
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    inspector = inspect(make_engine(f"sqlite:///{db}"))
+    due_date = next(
+        column for column in inspector.get_columns("ticket") if column["name"] == "due_date"
+    )
+    assert due_date["nullable"]
+    assert "ix_ticket_due_date" in {index["name"] for index in inspector.get_indexes("ticket")}
+
+    subprocess.run(["uv", "run", "alembic", "downgrade", "5d0b32a81e77"], check=True, env=env)
+    inspector = inspect(make_engine(f"sqlite:///{db}"))
+    assert "due_date" not in {column["name"] for column in inspector.get_columns("ticket")}
+    assert "ix_ticket_due_date" not in {index["name"] for index in inspector.get_indexes("ticket")}
+
+
 def test_migration_produces_the_same_tables_as_the_models(tmp_path):
     db = tmp_path / "migrated.db"
     subprocess.run(
