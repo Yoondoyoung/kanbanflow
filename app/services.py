@@ -1,6 +1,7 @@
 import ipaddress
 import json
 import re
+import socket
 from datetime import date
 from urllib.parse import urlparse
 
@@ -187,7 +188,10 @@ def validate_webhook_url(url: str) -> None:
     try:
         address = ipaddress.ip_address(parsed.hostname)
     except ValueError:
-        return
+        try:
+            address = ipaddress.ip_address(socket.inet_aton(parsed.hostname))
+        except OSError:
+            return
     if any(
         (
             address.is_loopback,

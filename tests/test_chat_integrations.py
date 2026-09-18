@@ -31,6 +31,10 @@ def test_project_can_store_each_chat_provider(session, make_user, make_project):
         ("https://224.0.0.1/hook", "multicast@example.test"),
         ("https://240.0.0.1/hook", "reserved@example.test"),
         ("https://0.0.0.0/hook", "unspecified@example.test"),
+        ("https://127.1/hook", "abbreviated@example.test"),
+        ("https://0x7f000001/hook", "hex@example.test"),
+        ("https://2130706433/hook", "integer@example.test"),
+        ("https://0177.0.0.1/hook", "octal@example.test"),
     ],
 )
 def test_chat_webhook_rejects_disallowed_literal_ip(
