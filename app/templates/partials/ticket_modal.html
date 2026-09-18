@@ -12,7 +12,6 @@
       <div>
         <label for="ticket-sprint">Destination</label>
         <select id="ticket-sprint" name="sprint_id">
-          <option value=""{% if not sprint %} selected{% endif %}>Backlog</option>
           {% for destination in destination_sprints|default([]) %}
           <option value="{{ destination.id }}"{% if sprint and destination.id == sprint.id %} selected{% endif %}>{{ destination.name }}</option>
           {% endfor %}

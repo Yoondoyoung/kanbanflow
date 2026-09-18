@@ -34,6 +34,7 @@ def test_modal_redirects_after_a_successful_htmx_submission(client, active_sprin
     assert 'hx-swap="none"' in page
     assert f'hx-post="/projects/{project.slug}/tickets"' in page
     assert f'<option value="{sprint.id}" selected>' in page
+    assert ">Backlog</option>" not in page
 
 
 def test_submitting_the_modal_redirects_after_an_htmx_success(
@@ -207,7 +208,7 @@ def test_five_interactions_or_fewer(client, active_sprint, login_as):
     assert len(required) <= 2, "only title and type may be required"
 
 
-def test_backlog_modal_defaults_to_backlog_and_members_can_create_there(
+def test_backlog_without_open_sprints_hides_new_ticket_but_keeps_legacy_post(
     client, make_user, make_project, add_member, engine, login_as
 ):
     owner = make_user(email="ada@example.com")
@@ -227,8 +228,8 @@ def test_backlog_modal_defaults_to_backlog_and_members_can_create_there(
             select(Ticket).where(Ticket.project_id == project.id, Ticket.ticket_number == 1)
         ).one()
 
-    assert "New ticket" in page.text
-    assert '<option value="" selected>Backlog</option>' in page.text
+    assert "New ticket" not in page.text
+    assert ">Backlog</option>" not in page.text
     assert response.status_code == 303
     assert ticket.sprint_id is None
 
@@ -262,7 +263,7 @@ def test_backlog_modal_lists_only_this_projects_open_sprints(
 
     page = client.get(f"/projects/{project.slug}/backlog").text
 
-    assert '<option value="" selected>Backlog</option>' in page
+    assert ">Backlog</option>" not in page
     assert f'<option value="{active.id}">Sprint 1</option>' in page
     assert f'<option value="{planning.id}">Next sprint</option>' in page
     assert "Foreign sprint" not in page

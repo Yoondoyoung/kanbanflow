@@ -9,7 +9,9 @@
       {% include "partials/sprint_selector.html" %}
     </div>
     <div class="project-actions"{% if role == 'OWNER' %} data-testid="owner-planning-controls"{% endif %}>
+      {% if destination_sprints %}
       <button class="app-secondary-button" type="button" x-ref="ticketModalOpener" @click="$refs.ticketModal.showModal(); $nextTick(() => $refs.ticketTitle.focus())">New ticket</button>
+      {% endif %}
       {% if role == 'OWNER' and not planning_sprint %}
       <button class="app-primary-button" type="button" x-ref="sprintFormOpener" @click="$refs.sprintForm.showModal()">Add sprint</button>
       {% endif %}
@@ -46,7 +48,9 @@
     </div>
   </section>
 
-  {% include "partials/ticket_modal.html" %}
+{% if destination_sprints %}
+{% include "partials/ticket_modal.html" %}
+{% endif %}
   {% if role == 'OWNER' %}
   <dialog x-ref="sprintForm" class="app-dialog" aria-labelledby="sprint-form-heading" @close="$refs.sprintFormOpener.focus()">
     {% include "partials/sprint_form.html" %}

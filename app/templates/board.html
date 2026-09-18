@@ -3,7 +3,7 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board sketch-board" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus())">
+<div class="project-board sketch-board" data-board-csrf="{{ csrf_token }}" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus())">
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
@@ -54,9 +54,11 @@
     <p class="board-filter-summary">Filters active</p>
     <a class="app-ghost-button" href="/projects/{{ project.slug }}">Clear filters</a>
     {% endif %}
-  </form>
+</form>
 
-  <div class="board-workspace">
+<p class="board-drag-status" data-board-drag-status role="status" aria-live="polite" hidden></p>
+
+<div class="board-workspace">
     <div class="board-scroll" role="region" aria-label="Board columns" tabindex="0">
       <div class="board-columns">
       {% for column in columns %}
@@ -65,7 +67,7 @@
           {{ column.value|replace('_', ' ')|capitalize }}
           <span data-testid="column-count-{{ column.value }}">{{ tickets_by_status[column.value]|length }}{% if column.value in truncated_columns %}+{% endif %}</span>
         </h2>
-        <div id="column-{{ column.value }}">
+        <div id="column-{{ column.value }}" data-drop-status="{{ column.value }}">
           {% for ticket in tickets_by_status[column.value] %}
             {% include "partials/ticket_card.html" %}
           {% else %}

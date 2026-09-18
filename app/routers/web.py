@@ -449,8 +449,8 @@ def board(
     sprint_id: str | None = None,
     mine: bool = False,
     assignee_id: str | None = None,
-    type_filter: TicketType | None = _TYPE_FILTER_QUERY,
-    priority: Priority | None = None,
+    type_filter: str | None = _TYPE_FILTER_QUERY,
+    priority: str | None = None,
 ) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
@@ -459,6 +459,12 @@ def board(
     project, member = load_project_and_membership(slug, user, session)
     if member is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Project not found")
+
+    try:
+        type_filter = TicketType(type_filter) if type_filter else None
+        priority = Priority(priority) if priority else None
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid board filter") from exc
 
     sprint = session.exec(
         select(Sprint).where(

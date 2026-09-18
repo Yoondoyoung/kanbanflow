@@ -223,6 +223,11 @@ button, input, select, textarea { font: inherit; }
 .ticket-card-title { align-items: baseline; display: flex; font-weight: 650; gap: var(--space-2); }
 .ticket-number { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 400; }
 .ticket-card-meta { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 12px; gap: var(--space-2); margin-top: var(--space-1); }
+.ticket-card[draggable="true"] { cursor: grab; }
+.ticket-card.is-dragging { cursor: grabbing; opacity: .45; }
+[data-drop-status].is-drag-over { outline: 3px solid var(--focus); outline-offset: 2px; }
+.board-drag-status { color: var(--text); margin: 0 0 var(--space-3); }
+.board-drag-status[hidden] { display: none; }
 .backlog-planning-sprint, .backlog-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
 .backlog-planning-sprint { align-items: center; display: flex; gap: var(--space-4); justify-content: space-between; margin-bottom: var(--space-4); padding: var(--space-3); }
 .backlog-planning-sprint h2, .backlog-list h2 { font-size: 18px; margin: 0; }

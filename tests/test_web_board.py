@@ -222,6 +222,39 @@ def test_board_filter_checkbox_has_a_40px_hit_target():
     assert "min-height: 40px" in stylesheet.split(".board-filter-check", 1)[1].split("}", 1)[0]
 
 
+def test_blank_select_filters_render_the_html_board(
+    client, active_sprint_world, login_as
+):
+    login_as(active_sprint_world.owner.email)
+
+    response = client.get(
+        f"/projects/{active_sprint_world.project.slug}",
+        params={"assignee_id": "", "type": "", "priority": ""},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert 'class="project-board sketch-board"' in response.text
+
+
+def test_board_exposes_native_drag_and_drop_contract():
+    board = Path("app/templates/board.html").read_text()
+    card = Path("app/templates/partials/ticket_card.html").read_text()
+    script = Path("app/static/app.js").read_text()
+    stylesheet = Path("app/static/app.css").read_text()
+
+    assert 'data-drop-status="{{ column.value }}"' in board
+    assert 'data-board-csrf="{{ csrf_token }}"' in board
+    assert "data-board-drag-status" in board
+    assert 'draggable="true"' in card
+    assert "data-ticket-status-url" in card
+    for event_name in ("dragstart", "dragend", "dragover", "dragleave", "drop"):
+        assert f'addEventListener("{event_name}"' in script
+    assert "fetch(" in script
+    assert ".is-dragging" in stylesheet
+    assert ".is-drag-over" in stylesheet
+
+
 def test_board_caps_each_column_and_shows_a_truncation_notice(
     client, engine, active_sprint_world, login_as
 ):

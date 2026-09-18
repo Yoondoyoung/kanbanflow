@@ -145,3 +145,90 @@
     if (input) syncSelected(input);
   }, true);
 })();
+
+(() => {
+  let draggedCard = null;
+
+  function setDragStatus(board, message) {
+    const status = board.querySelector("[data-board-drag-status]");
+    status.hidden = false;
+    status.textContent = message;
+  }
+
+  function refreshLane(lane) {
+    const cards = lane.querySelectorAll(":scope > .ticket-card");
+    let empty = lane.querySelector(":scope > .board-empty-state");
+    if (cards.length) empty?.remove();
+    else if (!empty) {
+      empty = document.createElement("p");
+      empty.className = "board-empty-state";
+      empty.textContent = "No tickets here.";
+      lane.append(empty);
+    }
+
+    const count = lane.closest(".board-column").querySelector("[data-testid^='column-count-']");
+    if (!count.textContent.trim().endsWith("+")) count.textContent = String(cards.length);
+  }
+
+  document.addEventListener("dragstart", (event) => {
+    const card = event.target.closest(".ticket-card[draggable='true']");
+    if (!card) return;
+    draggedCard = card;
+    card.classList.add("is-dragging");
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.id);
+  });
+
+  document.addEventListener("dragend", () => {
+    draggedCard?.classList.remove("is-dragging");
+    document.querySelectorAll("[data-drop-status].is-drag-over").forEach((lane) => lane.classList.remove("is-drag-over"));
+    draggedCard = null;
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const lane = event.target.closest("[data-drop-status]");
+    if (!lane || !draggedCard) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    document.querySelectorAll("[data-drop-status].is-drag-over").forEach((other) => other.classList.toggle("is-drag-over", other === lane));
+  });
+
+  document.addEventListener("dragleave", (event) => {
+    const lane = event.target.closest("[data-drop-status]");
+    if (lane && !lane.contains(event.relatedTarget)) lane.classList.remove("is-drag-over");
+  });
+
+  document.addEventListener("drop", async (event) => {
+    const lane = event.target.closest("[data-drop-status]");
+    const card = draggedCard;
+    if (!lane || !card) return;
+    event.preventDefault();
+    lane.classList.remove("is-drag-over");
+
+    const source = card.closest("[data-drop-status]");
+    if (source === lane) return;
+    const board = lane.closest(".project-board");
+    const body = new FormData();
+    body.append("status", lane.dataset.dropStatus);
+    body.append("_csrf", board.dataset.boardCsrf);
+
+    card.setAttribute("aria-busy", "true");
+    try {
+      const response = await fetch(card.dataset.ticketStatusUrl, {
+        method: "POST",
+        body,
+        credentials: "same-origin",
+        headers: { "HX-Request": "true" },
+      });
+      if (!response.ok) throw new Error();
+      lane.append(card);
+      refreshLane(source);
+      refreshLane(lane);
+      setDragStatus(board, `Moved ticket to ${lane.dataset.dropStatus.replaceAll("_", " ").toLowerCase()}.`);
+    } catch {
+      setDragStatus(board, "Could not move ticket. Try again.");
+    } finally {
+      card.removeAttribute("aria-busy");
+    }
+  });
+})();

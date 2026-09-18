@@ -184,7 +184,7 @@ def test_backlog_has_one_primary_owner_action_without_a_planning_sprint(
     page = client.get(f"/projects/{project.slug}/backlog")
     header = re.search(r'<header class="project-header">.*?</header>', page.text, re.DOTALL).group()
 
-    assert 'class="app-secondary-button" type="button" x-ref="ticketModalOpener"' in header
+    assert 'x-ref="ticketModalOpener"' not in header
     assert 'class="app-primary-button" type="button" x-ref="sprintFormOpener"' in header
 
 
