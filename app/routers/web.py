@@ -822,7 +822,7 @@ def board(
             "total_count": total,
             "completion_percent": round(len(done) * 100 / total) if total else 0,
             "completed_points": sum(ticket.story_points or 0 for ticket in done),
-            "committed_points": sprint.committed_points or 0,
+            "total_points": sum(ticket.story_points or 0 for ticket in summary_tickets),
             "rollover_count": sum(ticket.rollover_count > 0 for ticket in summary_tickets),
             "at_risk_count": sum(
                 ticket.rollover_count >= 2 or (ticket.delayed_days or 0) >= 14
@@ -1105,8 +1105,6 @@ def update_ticket_form(
     project, _ = project_and_member
     ticket = _project_ticket(session, project, ticket_number)
     is_hx = bool(request.headers.get("HX-Request"))
-    old_status = ticket.status
-    old_sprint_id = ticket.sprint_id
     submitted_values = {
         "title": title,
         "description": description,
@@ -1177,10 +1175,7 @@ def update_ticket_form(
             status_code=status.HTTP_303_SEE_OTHER,
         )
     response = _ticket_detail(request, session, user, project, ticket, saved=True)
-    if (ticket.status, ticket.sprint_id) != (old_status, old_sprint_id):
-        response.headers["HX-Refresh"] = "true"
-    else:
-        response.headers["HX-Trigger"] = f"refresh-ticket-card-{ticket.id}"
+    response.headers["HX-Refresh"] = "true"
     return response
 
 

@@ -203,7 +203,7 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
 
     assert 'data-testid="sprint-summary"' in page
     assert "<dt>Completed</dt><dd>2 / 5 · 40%</dd>" in page
-    assert "<dt>Points</dt><dd>5 / 13</dd>" in page
+    assert "<dt>Points</dt><dd>5 / 8</dd>" in page
     assert "<dt>Rollover</dt><dd>2</dd>" in page
     assert "<dt>At risk</dt><dd>2</dd>" in page
 
@@ -358,6 +358,7 @@ def test_board_exposes_native_drag_and_drop_contract():
     for event_name in ("dragstart", "dragend", "dragover", "dragleave", "drop"):
         assert f'addEventListener("{event_name}"' in script
     assert "fetch(" in script
+    assert "window.location.reload();" in script
     assert ".is-dragging" in stylesheet
     assert ".is-drag-over" in stylesheet
 

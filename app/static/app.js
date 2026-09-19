@@ -155,21 +155,6 @@
     status.textContent = message;
   }
 
-  function refreshLane(lane) {
-    const cards = lane.querySelectorAll(":scope > .ticket-card");
-    let empty = lane.querySelector(":scope > .board-empty-state");
-    if (cards.length) empty?.remove();
-    else if (!empty) {
-      empty = document.createElement("p");
-      empty.className = "board-empty-state";
-      empty.textContent = "No tickets here.";
-      lane.append(empty);
-    }
-
-    const count = lane.closest(".board-column").querySelector("[data-testid^='column-count-']");
-    if (!count.textContent.trim().endsWith("+")) count.textContent = String(cards.length);
-  }
-
   document.addEventListener("dragstart", (event) => {
     const card = event.target.closest(".ticket-card[draggable='true']");
     if (!card) return;
@@ -221,10 +206,7 @@
         headers: { "HX-Request": "true" },
       });
       if (!response.ok) throw new Error();
-      lane.append(card);
-      refreshLane(source);
-      refreshLane(lane);
-      setDragStatus(board, `Moved ticket to ${lane.dataset.dropStatus.replaceAll("_", " ").toLowerCase()}.`);
+      window.location.reload();
     } catch {
       setDragStatus(board, "Could not move ticket. Try again.");
     } finally {

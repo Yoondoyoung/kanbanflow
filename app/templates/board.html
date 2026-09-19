@@ -27,7 +27,7 @@
   {% if sprint_summary %}
   <dl class="sprint-summary" data-testid="sprint-summary">
     <div><dt>Completed</dt><dd>{{ sprint_summary.completed_count }} / {{ sprint_summary.total_count }} · {{ sprint_summary.completion_percent }}%</dd></div>
-    <div><dt>Points</dt><dd>{{ sprint_summary.completed_points }} / {{ sprint_summary.committed_points }}</dd></div>
+    <div><dt>Points</dt><dd>{{ sprint_summary.completed_points }} / {{ sprint_summary.total_points }}</dd></div>
     <div><dt>Rollover</dt><dd>{{ sprint_summary.rollover_count }}</dd></div>
     <div><dt>At risk</dt><dd>{{ sprint_summary.at_risk_count }}</dd></div>
   </dl>

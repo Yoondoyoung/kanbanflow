@@ -314,6 +314,8 @@ def test_ticket_save_returns_a_textual_status(client, ticket_world, login_as):
 
     assert response.status_code == 200
     assert '<p class="form-status" role="status">Ticket saved.</p>' in response.text
+    assert response.headers["HX-Refresh"] == "true"
+    assert "HX-Trigger" not in response.headers
 
 
 def test_ticket_drawer_resolves_the_current_card_button_after_a_refresh():
