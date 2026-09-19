@@ -157,6 +157,39 @@ def test_dashboard_shows_empty_my_work_state(client, make_user, login_as):
     assert "No assigned work." in page
 
 
+def test_invalid_project_submission_keeps_my_work_visible(
+    client, engine, make_user, make_project, login_as
+):
+    user = make_user(email="ada@example.com")
+    project = make_project(user)
+    with Session(engine) as session:
+        session.add(
+            Ticket(
+                ticket_number=1,
+                project_id=project.id,
+                title="Keep visible after form error",
+                status=TicketStatus.BACKLOG,
+                creator_id=user.id,
+                assignee_id=user.id,
+            )
+        )
+        session.commit()
+    login_as(user.email)
+
+    response = client.post(
+        "/projects",
+        data={"name": "x" * 101, "_csrf": csrf_for(user)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 422
+    next_group = re.search(
+        r'<section id="my-work-next".*?</section>', response.text, re.DOTALL
+    ).group()
+    assert "Keep visible after form error" in next_group
+    assert 'x-data="{ projectDialog: true }"' in response.text
+
+
 def test_dashboard_has_accessible_project_creation_dialog(client, make_user, login_as):
     owner = make_user(email="ada@example.com")
     login_as(owner.email)

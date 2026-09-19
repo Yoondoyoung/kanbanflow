@@ -673,14 +673,7 @@ def _ticket_detail(
     )
 
 
-@router.get("/dashboard")
-def dashboard(
-    request: Request,
-    user: User | None = Depends(optional_user),
-    session: Session = Depends(get_session),
-) -> Response:
-    if user is None:
-        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+def _dashboard_context(session: Session, user: User) -> dict:
     today = date.today()
     open_rows = session.exec(
         select(Ticket, Project)
@@ -717,19 +710,25 @@ def dashboard(
             in_progress_tickets.append(row)
         else:
             next_tickets.append(row)
-    return render(
-        request,
-        "dashboard.html",
-        {
-            "user": user,
-            "today": today,
-            "overdue_tickets": overdue_tickets,
-            "in_progress_tickets": in_progress_tickets,
-            "next_tickets": next_tickets,
-            "recently_completed_tickets": recently_completed_tickets,
-        },
-        session=session,
-    )
+    return {
+        "user": user,
+        "today": today,
+        "overdue_tickets": overdue_tickets,
+        "in_progress_tickets": in_progress_tickets,
+        "next_tickets": next_tickets,
+        "recently_completed_tickets": recently_completed_tickets,
+    }
+
+
+@router.get("/dashboard")
+def dashboard(
+    request: Request,
+    user: User | None = Depends(optional_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    if user is None:
+        return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
+    return render(request, "dashboard.html", _dashboard_context(session, user), session=session)
 
 
 @router.post("/projects", dependencies=[Depends(verify_csrf)])
@@ -747,10 +746,12 @@ def create_project_form(
     try:
         project = create_project(session, name, user)
     except HTTPException as exc:
+        context = _dashboard_context(session, user)
+        context.update({"error": exc.detail, "name": name})
         return render(
             request,
             "dashboard.html",
-            {"user": user, "error": exc.detail, "name": name},
+            context,
             status_code=exc.status_code,
             session=session,
         )
