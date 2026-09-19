@@ -1,5 +1,4 @@
 import subprocess
-from datetime import date
 
 import httpx
 import pytest
@@ -256,10 +255,9 @@ async def test_ticket_tools_delegate_to_the_api(monkeypatch):
     monkeypatch.setattr(mcp_server, "api_request", fake_request)
 
     async with Client(mcp) as client:
-        await mcp_server.create_ticket(
-            "mcp-check",
-            "MCP ticket",
-            due_date=date(2026, 9, 30),
+        await client.call_tool(
+            "create_ticket",
+            {"slug": "mcp-check", "title": "MCP ticket", "due_date": "2026-09-30"},
         )
         await client.call_tool(
             "list_tickets", {"slug": "mcp-check", "status": "BACKLOG", "limit": 10}

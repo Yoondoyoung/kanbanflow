@@ -111,7 +111,7 @@ def test_patch_empty_body_leaves_ticket_unchanged(client, seeded):
     assert response.json() == ticket
 
 
-def test_ticket_due_date_create_update_and_clear(client, seeded):
+def test_ticket_due_date_create_update_preserve_and_clear(client, seeded):
     _, project = seeded
     created = client.post(
         "/api/v1/tickets",
@@ -124,6 +124,12 @@ def test_ticket_due_date_create_update_and_clear(client, seeded):
     updated = client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": "2026-10-02"})
     assert updated.status_code == 200
     assert updated.json()["due_date"] == "2026-10-02"
+
+    preserved = client.patch(
+        f"/api/v1/tickets/{ticket_id}", json={"title": "Ship billing on Friday"}
+    )
+    assert preserved.status_code == 200
+    assert preserved.json()["due_date"] == "2026-10-02"
 
     cleared = client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": None})
     assert cleared.status_code == 200

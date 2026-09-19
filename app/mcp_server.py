@@ -228,7 +228,7 @@ async def get_ticket(ticket_id: str) -> dict[str, object]:
 
 @mcp.tool()
 async def update_ticket(ticket_id: str, changes: dict[str, object]) -> dict[str, object]:
-    """Update title, description, type, priority, story_points, sprint_id, assignee_id, resolution_notes, or meta; explicit null clears story_points, sprint_id, assignee_id, or resolution_notes."""  # noqa: E501
+    """Update title, description, type, priority, story_points, due_date, sprint_id, assignee_id, resolution_notes, or meta; explicit null clears story_points, due_date, sprint_id, assignee_id, or resolution_notes."""  # noqa: E501
     return await _tool_request("PATCH", f"/api/v1/tickets/{_path_segment(ticket_id)}", changes)
 
 

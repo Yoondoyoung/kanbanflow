@@ -174,22 +174,22 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
                     project_id=project.id,
                     title="Open estimate",
                     story_points=3,
+                    rollover_count=1,
                     sprint_id=sprint.id,
                     creator_id=owner.id,
                 ),
                 Ticket(
                     ticket_number=4,
                     project_id=project.id,
-                    title="Rolled over",
-                    rollover_count=1,
+                    title="Rollover at risk",
+                    rollover_count=2,
                     sprint_id=sprint.id,
                     creator_id=owner.id,
                 ),
                 Ticket(
                     ticket_number=5,
                     project_id=project.id,
-                    title="At risk",
-                    rollover_count=2,
+                    title="Delay at risk",
                     delayed_days=14,
                     sprint_id=sprint.id,
                     creator_id=owner.id,
@@ -202,8 +202,10 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
     page = client.get(f"/projects/{project.slug}").text
 
     assert 'data-testid="sprint-summary"' in page
-    for text in ("Completed", "2 / 5 · 40%", "Points", "5 / 13", "Rollover", "2", "At risk", "1"):
-        assert text in page
+    assert "<dt>Completed</dt><dd>2 / 5 · 40%</dd>" in page
+    assert "<dt>Points</dt><dd>5 / 13</dd>" in page
+    assert "<dt>Rollover</dt><dd>2</dd>" in page
+    assert "<dt>At risk</dt><dd>2</dd>" in page
 
 
 def test_empty_active_sprint_summary_is_zero(client, active_sprint_world, login_as):
