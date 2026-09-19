@@ -267,9 +267,9 @@ def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
     assert ".sketch-board .board-workspace .board-scroll {" in css
     assert "overflow-x: auto;" in css
     for index, angle in enumerate(("-0.25deg", "0.35deg", "-0.15deg", "0.2deg"), 1):
-        rule = css.split(
-            f".sketch-board .ticket-card:nth-child(4n + {index}) {{", 1
-        )[1].split("}", 1)[0]
+        rule = css.split(f".sketch-board .ticket-card:nth-child(4n + {index}) {{", 1)[1].split(
+            "}", 1
+        )[0]
         assert f"transform: rotate({angle});" in rule
     assert ".sketch-board .ticket-card:hover {" in css
     hover_rule = css.split(".sketch-board .ticket-card:hover {", 1)[1].split("}", 1)[0]
@@ -305,8 +305,7 @@ def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
     assert fragment.status_code == 200
     assert (
         '<dialog id="ticket-detail-panel" '
-        'class="app-dialog ticket-detail-modal sketch-ticket-detail"'
-        in fragment.text
+        'class="app-dialog ticket-detail-modal sketch-ticket-detail"' in fragment.text
     )
     assert 'aria-labelledby="ticket-detail-heading"' in fragment.text
     assert '@cancel="$event.preventDefault(); $el.close()"' in fragment.text
@@ -317,13 +316,9 @@ def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
     modal_css = css.split(".ticket-detail-modal {", 1)[1].split("}", 1)[0]
     assert "margin: auto" in modal_css
     assert "max-width: 1120px" in modal_css
-    layout_css = css.split(".ticket-detail-modal .ticket-detail-layout {", 1)[1].split(
-        "}", 1
-    )[0]
+    layout_css = css.split(".ticket-detail-modal .ticket-detail-layout {", 1)[1].split("}", 1)[0]
     assert "grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr)" in layout_css
-    comments_css = css.split(".ticket-detail-modal .ticket-comments {", 1)[1].split(
-        "}", 1
-    )[0]
+    comments_css = css.split(".ticket-detail-modal .ticket-comments {", 1)[1].split("}", 1)[0]
     assert "border-left: 1px solid var(--line)" in comments_css
 
 
@@ -334,9 +329,7 @@ def test_board_filter_checkbox_has_a_40px_hit_target():
     assert "min-height: 40px" in stylesheet.split(".board-filter-check", 1)[1].split("}", 1)[0]
 
 
-def test_blank_select_filters_render_the_html_board(
-    client, active_sprint_world, login_as
-):
+def test_blank_select_filters_render_the_html_board(client, active_sprint_world, login_as):
     login_as(active_sprint_world.owner.email)
 
     response = client.get(
@@ -448,8 +441,7 @@ def test_project_opens_active_sprint(client, active_sprint_world, login_as):
         assert f">{tab}</a>" in page.text
     assert (
         f'<a class="project-settings-link" '
-        f'href="/projects/{active_sprint_world.project.slug}/settings">Settings</a>'
-        in page.text
+        f'href="/projects/{active_sprint_world.project.slug}/settings">Settings</a>' in page.text
     )
 
 

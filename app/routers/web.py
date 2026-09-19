@@ -814,9 +814,7 @@ def board(
 
     sprint_summary = None
     if sprint.status is SprintStatus.ACTIVE:
-        summary_tickets = session.exec(
-            select(Ticket).where(Ticket.sprint_id == sprint.id)
-        ).all()
+        summary_tickets = session.exec(select(Ticket).where(Ticket.sprint_id == sprint.id)).all()
         done = [ticket for ticket in summary_tickets if ticket.status is TicketStatus.DONE]
         total = len(summary_tickets)
         sprint_summary = {

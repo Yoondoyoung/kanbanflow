@@ -121,9 +121,7 @@ def test_ticket_due_date_create_update_and_clear(client, seeded):
     assert created.json()["due_date"] == "2026-09-30"
 
     ticket_id = created.json()["id"]
-    updated = client.patch(
-        f"/api/v1/tickets/{ticket_id}", json={"due_date": "2026-10-02"}
-    )
+    updated = client.patch(f"/api/v1/tickets/{ticket_id}", json={"due_date": "2026-10-02"})
     assert updated.status_code == 200
     assert updated.json()["due_date"] == "2026-10-02"
 

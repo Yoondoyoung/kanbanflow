@@ -48,12 +48,9 @@ def test_key_migration_backfills_existing_projects(tmp_path):
             "PAY2",
         ]
 
-    subprocess.run(
-        ["uv", "run", "alembic", "downgrade", "c41d8e7f2a10"], check=True, env=env
-    )
+    subprocess.run(["uv", "run", "alembic", "downgrade", "c41d8e7f2a10"], check=True, env=env)
     columns = {
-        column["name"]
-        for column in inspect(make_engine(f"sqlite:///{db}")).get_columns("project")
+        column["name"] for column in inspect(make_engine(f"sqlite:///{db}")).get_columns("project")
     }
     assert "key" not in columns
 
@@ -73,12 +70,11 @@ def test_chat_migration_round_trip(tmp_path):
         )
     subprocess.run(["uv", "run", "alembic", "upgrade", "e4b9c52d8fa1"], check=True, env=env)
     with make_engine(f"sqlite:///{db}").connect() as connection:
-        assert connection.execute(
-            text("SELECT provider,url FROM project_chat_webhook")
-        ).one() == ("SLACK", "https://hooks.example.test/legacy")
-    subprocess.run(
-        ["uv", "run", "alembic", "downgrade", "d93f7a21c4e8"], check=True, env=env
-    )
+        assert connection.execute(text("SELECT provider,url FROM project_chat_webhook")).one() == (
+            "SLACK",
+            "https://hooks.example.test/legacy",
+        )
+    subprocess.run(["uv", "run", "alembic", "downgrade", "d93f7a21c4e8"], check=True, env=env)
     with make_engine(f"sqlite:///{db}").connect() as connection:
         assert connection.execute(
             text("SELECT webhook_type,webhook_url FROM project WHERE id='p'")
@@ -157,9 +153,7 @@ def test_api_token_migration_downgrade_and_upgrade_are_safe(tmp_path):
     db = tmp_path / "migrated.db"
     env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
     subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
-    subprocess.run(
-        ["uv", "run", "alembic", "downgrade", "6c25b12d1a91"], check=True, env=env
-    )
+    subprocess.run(["uv", "run", "alembic", "downgrade", "6c25b12d1a91"], check=True, env=env)
 
     downgraded_tables = inspect(make_engine(f"sqlite:///{db}")).get_table_names()
     assert "api_token" not in downgraded_tables
@@ -306,9 +300,7 @@ def test_github_migration_creates_tables_constraints_and_indexes(tmp_path):
         "github_installation": {("github_installation_id",)},
         "project_github_connection": {("project_id", "installation_id")},
         "project_github_repository": {("project_id", "github_repository_id")},
-        "github_artifact": {
-            ("repository_connection_id", "kind", "external_id")
-        },
+        "github_artifact": {("repository_connection_id", "kind", "external_id")},
         "integration_delivery": {("provider", "delivery_id")},
     }
     for table_name, expected in expected_unique_columns.items():
@@ -343,9 +335,7 @@ def test_github_migration_creates_tables_constraints_and_indexes(tmp_path):
         "github_artifact": {"ix_github_artifact_repository_connection_id"},
     }
     for table_name, expected in expected_indexes.items():
-        assert expected <= {
-            index["name"] for index in inspector.get_indexes(table_name)
-        }
+        assert expected <= {index["name"] for index in inspector.get_indexes(table_name)}
 
 
 def test_github_migration_downgrade_and_upgrade_are_safe(tmp_path):

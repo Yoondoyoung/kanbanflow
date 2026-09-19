@@ -116,9 +116,7 @@ def test_dashboard_groups_only_visible_assigned_work(
     login_as(user.email)
     page = client.get("/dashboard").text
     groups = {
-        group: re.search(
-            rf'<section id="my-work-{group}".*?</section>', page, re.DOTALL
-        ).group()
+        group: re.search(rf'<section id="my-work-{group}".*?</section>', page, re.DOTALL).group()
         for group in ("overdue", "in-progress", "next", "recently-completed")
     }
 
@@ -132,9 +130,7 @@ def test_dashboard_groups_only_visible_assigned_work(
     assert all(f"Done task {number}" in groups["recently-completed"] for number in range(1, 11))
     assert "Unassigned task" not in page
     assert "Former project task" not in page
-    work_rows = re.findall(
-        r'<li class="app-row">(.*?)</li>', "".join(groups.values()), re.DOTALL
-    )
+    work_rows = re.findall(r'<li class="app-row">(.*?)</li>', "".join(groups.values()), re.DOTALL)
     assert len(work_rows) == 14
     assert all(
         re.search(r'href="/projects/[^/]+/tickets/\d+"', row)

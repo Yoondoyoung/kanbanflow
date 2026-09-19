@@ -178,10 +178,7 @@ def validate_webhook_url(url: str) -> None:
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook URL must be at most 500 characters",
         )
-    if any(
-        char == "\\" or char.isspace() or ord(char) <= 31 or ord(char) == 127
-        for char in url
-    ):
+    if any(char == "\\" or char.isspace() or ord(char) <= 31 or ord(char) == 127 for char in url):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook URL must be a safe https URL",
@@ -251,9 +248,7 @@ def set_chat_webhook(
     return webhook
 
 
-def disconnect_chat_webhook(
-    session: Session, project: Project, provider: WebhookType
-) -> None:
+def disconnect_chat_webhook(session: Session, project: Project, provider: WebhookType) -> None:
     webhook = session.exec(
         select(ProjectChatWebhook).where(
             ProjectChatWebhook.project_id == project.id,
@@ -358,24 +353,16 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
             ProjectGitHubConnection.project_id == project.id
         )
     ).all()
-    session.execute(
-        delete(GitHubConnectState).where(GitHubConnectState.project_id == project.id)
-    )
+    session.execute(delete(GitHubConnectState).where(GitHubConnectState.project_id == project.id))
     session.execute(delete(TicketGitLink).where(TicketGitLink.artifact_id.in_(artifact_ids)))
     session.execute(
-        delete(GitHubArtifact).where(
-            GitHubArtifact.repository_connection_id.in_(repository_ids)
-        )
+        delete(GitHubArtifact).where(GitHubArtifact.repository_connection_id.in_(repository_ids))
     )
     session.execute(
-        delete(ProjectGitHubRepository).where(
-            ProjectGitHubRepository.project_id == project.id
-        )
+        delete(ProjectGitHubRepository).where(ProjectGitHubRepository.project_id == project.id)
     )
     session.execute(
-        delete(ProjectGitHubConnection).where(
-            ProjectGitHubConnection.project_id == project.id
-        )
+        delete(ProjectGitHubConnection).where(ProjectGitHubConnection.project_id == project.id)
     )
     sprint_ids = select(Sprint.id).where(Sprint.project_id == project.id)
     session.execute(
@@ -386,9 +373,7 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
     session.execute(delete(Ticket).where(Ticket.project_id == project.id))
     session.execute(delete(Sprint).where(Sprint.project_id == project.id))
     session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
-    session.execute(
-        delete(ProjectChatWebhook).where(ProjectChatWebhook.project_id == project.id)
-    )
+    session.execute(delete(ProjectChatWebhook).where(ProjectChatWebhook.project_id == project.id))
     session.flush()
     session.delete(project)
     session.flush()

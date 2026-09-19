@@ -124,9 +124,7 @@ class Project(SQLModel, table=True):
 class ProjectChatWebhook(SQLModel, table=True):
     __tablename__ = "project_chat_webhook"
     __table_args__ = (
-        UniqueConstraint(
-            "project_id", "provider", name="uq_project_chat_webhook_provider"
-        ),
+        UniqueConstraint("project_id", "provider", name="uq_project_chat_webhook_provider"),
         CheckConstraint(
             "provider IN ('SLACK', 'TEAMS', 'DISCORD')",
             name="ck_chat_webhook_provider",
@@ -320,9 +318,7 @@ class GitHubArtifact(SQLModel, table=True):
     )
 
     id: str = Field(default_factory=new_id, primary_key=True)
-    repository_connection_id: str = Field(
-        foreign_key="project_github_repository.id", index=True
-    )
+    repository_connection_id: str = Field(foreign_key="project_github_repository.id", index=True)
     kind: GitHubArtifactKind
     external_id: str = Field(max_length=255)
     number: int | None = None
@@ -348,9 +344,7 @@ class TicketGitLink(SQLModel, table=True):
 class IntegrationDelivery(SQLModel, table=True):
     __tablename__ = "integration_delivery"
     __table_args__ = (
-        UniqueConstraint(
-            "provider", "delivery_id", name="uq_integration_delivery_provider"
-        ),
+        UniqueConstraint("provider", "delivery_id", name="uq_integration_delivery_provider"),
     )
 
     id: str = Field(default_factory=new_id, primary_key=True)
