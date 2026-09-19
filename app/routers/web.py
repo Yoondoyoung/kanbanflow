@@ -681,7 +681,55 @@ def dashboard(
 ) -> Response:
     if user is None:
         return RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
-    return render(request, "dashboard.html", {"user": user}, session=session)
+    today = date.today()
+    open_rows = session.exec(
+        select(Ticket, Project)
+        .join(Project, Ticket.project_id == Project.id)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .where(
+            Ticket.assignee_id == user.id,
+            ProjectMember.user_id == user.id,
+            Ticket.status != TicketStatus.DONE,
+        )
+        .order_by(Ticket.due_date.is_(None), Ticket.due_date, Ticket.created_at.desc())
+        .limit(100)
+    ).all()
+    recently_completed_tickets = session.exec(
+        select(Ticket, Project)
+        .join(Project, Ticket.project_id == Project.id)
+        .join(ProjectMember, ProjectMember.project_id == Project.id)
+        .where(
+            Ticket.assignee_id == user.id,
+            ProjectMember.user_id == user.id,
+            Ticket.status == TicketStatus.DONE,
+        )
+        .order_by(Ticket.completed_at.desc())
+        .limit(10)
+    ).all()
+    overdue_tickets = []
+    in_progress_tickets = []
+    next_tickets = []
+    for row in open_rows:
+        ticket = row[0]
+        if ticket.due_date is not None and ticket.due_date < today:
+            overdue_tickets.append(row)
+        elif ticket.status is TicketStatus.IN_PROGRESS:
+            in_progress_tickets.append(row)
+        else:
+            next_tickets.append(row)
+    return render(
+        request,
+        "dashboard.html",
+        {
+            "user": user,
+            "today": today,
+            "overdue_tickets": overdue_tickets,
+            "in_progress_tickets": in_progress_tickets,
+            "next_tickets": next_tickets,
+            "recently_completed_tickets": recently_completed_tickets,
+        },
+        session=session,
+    )
 
 
 @router.post("/projects", dependencies=[Depends(verify_csrf)])

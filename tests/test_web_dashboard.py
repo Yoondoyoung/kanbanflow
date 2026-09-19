@@ -1,6 +1,10 @@
 import re
+from datetime import UTC, date, datetime, timedelta
+
+from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
+from app.models import ProjectMember, Ticket, TicketStatus
 
 
 def csrf_for(user):
@@ -14,12 +18,143 @@ def test_dashboard_lists_projects(client, make_user, make_project, login_as):
     response = client.get("/dashboard")
     assert response.status_code == 200
     assert "Payment Gateway" in response.text
-    assert len(re.findall(r"<h1[^>]*>\s*Projects\s*</h1>", response.text)) == 1
+    assert len(re.findall(r"<h2[^>]*>\s*Projects\s*</h2>", response.text)) == 1
     assert 'data-testid="project-row"' in response.text
     assert f'href="/projects/{project.slug}"' in response.text
     row = re.search(r'<li data-testid="project-row".*?</li>', response.text, re.DOTALL).group()
     assert row.count(f'href="/projects/{project.slug}"') == 1
     assert ">Owner</span>" in response.text
+
+
+def test_dashboard_groups_only_visible_assigned_work(
+    client, engine, make_user, make_project, login_as
+):
+    """Removing membership, grouping the wrong status, or leaking a ticket must fail this."""
+    user = make_user(email="ada@example.com")
+    first = make_project(user, name="Payments")
+    second = make_project(user, name="Mobile")
+    former_owner = make_user(email="bob@example.com")
+    former = make_project(former_owner, name="Former")
+    today = date.today()
+
+    with Session(engine) as session:
+        former_membership = ProjectMember(project_id=former.id, user_id=user.id)
+        session.add(former_membership)
+        session.add_all(
+            [
+                Ticket(
+                    ticket_number=1,
+                    project_id=first.id,
+                    title="Overdue task",
+                    status=TicketStatus.BACKLOG,
+                    creator_id=user.id,
+                    assignee_id=user.id,
+                    due_date=today - timedelta(days=1),
+                ),
+                Ticket(
+                    ticket_number=1,
+                    project_id=second.id,
+                    title="In progress task",
+                    status=TicketStatus.IN_PROGRESS,
+                    creator_id=user.id,
+                    assignee_id=user.id,
+                    due_date=today,
+                ),
+                Ticket(
+                    ticket_number=2,
+                    project_id=first.id,
+                    title="Backlog task",
+                    status=TicketStatus.BACKLOG,
+                    creator_id=user.id,
+                    assignee_id=user.id,
+                ),
+                Ticket(
+                    ticket_number=2,
+                    project_id=second.id,
+                    title="Selected task",
+                    status=TicketStatus.SELECTED,
+                    creator_id=user.id,
+                    assignee_id=user.id,
+                ),
+                Ticket(
+                    ticket_number=3,
+                    project_id=first.id,
+                    title="Unassigned task",
+                    status=TicketStatus.BACKLOG,
+                    creator_id=user.id,
+                ),
+                Ticket(
+                    ticket_number=1,
+                    project_id=former.id,
+                    title="Former project task",
+                    status=TicketStatus.BACKLOG,
+                    creator_id=former_owner.id,
+                    assignee_id=user.id,
+                ),
+            ]
+            + [
+                Ticket(
+                    ticket_number=number + 3,
+                    project_id=second.id,
+                    title=f"Done task {number}",
+                    status=TicketStatus.DONE,
+                    creator_id=user.id,
+                    assignee_id=user.id,
+                    completed_at=datetime(2026, 9, 1, tzinfo=UTC) + timedelta(days=number),
+                )
+                for number in range(11)
+            ]
+        )
+        session.commit()
+        session.delete(
+            session.exec(
+                select(ProjectMember).where(ProjectMember.id == former_membership.id)
+            ).one()
+        )
+        session.commit()
+
+    login_as(user.email)
+    page = client.get("/dashboard").text
+    groups = {
+        group: re.search(
+            rf'<section id="my-work-{group}".*?</section>', page, re.DOTALL
+        ).group()
+        for group in ("overdue", "in-progress", "next", "recently-completed")
+    }
+
+    assert "Overdue task" in groups["overdue"]
+    assert "Overdue task" not in groups["in-progress"] + groups["next"]
+    assert "In progress task" in groups["in-progress"]
+    assert "In progress task" not in groups["overdue"] + groups["next"]
+    assert "Backlog task" in groups["next"]
+    assert "Selected task" in groups["next"]
+    assert "Done task 0" not in groups["recently-completed"]
+    assert all(f"Done task {number}" in groups["recently-completed"] for number in range(1, 11))
+    assert "Unassigned task" not in page
+    assert "Former project task" not in page
+    work_rows = re.findall(
+        r'<li class="app-row">(.*?)</li>', "".join(groups.values()), re.DOTALL
+    )
+    assert len(work_rows) == 14
+    assert all(
+        re.search(r'href="/projects/[^/]+/tickets/\d+"', row)
+        and (first.key in row or second.key in row)
+        for row in work_rows
+    )
+    overdue_due_date = (today - timedelta(days=1)).isoformat()
+    assert (
+        f'<time datetime="{overdue_due_date}" class="ticket-due-date is-overdue">'
+        in groups["overdue"]
+    )
+
+
+def test_dashboard_shows_empty_my_work_state(client, make_user, login_as):
+    user = make_user(email="ada@example.com")
+    login_as(user.email)
+
+    page = client.get("/dashboard").text
+
+    assert "No assigned work." in page
 
 
 def test_dashboard_has_accessible_project_creation_dialog(client, make_user, login_as):

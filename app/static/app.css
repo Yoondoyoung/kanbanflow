@@ -85,7 +85,7 @@ button, input, select, textarea { font: inherit; }
 .app-page { margin: 0 auto; max-width: 768px; }
 .app-page-header { align-items: center; display: flex; min-height: 40px; }
 .app-page-header .app-primary-button, .app-dialog-header .app-icon-button { margin-left: auto; }
-.app-dashboard { max-width: 768px; }
+.app-dashboard { display: grid; gap: var(--space-4); max-width: 768px; }
 .app-dashboard .app-surface { overflow: hidden; }
 .app-page-title, .project-title { font-size: 28px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; margin: 0; text-wrap: balance; }
 .app-surface, .surface { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
@@ -98,6 +98,12 @@ button, input, select, textarea { font: inherit; }
 .app-empty-state { padding: var(--space-3) var(--space-4); }
 .app-row-link { color: var(--text); font-weight: 650; text-decoration: none; }
 .app-row-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.my-work-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.my-work-group { overflow: hidden; }
+.my-work-group h2 { font-size: 14px; margin: 0; padding: var(--space-3) var(--space-4); }
+.my-work-group .app-row { align-items: flex-start; flex-wrap: wrap; }
+.my-work-group .app-row-link { min-width: 0; overflow-wrap: anywhere; }
+.my-work-ticket-meta { align-items: baseline; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 
 .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button { align-items: center; border: 1px solid transparent; border-radius: var(--radius-sm); cursor: pointer; display: inline-flex; font-size: 14px; font-weight: 650; justify-content: center; min-height: 40px; padding: var(--space-2) var(--space-3); text-decoration: none; }
 .app-primary-button { background: var(--text); border-color: var(--text); color: var(--surface); }
@@ -921,6 +927,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
 }
 
 @media (max-width: 767px) {
+  .my-work-grid { grid-template-columns: 1fr; }
   .app-shell { display: block; }
   .app-mobile-header { align-items: center; background: var(--canvas); border-bottom: 1px solid var(--line); display: flex; gap: var(--space-3); min-height: 56px; padding: 0 var(--space-4); }
   .app-mobile-header { border-bottom: 2px solid var(--sketch-pencil); }
