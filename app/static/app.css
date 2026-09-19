@@ -149,6 +149,10 @@ button, input, select, textarea { font: inherit; }
 .board-filters select { width: auto; }
 .board-filter-check { align-items: center; display: inline-flex; gap: var(--space-1); min-height: 40px; }
 .board-filter-summary { color: var(--muted); margin: 0 0 0 auto; }
+.sprint-summary { display: grid; gap: var(--space-3); grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 0 var(--space-4); }
+.sprint-summary > div { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-3); }
+.sprint-summary dt { color: var(--text-secondary); font-size: 12px; font-weight: 650; }
+.sprint-summary dd { font-size: 18px; font-variant-numeric: tabular-nums; font-weight: 650; margin: var(--space-1) 0 0; }
 .board-scroll { overflow-x: auto; padding-bottom: var(--space-2); }
 .board-workspace { min-width: 0; }
 .ticket-detail-root:empty { display: none; }
@@ -968,6 +972,7 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
   .auth-main { padding-top: var(--space-6); }
   .auth-card { padding: var(--space-5); }
   .project-board { padding: var(--space-4); }
+  .sprint-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sketch-board > .project-header,
   .sketch-board > .board-filters,
   .sketch-board > .board-filters .board-filter-controls {

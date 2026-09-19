@@ -142,6 +142,79 @@ def test_empty_project_renders_four_empty_columns(client, active_sprint_world, l
         assert f'data-testid="empty-lane-{column}"' in response.text
 
 
+def test_active_sprint_summary_uses_current_ticket_metrics(
+    client, active_sprint_world, engine, login_as
+):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    with Session(engine) as session:
+        sprint = session.get(Sprint, active_sprint_world.sprint.id)
+        sprint.committed_points = 13
+        session.add_all(
+            [
+                Ticket(
+                    ticket_number=1,
+                    project_id=project.id,
+                    title="Completed estimate",
+                    status=TicketStatus.DONE,
+                    story_points=5,
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=2,
+                    project_id=project.id,
+                    title="Completed unestimated",
+                    status=TicketStatus.DONE,
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=3,
+                    project_id=project.id,
+                    title="Open estimate",
+                    story_points=3,
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=4,
+                    project_id=project.id,
+                    title="Rolled over",
+                    rollover_count=1,
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=5,
+                    project_id=project.id,
+                    title="At risk",
+                    rollover_count=2,
+                    delayed_days=14,
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+            ]
+        )
+        session.commit()
+
+    login_as(owner.email)
+    page = client.get(f"/projects/{project.slug}").text
+
+    assert 'data-testid="sprint-summary"' in page
+    for text in ("Completed", "2 / 5 · 40%", "Points", "5 / 13", "Rollover", "2", "At risk", "1"):
+        assert text in page
+
+
+def test_empty_active_sprint_summary_is_zero(client, active_sprint_world, login_as):
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{active_sprint_world.project.slug}").text
+
+    assert 'data-testid="sprint-summary"' in page
+    assert "0 / 0 · 0%" in page
+
+
 def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_world, login_as):
     project = active_sprint_world.project
     login_as(active_sprint_world.owner.email)
@@ -489,6 +562,7 @@ def test_project_falls_back_to_planning_sprint(client, make_user, make_project, 
 
     assert page.status_code == 200
     assert "Sprint planning" in page.text
+    assert 'data-testid="sprint-summary"' not in page.text
 
 
 def test_project_without_sprint_redirects_to_backlog(client, make_user, make_project, login_as):

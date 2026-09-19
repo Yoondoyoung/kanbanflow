@@ -812,6 +812,26 @@ def board(
         if sprint is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Sprint not found")
 
+    sprint_summary = None
+    if sprint.status is SprintStatus.ACTIVE:
+        summary_tickets = session.exec(
+            select(Ticket).where(Ticket.sprint_id == sprint.id)
+        ).all()
+        done = [ticket for ticket in summary_tickets if ticket.status is TicketStatus.DONE]
+        total = len(summary_tickets)
+        sprint_summary = {
+            "completed_count": len(done),
+            "total_count": total,
+            "completion_percent": round(len(done) * 100 / total) if total else 0,
+            "completed_points": sum(ticket.story_points or 0 for ticket in done),
+            "committed_points": sprint.committed_points or 0,
+            "rollover_count": sum(ticket.rollover_count > 0 for ticket in summary_tickets),
+            "at_risk_count": sum(
+                ticket.rollover_count >= 2 or (ticket.delayed_days or 0) >= 14
+                for ticket in summary_tickets
+            ),
+        }
+
     filters = [Ticket.project_id == project.id, Ticket.sprint_id == sprint.id]
     if mine:
         filters.append(Ticket.assignee_id == user.id)
@@ -849,6 +869,7 @@ def board(
             "role": member.role.value,
             "active_tab": "board",
             "sprint": sprint,
+            "sprint_summary": sprint_summary,
             "selected_sprint_id": sprint.id,
             "columns": COLUMNS,
             "tickets_by_status": tickets_by_status,
