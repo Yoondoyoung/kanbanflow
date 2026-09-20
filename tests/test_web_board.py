@@ -194,6 +194,22 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
                     sprint_id=sprint.id,
                     creator_id=owner.id,
                 ),
+                Ticket(
+                    ticket_number=6,
+                    project_id=project.id,
+                    title="Blocked now",
+                    blocked_reason="Waiting for security review",
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=7,
+                    project_id=project.id,
+                    title="Overdue now",
+                    due_date=date(2020, 1, 1),
+                    sprint_id=sprint.id,
+                    creator_id=owner.id,
+                ),
             ]
         )
         session.commit()
@@ -202,10 +218,10 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
     page = client.get(f"/projects/{project.slug}").text
 
     assert 'data-testid="sprint-summary"' in page
-    assert "<dt>Completed</dt><dd>2 / 5 · 40%</dd>" in page
+    assert "<dt>Completed</dt><dd>2 / 7 · 29%</dd>" in page
     assert "<dt>Points</dt><dd>5 / 8</dd>" in page
     assert "<dt>Rollover</dt><dd>2</dd>" in page
-    assert "<dt>At risk</dt><dd>2</dd>" in page
+    assert "<dt>At risk</dt><dd>4</dd>" in page
 
 
 def test_empty_active_sprint_summary_is_zero(client, active_sprint_world, login_as):

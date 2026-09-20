@@ -29,12 +29,14 @@ from app.models import (
     ProjectGitHubConnection,
     ProjectGitHubRepository,
     ProjectMember,
+    Priority,
     Role,
     Sprint,
     SprintStatus,
     SprintTicketHistory,
     Ticket,
     TicketStatus,
+    TicketType,
     User,
     WebhookType,
     utcnow,
@@ -139,6 +141,9 @@ def _backlog(
     project: Project,
     member: ProjectMember,
     status_code: int = status.HTTP_200_OK,
+    q: str = "",
+    priority: Priority | None = None,
+    type_filter: TicketType | None = None,
     **context,
 ) -> Response:
     planning_sprint = session.exec(
@@ -147,15 +152,31 @@ def _backlog(
             Sprint.status == SprintStatus.PLANNING,
         )
     ).first()
+    filters = [Ticket.project_id == project.id, Ticket.sprint_id.is_(None)]
+    if q:
+        filters.append(Ticket.title.ilike(f"%{q.strip()}%"))
+    if priority:
+        filters.append(Ticket.priority == priority)
+    if type_filter:
+        filters.append(Ticket.type == type_filter)
     tickets = session.exec(
-        select(Ticket)
-        .where(Ticket.project_id == project.id, Ticket.sprint_id.is_(None))
-        .order_by(Ticket.ticket_number.desc())
+        select(Ticket).where(*filters).order_by(Ticket.backlog_rank.desc())
     ).all()
     planning_tickets = (
         session.exec(select(Ticket).where(Ticket.sprint_id == planning_sprint.id)).all()
         if planning_sprint
         else []
+    )
+    recent_completed = session.exec(
+        select(Sprint.completed_points)
+        .where(Sprint.project_id == project.id, Sprint.status == SprintStatus.CLOSED)
+        .order_by(Sprint.end_date.desc())
+        .limit(3)
+    ).all()
+    recent_velocity = (
+        round(sum(points or 0 for points in recent_completed) / len(recent_completed))
+        if recent_completed
+        else None
     )
     return render(
         request,
@@ -172,7 +193,13 @@ def _backlog(
             "planning_unestimated_count": sum(
                 ticket.story_points is None for ticket in planning_tickets
             ),
+            "recent_velocity": recent_velocity,
             "tickets": tickets,
+            "q": q,
+            "priority_filter": priority,
+            "type_filter": type_filter,
+            "priorities": Priority,
+            "ticket_types": TicketType,
             "sprint": None,
             "destination_sprints": session.exec(
                 select(Sprint)
@@ -260,12 +287,46 @@ def _close_preview(
 @router.get("/projects/{slug}/backlog")
 def backlog(
     request: Request,
+    q: str = "",
+    priority: Priority | None = None,
+    type: TicketType | None = None,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
-    return _backlog(request, session, user, project, member)
+    return _backlog(
+        request, session, user, project, member, q=q, priority=priority, type_filter=type
+    )
+
+
+@router.post("/projects/{slug}/backlog/{ticket_id}/move", dependencies=[Depends(verify_csrf)])
+def move_backlog_ticket(
+    ticket_id: str,
+    direction: str = Form(...),
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    tickets = session.exec(
+        select(Ticket)
+        .where(Ticket.project_id == project.id, Ticket.sprint_id.is_(None))
+        .order_by(Ticket.backlog_rank.desc())
+    ).all()
+    index = next((i for i, ticket in enumerate(tickets) if ticket.id == ticket_id), None)
+    offset = -1 if direction == "up" else 1 if direction == "down" else 0
+    if index is None or not offset or not 0 <= index + offset < len(tickets):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Cannot move ticket")
+    other = tickets[index + offset]
+    tickets[index].backlog_rank, other.backlog_rank = (
+        other.backlog_rank,
+        tickets[index].backlog_rank,
+    )
+    session.add_all((tickets[index], other))
+    session.commit()
+    return RedirectResponse(
+        f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.get("/projects/{slug}/settings")
@@ -809,6 +870,7 @@ def sprint_history(
             "role": member.role.value,
             "active_tab": "history",
             "summaries": summaries,
+            "velocity_points": [sprint.completed_points or 0 for sprint in reversed(sprints[:5])],
         },
         session=session,
     )
@@ -938,6 +1000,8 @@ def close_sprint_form(
     sprint_id: str,
     request: Request,
     next_sprint_id: str = Form(""),
+    goal_achieved: str = Form(""),
+    review_notes: str = Form(""),
     access: tuple[Project, ProjectMember] = Depends(project_owner),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -966,7 +1030,12 @@ def close_sprint_form(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
     try:
-        close_sprint(session, sprint, next_sprint)
+        review = {}
+        if goal_achieved in {"yes", "no"}:
+            review["goal_achieved"] = goal_achieved == "yes"
+        if review_notes:
+            review["review_notes"] = review_notes
+        close_sprint(session, sprint, next_sprint, **review)
     except HTTPException as exc:
         return _close_preview(
             request,

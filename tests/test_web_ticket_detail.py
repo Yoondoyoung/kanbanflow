@@ -216,7 +216,7 @@ def test_member_can_update_ticket_details(client, ticket_world, login_as, sessio
         headers={"HX-Request": "true"},
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     ticket = _ticket(session, ticket_world)
     assert ticket.title == "Member edit"
     assert ticket.status == TicketStatus.IN_PROGRESS
@@ -314,6 +314,8 @@ def test_ticket_save_returns_a_textual_status(client, ticket_world, login_as):
 
     assert response.status_code == 200
     assert '<p class="form-status" role="status">Ticket saved.</p>' in response.text
+    assert "Updated:" in response.text
+    assert "status" in response.text
     assert response.headers["HX-Refresh"] == "true"
     assert "HX-Trigger" not in response.headers
 

@@ -115,6 +115,7 @@
       </div>
     </div>
     <div><label for="detail-resolution-notes">Outcome notes</label><textarea id="detail-resolution-notes" name="resolution_notes" rows="3">{{ form_values['resolution_notes'] }}</textarea></div>
+    <div><label for="detail-blocked-reason">Blocked reason</label><textarea id="detail-blocked-reason" name="blocked_reason" rows="2" maxlength="500" placeholder="Leave blank when work is not blocked">{{ form_values['blocked_reason'] }}</textarea></div>
     <button class="app-primary-button">Save changes</button>
     <section class="ticket-development" aria-labelledby="ticket-development-heading">
       <h3 id="ticket-development-heading">Development</h3>
@@ -141,6 +142,15 @@
         {% endfor %}
       </div>
     </section>
+    {% set activity = (ticket.meta|default({})).get('activity', []) %}
+    {% if activity %}
+    <section class="ticket-development" aria-labelledby="ticket-activity-heading">
+      <h3 id="ticket-activity-heading">Activity</h3>
+      <div class="ticket-development-list">
+        {% for item in activity|reverse %}<p class="sprint-meta"><strong>{{ item.actor }}</strong> · {{ item.summary }} · <time datetime="{{ item.at }}" data-local-time>{{ item.at }}</time></p>{% endfor %}
+      </div>
+    </section>
+    {% endif %}
   </form>
   {% include "partials/ticket_comments.html" %}
   </div>

@@ -164,6 +164,7 @@ class Ticket(SQLModel, table=True):
     type: TicketType = Field(default=TicketType.TASK)
     status: TicketStatus = Field(default=TicketStatus.BACKLOG, index=True)
     priority: Priority = Field(default=Priority.MEDIUM)
+    backlog_rank: int = Field(default=0, index=True)
     story_points: int | None = Field(default=None)
     due_date: date | None = Field(default=None, index=True)
     sprint_id: str | None = Field(default=None, foreign_key="sprint.id", index=True)
@@ -173,6 +174,7 @@ class Ticket(SQLModel, table=True):
     creator_id: str = Field(foreign_key="user.id")
     assignee_id: str | None = Field(default=None, foreign_key="user.id", index=True)
     resolution_notes: str | None = Field(default=None)
+    blocked_reason: str | None = Field(default=None, max_length=500)
     completed_at: datetime | None = Field(default=None)
     meta: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(default_factory=utcnow)
@@ -219,6 +221,8 @@ class Sprint(SQLModel, table=True):
     end_date: date
     committed_points: int | None = None
     completed_points: int | None = None
+    goal_achieved: bool | None = None
+    review_notes: str | None = Field(default=None, max_length=4000)
     closed_at: datetime | None = None
 
 

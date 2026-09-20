@@ -142,6 +142,7 @@ class TicketOut(BaseModel):
     creator_id: str
     assignee_id: str | None
     resolution_notes: str | None
+    blocked_reason: str | None
     completed_at: datetime | None
     meta: dict
     created_at: datetime
@@ -159,6 +160,7 @@ class TicketUpdate(BaseModel):
     sprint_id: str | None = None
     assignee_id: str | None = None
     resolution_notes: str | None = None
+    blocked_reason: str | None = Field(default=None, max_length=500)
     meta: dict | None = None
 
 

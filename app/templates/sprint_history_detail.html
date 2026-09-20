@@ -23,6 +23,13 @@
       <div><dt>Delayed</dt><dd>{{ delay_total }} days</dd></div>
     </dl>
   </section>
+  {% if sprint.goal_achieved is not none or sprint.review_notes %}
+  <section class="settings-section app-surface" aria-labelledby="review-heading">
+    <h2 id="review-heading">Sprint review</h2>
+    {% if sprint.goal_achieved is not none %}<p><strong>Goal achieved:</strong> {{ 'Yes' if sprint.goal_achieved else 'No' }}</p>{% endif %}
+    {% if sprint.review_notes %}<div>{{ sprint.review_notes|markdown|safe }}</div>{% endif %}
+  </section>
+  {% endif %}
 
   <section class="backlog-list sprint-history-tickets" aria-labelledby="history-tickets-heading">
     <div class="backlog-list-header"><p class="section-eyebrow">Snapshot</p><h2 id="history-tickets-heading">Tickets at close</h2></div>

@@ -22,6 +22,7 @@
 
   <section class="sprint-history app-surface" aria-labelledby="history-heading">
     <div class="sprint-history-header"><p class="section-eyebrow">Archive</p><h2 id="history-heading">Closed sprints</h2></div>
+    {% if velocity_points %}<p class="sprint-meta">Velocity trend: {{ velocity_points|join(' → ') }} pts</p>{% endif %}
     {% for summary in summaries %}
     <article class="sprint-history-row">
       <div>

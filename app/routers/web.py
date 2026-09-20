@@ -647,6 +647,7 @@ def _ticket_detail(
         "assignee_id": ticket.assignee_id or "",
         "status": ticket.status.value,
         "resolution_notes": ticket.resolution_notes or "",
+        "blocked_reason": ticket.blocked_reason or "",
         "sprint_id": ticket.sprint_id or "",
     }
     if submitted_values is not None:
@@ -833,8 +834,12 @@ def board(
             "total_points": sum(ticket.story_points or 0 for ticket in summary_tickets),
             "rollover_count": sum(ticket.rollover_count > 0 for ticket in summary_tickets),
             "at_risk_count": sum(
-                ticket.rollover_count >= 2 or (ticket.delayed_days or 0) >= 14
+                bool(ticket.blocked_reason)
+                or (ticket.due_date is not None and ticket.due_date < date.today())
+                or ticket.rollover_count >= 2
+                or (ticket.delayed_days or 0) >= 14
                 for ticket in summary_tickets
+                if ticket.status is not TicketStatus.DONE
             ),
         }
 
@@ -1105,6 +1110,7 @@ def update_ticket_form(
     assignee_id: str = Form(""),
     status_value: str = Form("", alias="status"),
     resolution_notes: str = Form(""),
+    blocked_reason: str = Form(""),
     sprint_id: str = Form(""),
     project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
     user: User = Depends(current_user),
@@ -1123,6 +1129,7 @@ def update_ticket_form(
         "assignee_id": assignee_id,
         "status": status_value,
         "resolution_notes": resolution_notes,
+        "blocked_reason": blocked_reason,
         "sprint_id": sprint_id,
     }
     try:
@@ -1136,9 +1143,27 @@ def update_ticket_form(
             due_date=due_date,
             assignee_id=assignee_id or None,
             resolution_notes=resolution_notes or None,
+            blocked_reason=blocked_reason or None,
             sprint_id=sprint_id or None,
         ).model_dump(exclude_unset=True)
         status_update = StatusUpdate(status=status_value, resolution_notes=resolution_notes or None)
+        changed_fields = [
+            field for field, value in changes.items() if getattr(ticket, field) != value
+        ]
+        if ticket.status is not status_update.status:
+            changed_fields.append("status")
+        if changed_fields:
+            meta = dict(ticket.meta)
+            activity = list(meta.get("activity", []))
+            activity.append(
+                {
+                    "at": utcnow().isoformat(),
+                    "actor": user.name,
+                    "summary": f"Updated: {', '.join(changed_fields)}",
+                }
+            )
+            meta["activity"] = activity[-50:]
+            changes["meta"] = meta
         update_ticket(session, ticket, project, commit=False, **changes)
         ticket = set_status(
             session,

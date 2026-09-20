@@ -118,6 +118,7 @@ def test_history_lists_closed_sprints_newest_first_with_totals(client, history_w
     assert "<dt>Completed</dt><dd>5 pts</dd>" in page.text
     assert "<dt>Rollover</dt><dd>1</dd>" in page.text
     assert "<dt>Delayed</dt><dd>7 days</dd>" in page.text
+    assert "Velocity trend: 3 → 5 pts" in page.text
     assert f'href="/projects/{history_world.project.slug}/sprints" aria-current="page"' in page.text
 
 
@@ -129,11 +130,11 @@ def test_history_uses_labeled_metric_rows(client, history_world, login_as):
 
     assert '<article class="sprint-history-row">' in page.text
     assert '<dl class="sprint-history-metrics">' in page.text
-    assert '<dt>Committed</dt><dd>8 pts</dd>' in page.text
-    assert '<dt>Completed</dt><dd>5 pts</dd>' in page.text
-    assert '<dt>Completed tickets</dt><dd>0</dd>' in page.text
-    assert '<dt>Rollover</dt><dd>1</dd>' in page.text
-    assert '<dt>Delayed</dt><dd>7 days</dd>' in page.text
+    assert "<dt>Committed</dt><dd>8 pts</dd>" in page.text
+    assert "<dt>Completed</dt><dd>5 pts</dd>" in page.text
+    assert "<dt>Completed tickets</dt><dd>0</dd>" in page.text
+    assert "<dt>Rollover</dt><dd>1</dd>" in page.text
+    assert "<dt>Delayed</dt><dd>7 days</dd>" in page.text
 
 
 def test_empty_history_keeps_its_message_inside_the_archive_surface(

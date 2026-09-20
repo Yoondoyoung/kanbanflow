@@ -255,6 +255,8 @@ def test_owner_closes_sprint_and_rolls_unfinished_tickets_forward(
         data={
             "_csrf": make_csrf_token(lifecycle_world.owner.id),
             "next_sprint_id": lifecycle_world.next_sprint.id,
+            "goal_achieved": "yes",
+            "review_notes": "Strong delivery; reduce review wait next sprint.",
         },
         follow_redirects=False,
     )
@@ -265,7 +267,9 @@ def test_owner_closes_sprint_and_rolls_unfinished_tickets_forward(
         tickets = session.exec(
             select(Ticket).where(Ticket.project_id == lifecycle_world.project.id)
         ).all()
-    assert (sprint.status, sprint.completed_points) == (SprintStatus.CLOSED, 3)
+        assert (sprint.status, sprint.completed_points) == (SprintStatus.CLOSED, 3)
+        assert sprint.goal_achieved is True
+        assert sprint.review_notes == "Strong delivery; reduce review wait next sprint."
     rolled_over = {
         ticket.title for ticket in tickets if ticket.sprint_id == lifecycle_world.next_sprint.id
     }

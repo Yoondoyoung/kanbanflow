@@ -47,6 +47,7 @@ NULLABLE_TICKET_FIELDS = {
     "sprint_id",
     "assignee_id",
     "resolution_notes",
+    "blocked_reason",
 }
 NAME_MAX_LENGTH = 100
 USER_NAME_MAX_LENGTH = 50
@@ -487,7 +488,14 @@ def start_sprint(session: Session, sprint: Sprint) -> Sprint:
     return sprint
 
 
-def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprint:
+def close_sprint(
+    session: Session,
+    sprint: Sprint,
+    next_sprint: Sprint,
+    *,
+    goal_achieved: bool | None = None,
+    review_notes: str | None = None,
+) -> Sprint:
     try:
         sprint = session.get(Sprint, sprint.id, populate_existing=True)
         next_sprint = session.get(Sprint, next_sprint.id, populate_existing=True)
@@ -500,6 +508,8 @@ def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprin
         if next_sprint.status is not SprintStatus.PLANNING:
             raise HTTPException(status.HTTP_409_CONFLICT, "Next sprint must be planning")
 
+        if review_notes is not None and len(review_notes) > 4000:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "review_notes is too long")
         claim = session.exec(
             update(Sprint)
             .where(Sprint.id == sprint.id, Sprint.status == SprintStatus.ACTIVE)
@@ -536,6 +546,8 @@ def close_sprint(session: Session, sprint: Sprint, next_sprint: Sprint) -> Sprin
             )
 
         sprint.completed_points = completed_points
+        sprint.goal_achieved = goal_achieved
+        sprint.review_notes = review_notes.strip() if review_notes else None
         session.commit()
     except HTTPException:
         raise
@@ -662,14 +674,16 @@ def create_ticket(
     validate_meta(meta)
     validate_assignee(session, project, assignee_id)
     sprint = validate_sprint_assignment(session, project, sprint_id)
+    ticket_number = allocate_ticket_number(session, project.id)
     ticket = Ticket(
-        ticket_number=allocate_ticket_number(session, project.id),
+        ticket_number=ticket_number,
         project_id=project.id,
         title=clean_title,
         description=description,
         type=type,
         status=TicketStatus.BACKLOG,
         priority=priority,
+        backlog_rank=ticket_number,
         story_points=story_points,
         due_date=due_date,
         sprint_id=sprint.id if sprint else None,
