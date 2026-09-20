@@ -166,8 +166,12 @@ def _backlog(
             "role": member.role.value,
             "active_tab": "backlog",
             "planning_sprint": planning_sprint,
+            "planning_tickets": planning_tickets,
             "planning_ticket_count": len(planning_tickets),
             "planning_points": sum(ticket.story_points or 0 for ticket in planning_tickets),
+            "planning_unestimated_count": sum(
+                ticket.story_points is None for ticket in planning_tickets
+            ),
             "tickets": tickets,
             "sprint": None,
             "destination_sprints": session.exec(

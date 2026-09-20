@@ -32,9 +32,21 @@
       <p class="section-eyebrow">Planning sprint</p>
       <h2 id="planning-heading">{{ planning_sprint.name }}</h2>
       <p class="sprint-meta">{{ planning_sprint.start_date.strftime('%b %-d') }} – {{ planning_sprint.end_date.strftime('%b %-d, %Y') }}{% if planning_sprint.goal %} · {{ planning_sprint.goal }}{% endif %}</p>
+      <p class="sprint-meta">{{ planning_ticket_count }} ticket{{ '' if planning_ticket_count == 1 else 's' }} · {{ planning_points }} point{{ '' if planning_points == 1 else 's' }} · {{ planning_unestimated_count }} unestimated</p>
     </div>
     {% if role == 'OWNER' %}<button class="app-primary-button" type="button" x-ref="startFormOpener" @click="$refs.startForm.showModal()">Start sprint</button>{% endif %}
   </section>
+  {% if planning_tickets %}
+  <section class="backlog-list planning-ticket-list" aria-labelledby="planning-tickets-heading">
+    <div class="backlog-list-header"><h2 id="planning-tickets-heading">Committed work</h2></div>
+    {% for ticket in planning_tickets %}
+    <div class="backlog-ticket">
+      <a class="backlog-ticket-open" href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a>
+      <span class="sprint-meta">{{ ticket.story_points ~ ' pts' if ticket.story_points is not none else 'Unestimated' }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
   {% endif %}
 
   {% if tickets %}

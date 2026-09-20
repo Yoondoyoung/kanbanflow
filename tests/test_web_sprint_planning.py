@@ -63,13 +63,41 @@ def test_member_can_read_backlog_and_planning_state(client, backlog_world, add_m
     assert 'data-testid="owner-planning-controls"' not in page.text
 
 
-def test_backlog_only_lists_unassigned_tickets(client, backlog_world, login_as):
+def test_unscheduled_section_only_lists_unassigned_tickets(client, backlog_world, login_as):
     login_as(backlog_world.owner.email)
 
     page = client.get(f"/projects/{backlog_world.project.slug}/backlog")
 
-    assert "Backlog ticket" in page.text
-    assert "Planned ticket" not in page.text
+    unscheduled = page.text.split("Unscheduled tickets", 1)[1]
+    assert "Backlog ticket" in unscheduled
+    assert "Planned ticket" not in unscheduled
+
+
+def test_backlog_shows_planning_commitment_and_tickets(
+    client, backlog_world, engine, login_as
+):
+    with Session(engine) as session:
+        planned = session.exec(
+            select(Ticket).where(Ticket.sprint_id == backlog_world.sprint.id)
+        ).one()
+        planned.story_points = 5
+        session.add(
+            Ticket(
+                ticket_number=3,
+                project_id=backlog_world.project.id,
+                sprint_id=backlog_world.sprint.id,
+                title="Unestimated planned ticket",
+                creator_id=backlog_world.owner.id,
+            )
+        )
+        session.commit()
+    login_as(backlog_world.owner.email)
+
+    page = client.get(f"/projects/{backlog_world.project.slug}/backlog").text
+
+    assert "2 tickets · 5 points · 1 unestimated" in page
+    assert "Planned ticket" in page
+    assert "Unestimated planned ticket" in page
 
 
 def test_unscheduled_ticket_opens_editor_and_owner_can_delete(

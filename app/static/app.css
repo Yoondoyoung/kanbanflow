@@ -241,6 +241,7 @@ button, input, select, textarea { font: inherit; }
 .board-drag-status { color: var(--text); margin: 0 0 var(--space-3); }
 .board-drag-status[hidden] { display: none; }
 .backlog-planning-sprint, .backlog-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
+.planning-ticket-list { margin-bottom: var(--space-4); }
 .backlog-planning-sprint { align-items: center; display: flex; gap: var(--space-4); justify-content: space-between; margin-bottom: var(--space-4); padding: var(--space-3); }
 .backlog-planning-sprint h2, .backlog-list h2 { font-size: 18px; margin: 0; }
 .section-eyebrow { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; margin: 0 0 var(--space-1); text-transform: uppercase; }
