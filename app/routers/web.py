@@ -25,6 +25,7 @@ from app.auth import (
     load_project_and_membership,
     make_csrf_token,
     optional_user,
+    project_owner,
     project_reader,
     project_writer,
     verify_csrf,
@@ -51,7 +52,14 @@ from app.models import (
 from app.notifications import schedule_comment_mention
 from app.routers.api_auth import _set_session
 from app.schemas import StatusUpdate, TicketUpdate
-from app.services import create_project, create_ticket, register_user, set_status, update_ticket
+from app.services import (
+    create_project,
+    create_ticket,
+    delete_ticket_record,
+    register_user,
+    set_status,
+    update_ticket,
+)
 
 router = APIRouter(tags=["web"])
 
@@ -1177,6 +1185,31 @@ def update_ticket_form(
     response = _ticket_detail(request, session, user, project, ticket, saved=True)
     response.headers["HX-Refresh"] = "true"
     return response
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/delete",
+    dependencies=[Depends(verify_csrf)],
+)
+def delete_ticket_form(
+    request: Request,
+    ticket_number: int,
+    access: tuple[Project, ProjectMember] = Depends(project_owner),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = access
+    ticket = _project_ticket(session, project, ticket_number)
+    try:
+        delete_ticket_record(session, ticket)
+    except HTTPException as exc:
+        return Response(str(exc.detail), status_code=exc.status_code, media_type="text/plain")
+    if request.headers.get("HX-Request"):
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
+        response.headers["HX-Refresh"] = "true"
+        return response
+    return RedirectResponse(
+        f"/projects/{project.slug}/backlog", status_code=status.HTTP_303_SEE_OTHER
+    )
 
 
 @router.post("/projects/{slug}/tickets", dependencies=[Depends(verify_csrf)])

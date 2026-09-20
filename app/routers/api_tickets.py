@@ -1,5 +1,4 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from app.auth import current_user, load_project_and_membership, project_reader, require_member
@@ -9,16 +8,13 @@ from app.models import (
     Project,
     ProjectMember,
     Role,
-    SprintTicketHistory,
     Ticket,
-    TicketComment,
-    TicketGitLink,
     TicketStatus,
     TicketType,
     User,
 )
 from app.schemas import StatusUpdate, TicketCreate, TicketOut, TicketPage, TicketUpdate
-from app.services import create_ticket, set_status, update_ticket
+from app.services import create_ticket, delete_ticket_record, set_status, update_ticket
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
 
@@ -173,11 +169,4 @@ def delete_ticket(
     ticket, _, member = load_ticket_for_write(ticket_id, user, session)
     if member.role != Role.OWNER:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Owner role required")
-    if session.exec(
-        select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
-    ).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
-    session.execute(delete(TicketGitLink).where(TicketGitLink.ticket_id == ticket.id))
-    session.execute(delete(TicketComment).where(TicketComment.ticket_id == ticket.id))
-    session.delete(ticket)
-    session.commit()
+    delete_ticket_record(session, ticket)

@@ -339,6 +339,17 @@ def remove_project_member(session: Session, project: Project, user_id: str) -> N
     session.commit()
 
 
+def delete_ticket_record(session: Session, ticket: Ticket) -> None:
+    if session.exec(
+        select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
+    ).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
+    session.execute(delete(TicketGitLink).where(TicketGitLink.ticket_id == ticket.id))
+    session.execute(delete(TicketComment).where(TicketComment.ticket_id == ticket.id))
+    session.delete(ticket)
+    session.commit()
+
+
 def delete_project(session: Session, project: Project, confirm: str) -> None:
     if confirm != project.slug:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")

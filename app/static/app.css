@@ -246,7 +246,9 @@ button, input, select, textarea { font: inherit; }
 .section-eyebrow { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; margin: 0 0 var(--space-1); text-transform: uppercase; }
 .backlog-list-header { border-bottom: 1px solid var(--line); padding: var(--space-3); }
 .backlog-selection { display: grid; }
-.backlog-ticket { border-bottom: 1px solid var(--line); color: var(--text); display: block; padding: var(--space-3); }
+.backlog-ticket { align-items: center; border-bottom: 1px solid var(--line); color: var(--text); display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+.backlog-ticket-open { background: transparent; border: 0; color: inherit; flex: 1; font: inherit; min-height: 44px; padding: var(--space-1); text-align: left; }
+.backlog-ticket-open:hover { color: var(--sketch-blue-ink); text-decoration: underline; }
 .backlog-selection .app-secondary-button { justify-self: end; margin: var(--space-3); }
 
 .sprint-history, .settings-section { margin-bottom: var(--space-4); }

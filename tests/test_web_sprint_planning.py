@@ -5,7 +5,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
-from app.models import Sprint, SprintStatus, Ticket
+from app.models import Sprint, SprintStatus, SprintTicketHistory, Ticket, TicketStatus
 from app.routers import web_sprints
 
 
@@ -70,6 +70,89 @@ def test_backlog_only_lists_unassigned_tickets(client, backlog_world, login_as):
 
     assert "Backlog ticket" in page.text
     assert "Planned ticket" not in page.text
+
+
+def test_unscheduled_ticket_opens_editor_and_owner_can_delete(
+    client, backlog_world, login_as
+):
+    login_as(backlog_world.owner.email)
+
+    page = client.get(f"/projects/{backlog_world.project.slug}/backlog").text
+
+    assert f'id="ticket-{backlog_world.unassigned.id}"' in page
+    assert (
+        f'hx-get="/projects/{backlog_world.project.slug}/tickets/1"' in page
+    )
+    assert 'hx-target="#ticket-detail-root"' in page
+    assert (
+        f'hx-post="/projects/{backlog_world.project.slug}/tickets/1/delete"' in page
+    )
+    assert 'hx-confirm="Delete this ticket?"' in page
+    assert 'id="ticket-detail-root"' in page
+
+
+def test_member_can_edit_unscheduled_ticket_but_cannot_delete(
+    client, backlog_world, add_member, login_as
+):
+    add_member(backlog_world.project, backlog_world.member)
+    login_as(backlog_world.member.email)
+
+    page = client.get(f"/projects/{backlog_world.project.slug}/backlog").text
+
+    assert f'hx-get="/projects/{backlog_world.project.slug}/tickets/1"' in page
+    assert f"/projects/{backlog_world.project.slug}/tickets/1/delete" not in page
+
+
+def test_owner_deletes_unscheduled_ticket_from_backlog(
+    client, backlog_world, engine, login_as
+):
+    login_as(backlog_world.owner.email)
+
+    response = client.post(
+        f"/projects/{backlog_world.project.slug}/tickets/1/delete",
+        data={"_csrf": make_csrf_token(backlog_world.owner.id)},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 204, response.text
+    assert response.headers["HX-Refresh"] == "true"
+    with Session(engine) as session:
+        assert session.get(Ticket, backlog_world.unassigned.id) is None
+
+
+def test_backlog_delete_reports_closed_sprint_history_conflict(
+    client, backlog_world, engine, login_as
+):
+    with Session(engine) as session:
+        closed = Sprint(
+            project_id=backlog_world.project.id,
+            name="Closed",
+            goal="Done",
+            status=SprintStatus.CLOSED,
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 8),
+        )
+        session.add(closed)
+        session.flush()
+        session.add(
+            SprintTicketHistory(
+                sprint_id=closed.id,
+                ticket_id=backlog_world.unassigned.id,
+                status_at_close=TicketStatus.DONE,
+                was_completed=True,
+            )
+        )
+        session.commit()
+    login_as(backlog_world.owner.email)
+
+    response = client.post(
+        f"/projects/{backlog_world.project.slug}/tickets/1/delete",
+        data={"_csrf": make_csrf_token(backlog_world.owner.id)},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 409
+    assert response.text == "Ticket belongs to closed sprint history"
 
 
 def test_planning_backlog_prioritizes_start_and_hides_empty_selection_action(
