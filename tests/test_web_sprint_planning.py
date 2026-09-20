@@ -80,10 +80,25 @@ def test_planning_backlog_prioritizes_start_and_hides_empty_selection_action(
     page = client.get(f"/projects/{backlog_world.project.slug}/backlog").text
 
     assert "Unscheduled tickets" in page
+    assert ">Queue<" not in page
     assert ">Add sprint</button>" not in page
     assert ">Start sprint</button>" in page
     assert 'x-show="selectedCount > 0"' in page
     assert ':disabled="selectedCount === 0"' in page
+
+
+def test_backlog_hides_unscheduled_section_when_empty(
+    client, make_user, make_project, login_as
+):
+    owner = make_user(email="ada@example.com")
+    project = make_project(owner)
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}/backlog").text
+
+    assert 'class="backlog-list"' not in page
+    assert 'id="backlog-tickets"' not in page
+    assert "No unassigned tickets." not in page
 
 
 def test_owner_creates_a_dated_planning_sprint(client, make_user, make_project, login_as):

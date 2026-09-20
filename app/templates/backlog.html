@@ -37,8 +37,9 @@
   </section>
   {% endif %}
 
+  {% if tickets %}
   <section class="backlog-list" aria-labelledby="backlog-heading">
-    <div class="backlog-list-header"><div><p class="section-eyebrow">Queue</p><h2 id="backlog-heading">Unscheduled tickets</h2></div></div>
+    <div class="backlog-list-header"><div><h2 id="backlog-heading">Unscheduled tickets</h2></div></div>
     <div id="backlog-tickets">
     {% if role == 'OWNER' and planning_sprint and tickets %}
     <form class="backlog-selection" action="/projects/{{ project.slug }}/sprints/{{ planning_sprint.id }}/tickets" method="post" @change="selectedCount = $el.querySelectorAll('input[name=ticket_ids]:checked').length" @submit.prevent="if (!selectedCount) return; $el.submit()">
@@ -49,10 +50,11 @@
       <button class="app-secondary-button" type="submit" x-show="selectedCount > 0" x-cloak :disabled="selectedCount === 0">Add selected</button>
     </form>
     {% else %}
-      {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% else %}<p class="app-empty-state">No unassigned tickets.</p>{% endfor %}
+      {% for ticket in tickets %}<p class="backlog-ticket">#{{ ticket.ticket_number }} {{ ticket.title }}</p>{% endfor %}
     {% endif %}
     </div>
   </section>
+  {% endif %}
 
 {% if destination_sprints %}
 {% include "partials/ticket_modal.html" %}
