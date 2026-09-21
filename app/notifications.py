@@ -71,9 +71,7 @@ def format_slack(payload: dict) -> dict:
             **payload,
             "project_name": _escape_slack(payload["project_name"]),
             "author_name": _escape_slack(payload["author_name"]),
-            "mentioned_names": [
-                _escape_slack(name) for name in payload["mentioned_names"]
-            ],
+            "mentioned_names": [_escape_slack(name) for name in payload["mentioned_names"]],
             "comment_excerpt": _escape_slack(payload["comment_excerpt"]),
         }
     return {
@@ -97,7 +95,7 @@ def format_discord(payload: dict) -> dict:
                 ),
                 "description": _detail(payload),
             }
-        ]
+        ],
     }
 
 
@@ -146,6 +144,9 @@ def dispatch(
     owned = client is None
     try:
         try:
+            from app.services import validate_webhook_url
+
+            validate_webhook_url(webhook_url)
             client = client or httpx.Client(timeout=TIMEOUT_SECONDS)
             body = formatter(payload)
             for attempt in range(len(BACKOFF_SECONDS) + 1):
@@ -158,8 +159,7 @@ def dispatch(
                 if attempt < len(BACKOFF_SECONDS):
                     time.sleep(BACKOFF_SECONDS[attempt])
             logger.warning(
-                "chat webhook delivery failed after %d attempts: "
-                "project_id=%s ticket_number=%s",
+                "chat webhook delivery failed after %d attempts: project_id=%s ticket_number=%s",
                 len(BACKOFF_SECONDS) + 1,
                 payload.get("project_id"),
                 payload.get("ticket_number"),

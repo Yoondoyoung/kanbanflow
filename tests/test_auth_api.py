@@ -45,6 +45,40 @@ def test_unknown_email_and_wrong_password_are_indistinguishable(client, make_use
     assert unknown.json() == wrong.json()
 
 
+def test_login_rate_limit_blocks_repeated_attempts(client, make_user):
+    make_user(email="rate-limit@example.com", password="hunter22")
+    payload = {"email": "rate-limit@example.com", "password": "wrong-password"}
+
+    for _ in range(5):
+        assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+
+    response = client.post("/api/v1/auth/login", json=payload)
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"]
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+def test_registration_rate_limit_blocks_repeated_attempts(client):
+    for index in range(3):
+        response = client.post(
+            "/api/v1/auth/register",
+            json={
+                "name": "Bot",
+                "email": f"bot-{index}@example.com",
+                "password": "hunter22",
+            },
+        )
+        assert response.status_code == 201
+
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Bot", "email": "bot-4@example.com", "password": "hunter22"},
+    )
+
+    assert response.status_code == 429
+
+
 def test_short_password_is_rejected(client):
     response = client.post(
         "/api/v1/auth/register",

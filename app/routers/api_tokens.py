@@ -22,12 +22,14 @@ def list_tokens(
 def create_token(
     body: TokenCreate, user: User = Depends(current_user), session: Session = Depends(get_session)
 ) -> TokenIssued:
-    token, plaintext = issue_api_token(session, user, body.label)
+    token, plaintext = issue_api_token(session, user, body.label, body.scope)
     return TokenIssued(
         id=token.id,
         label=token.label,
         prefix=token.prefix,
+        scope=token.scope,
         created_at=token.created_at,
+        expires_at=token.expires_at,
         last_used_at=token.last_used_at,
         revoked_at=token.revoked_at,
         token=plaintext,

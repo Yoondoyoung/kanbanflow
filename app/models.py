@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -16,6 +16,10 @@ from sqlmodel import Field, SQLModel
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def api_token_expiry() -> datetime:
+    return utcnow() + timedelta(days=90)
 
 
 def new_id() -> str:
@@ -105,7 +109,9 @@ class ApiToken(SQLModel, table=True):
     label: str = Field(max_length=100)
     prefix: str = Field(max_length=12)
     token_hash: str = Field(max_length=64, unique=True, index=True)
+    scope: str = Field(default="read", max_length=10)
     created_at: datetime = Field(default_factory=utcnow)
+    expires_at: datetime = Field(default_factory=api_token_expiry)
     last_used_at: datetime | None = None
     revoked_at: datetime | None = None
 

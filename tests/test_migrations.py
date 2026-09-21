@@ -135,7 +135,9 @@ def test_api_token_migration_creates_indexes_and_user_foreign_key(tmp_path):
         "label",
         "prefix",
         "token_hash",
+        "scope",
         "created_at",
+        "expires_at",
         "last_used_at",
         "revoked_at",
     }

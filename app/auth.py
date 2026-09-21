@@ -47,13 +47,16 @@ def read_session_cookie(raw: str) -> str | None:
         return None
 
 
-def issue_api_token(session: Session, user: User, label: str) -> tuple[ApiToken, str]:
+def issue_api_token(
+    session: Session, user: User, label: str, scope: str = "read"
+) -> tuple[ApiToken, str]:
     plaintext = f"kf_{secrets.token_urlsafe(32)}"
     token = ApiToken(
         user_id=user.id,
         label=label,
         prefix=plaintext[:10],
         token_hash=hashlib.sha256(plaintext.encode()).hexdigest(),
+        scope=scope,
     )
     session.add(token)
     session.commit()
@@ -88,6 +91,15 @@ def optional_user(request: Request, session: Session = Depends(get_session)) -> 
         ).first()
         if token is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        expires_at = token.expires_at
+        if expires_at is None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=utcnow().tzinfo)
+        if expires_at <= utcnow():
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and token.scope != "write":
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "API token is read-only")
         user = session.get(User, token.user_id)
         if user is None or user.deleted_at is not None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")

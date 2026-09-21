@@ -9,6 +9,31 @@ from app.models import ProjectMember, Role, User
 from app.services import create_project
 
 
+@pytest.fixture(autouse=True)
+def isolate_security_state(monkeypatch):
+    import socket
+
+    from app.config import settings
+    from app.security import _auth_attempts
+
+    original_getaddrinfo = socket.getaddrinfo
+
+    def stable_test_dns(host, *args, **kwargs):
+        if host == "example.com" or str(host).endswith(".example.test"):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
+        return original_getaddrinfo(host, *args, **kwargs)
+
+    _auth_attempts.clear()
+    monkeypatch.setattr(
+        settings,
+        "webhook_allowed_hosts",
+        [*settings.webhook_allowed_hosts, "example.com", "example.test"],
+    )
+    monkeypatch.setattr(socket, "getaddrinfo", stable_test_dns)
+    yield
+    _auth_attempts.clear()
+
+
 @pytest.fixture
 def engine(tmp_path):
     engine = make_engine(f"sqlite:///{tmp_path / 'test.db'}")

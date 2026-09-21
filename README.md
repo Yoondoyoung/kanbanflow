@@ -50,12 +50,63 @@ generate your own value and put it in `.env`:
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
+For an internet-facing deployment, also set the production guardrails. The
+application refuses to start if these values are insecure:
+
+```dotenv
+ENVIRONMENT=production
+SECURE_COOKIES=true
+ALLOWED_ORIGINS=["https://kanban.example.com"]
+ALLOWED_HOSTS=["kanban.example.com"]
+```
+
 ### Single worker, on purpose
 
 The container always runs `uvicorn --workers 1`. SQLite allows exactly one
 writer at a time; a second worker process reintroduces `database is locked`
 errors under concurrent writes. Do not raise the worker count to improve
 throughput — it will not, and it will break writes instead.
+
+## Deploy on one EC2 instance
+
+The production layout is one Dockerized application bound to
+`127.0.0.1:8000`, with host Nginx as the only public entry point. Open ports
+80/443 in the EC2 security group; restrict SSH to your IP or use AWS SSM.
+
+1. Point the domain's DNS A record at the EC2 Elastic IP.
+2. Copy `.env.example` to `.env` and set the production values shown above.
+3. Start the application with `docker compose up -d --build`.
+4. Replace `kanban.example.com` in `deploy/nginx/kanbanflow.conf`, then install
+   it as `/etc/nginx/sites-available/kanbanflow` and enable the site.
+5. Run `sudo nginx -t && sudo systemctl reload nginx`.
+6. Install Certbot and run:
+
+```bash
+sudo certbot --nginx --redirect -d kanban.example.com
+```
+
+Certbot adds the HTTPS listener and HTTP-to-HTTPS redirect, and installs its
+renewal timer. Verify renewal once with `sudo certbot renew --dry-run`.
+
+The Nginx configuration overwrites forwarded-client headers and applies an
+edge rate limit to authentication requests. Port 8000 is loopback-only, so the
+application can safely trust the Nginx forwarded address for its own rate
+limiter.
+
+### Automatic deployment from `main`
+
+The `Deploy to EC2` GitHub Actions workflow fast-forward pulls `main`, rebuilds
+the container, runs migrations through the container startup command, and
+waits for `/health`. Prepare `/srv/kanbanflow` on EC2 as a clone that can read
+the repository, then add these secrets to the GitHub `production` environment:
+
+- `EC2_HOST` — the EC2 domain or Elastic IP
+- `EC2_USER` — the SSH user
+- `EC2_SSH_KEY` — its private Ed25519 key
+- `EC2_HOST_KEY` — the pinned `known_hosts` line from a trusted first setup
+
+Protect the `production` environment if deployments require manual approval.
+The workflow also supports a manual `workflow_dispatch` run.
 
 ## Develop (without Docker)
 
@@ -109,7 +160,9 @@ The available commands are:
 The local MCP server uses stdio and calls this application's API; it does not
 open another network service. Start the web API first, then, while logged in,
 issue a personal API token with `POST /api/v1/tokens` and a JSON body such as
-`{"label":"local-mcp"}`. The response's `token` value is shown exactly once;
+`{"label":"local-mcp","scope":"read"}`. Tokens expire after 90 days and are
+read-only by default; request `scope: "write"` only when mutation tools are
+needed. The response's `token` value is shown exactly once;
 copy it into a local `.env.mcp` file (start from `.env.mcp.example`) and never
 commit the plaintext token.
 
@@ -121,10 +174,16 @@ falls back to a session cookie.
 ```dotenv
 KANBANFLOW_BASE_URL=http://localhost:8000
 KANBANFLOW_API_TOKEN=paste-the-token-shown-once
+KANBANFLOW_READ_ONLY=true
 ```
 
+MCP is read-only by default because ticket, comment, and GitHub text is
+untrusted input to an AI client. Use a dedicated non-owner account for MCP.
+Only set `KANBANFLOW_READ_ONLY=false` when write tools are needed and the MCP
+client requires human approval before each write.
+
 Configure your MCP client to launch the server as a stdio process, with those
-two values in its environment:
+three values in its environment:
 
 ```json
 {
@@ -132,7 +191,8 @@ two values in its environment:
   "args": ["run", "mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
   "env": {
     "KANBANFLOW_BASE_URL": "http://localhost:8000",
-    "KANBANFLOW_API_TOKEN": "paste-the-token-shown-once"
+    "KANBANFLOW_API_TOKEN": "paste-the-token-shown-once",
+    "KANBANFLOW_READ_ONLY": "true"
   }
 }
 ```

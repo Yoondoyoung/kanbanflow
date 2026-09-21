@@ -388,6 +388,7 @@ def update_password(
 def create_user_token(
     request: Request,
     label: str = Form(""),
+    scope: str = Form("read"),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> Response:
@@ -400,7 +401,15 @@ def create_user_token(
             error="Token label must be between 1 and 100 characters",
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    _, plaintext = issue_api_token(session, user, label)
+    if scope not in {"read", "write"}:
+        return _user_settings(
+            request,
+            session,
+            user,
+            error="Token scope must be read or write",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    _, plaintext = issue_api_token(session, user, label, scope)
     return _user_settings(
         request,
         session,

@@ -1,14 +1,14 @@
 import hashlib
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlmodel import select
 
 from app.models import ApiToken, utcnow
 
 
-def issue_token(client, login_as, email="ada@example.com"):
+def issue_token(client, login_as, email="ada@example.com", scope="read"):
     login_as(email)
-    response = client.post("/api/v1/tokens", json={"label": "Cursor"})
+    response = client.post("/api/v1/tokens", json={"label": "Cursor", "scope": scope})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -25,6 +25,11 @@ def test_issuing_token_returns_plaintext_once_and_stores_only_its_hash(
     assert stored.token_hash == hashlib.sha256(issued["token"].encode()).hexdigest()
     assert stored.token_hash != issued["token"]
     assert issued["prefix"] == issued["token"][:10]
+    assert issued["scope"] == "read"
+    expires_at = datetime.fromisoformat(issued["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=utcnow().tzinfo)
+    assert expires_at > utcnow() + timedelta(days=89)
 
     listed = client.get("/api/v1/tokens")
     assert listed.status_code == 200
@@ -34,6 +39,8 @@ def test_issuing_token_returns_plaintext_once_and_stores_only_its_hash(
             "label": "Cursor",
             "prefix": issued["prefix"],
             "created_at": issued["created_at"],
+            "scope": "read",
+            "expires_at": issued["expires_at"],
             "last_used_at": None,
             "revoked_at": None,
         }
@@ -51,6 +58,50 @@ def test_issued_token_authenticates_after_cookie_logout(client, make_user, login
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_read_token_rejects_writes(client, make_user, login_as):
+    make_user(email="ada@example.com")
+    issued = issue_token(client, login_as)
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "Blocked write"},
+        headers={"Authorization": f"Bearer {issued['token']}"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_write_token_allows_writes(client, make_user, login_as):
+    make_user(email="ada@example.com")
+    issued = issue_token(client, login_as, scope="write")
+    client.post("/api/v1/auth/logout")
+
+    response = client.post(
+        "/api/v1/projects",
+        json={"name": "Allowed write"},
+        headers={"Authorization": f"Bearer {issued['token']}"},
+    )
+
+    assert response.status_code == 201
+
+
+def test_expired_token_is_rejected(client, session, make_user, login_as):
+    make_user(email="ada@example.com")
+    issued = issue_token(client, login_as)
+    token = session.exec(select(ApiToken).where(ApiToken.id == issued["id"])).one()
+    token.expires_at = utcnow() - timedelta(seconds=1)
+    session.add(token)
+    session.commit()
+    client.post("/api/v1/auth/logout")
+
+    response = client.get(
+        "/api/v1/projects", headers={"Authorization": f"Bearer {issued['token']}"}
+    )
+
+    assert response.status_code == 401
 
 
 def test_invalid_bearer_does_not_fall_back_to_a_valid_cookie(client, make_user, login_as):

@@ -37,9 +37,7 @@ def test_project_can_store_each_chat_provider(session, make_user, make_project):
         ("https://0177.0.0.1/hook", "octal@example.test"),
     ],
 )
-def test_chat_webhook_rejects_disallowed_literal_ip(
-    session, make_user, make_project, url, email
-):
+def test_chat_webhook_rejects_disallowed_literal_ip(session, make_user, make_project, url, email):
     owner = make_user(email=email)
     project = make_project(owner)
     with pytest.raises(HTTPException, match="safe https URL"):
@@ -95,16 +93,43 @@ def test_http_url_is_rejected(session, make_user, make_project):
         set_chat_webhook(session, project, WebhookType.SLACK, "http://hooks.example.test/x")
 
 
-def test_hostname_without_dns_lookup(session, make_user, make_project, monkeypatch):
+def test_chat_webhook_rejects_hostname_resolving_to_private_ip(
+    session, make_user, make_project, monkeypatch
+):
     monkeypatch.setattr(
         socket,
         "getaddrinfo",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("DNS lookup attempted")),
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))],
     )
     project = make_project(make_user(email="hostname-owner@example.com"))
 
-    webhook = set_chat_webhook(
-        session, project, WebhookType.SLACK, "https://hooks.example.test/x"
-    )
+    with pytest.raises(HTTPException, match="safe https URL"):
+        set_chat_webhook(session, project, WebhookType.SLACK, "https://hooks.example.test/x")
 
+
+def test_chat_webhook_accepts_hostname_resolving_to_public_ip(
+    session, make_user, make_project, monkeypatch
+):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))],
+    )
+    project = make_project(make_user(email="public-hostname-owner@example.com"))
+
+    webhook = set_chat_webhook(session, project, WebhookType.SLACK, "https://hooks.example.test/x")
     assert webhook.url == "https://hooks.example.test/x"
+
+
+def test_chat_webhook_rejects_unapproved_public_hostname(
+    session, make_user, make_project, monkeypatch
+):
+    monkeypatch.setattr(
+        socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))],
+    )
+    project = make_project(make_user(email="unapproved-hostname-owner@example.com"))
+
+    with pytest.raises(HTTPException, match="approved webhook host"):
+        set_chat_webhook(session, project, WebhookType.SLACK, "https://attacker.example.org/x")

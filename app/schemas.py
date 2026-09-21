@@ -43,6 +43,7 @@ class UserOut(BaseModel):
 
 class TokenCreate(BaseModel):
     label: str = Field(min_length=1, max_length=100)
+    scope: Literal["read", "write"] = "read"
 
     @field_validator("label")
     @classmethod
@@ -57,7 +58,9 @@ class TokenOut(BaseModel):
     id: str
     label: str
     prefix: str
+    scope: str
     created_at: datetime
+    expires_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
 

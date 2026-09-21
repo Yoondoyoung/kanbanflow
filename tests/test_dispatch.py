@@ -41,6 +41,26 @@ def test_successful_delivery_posts_once(no_sleep):
     assert no_sleep == []
 
 
+def test_delivery_rechecks_dns_and_blocks_private_address(no_sleep, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.socket.getaddrinfo",
+        lambda *args, **kwargs: [
+            (2, 1, 6, "", ("127.0.0.1", 443)),
+        ],
+    )
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200)
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        dispatch(WebhookType.SLACK, "https://example.com/hook", PAYLOAD, client=client)
+
+    assert calls == []
+    assert no_sleep == []
+
+
 def test_failure_retries_three_times_then_warns(no_sleep, caplog):
     attempts = {"n": 0}
 

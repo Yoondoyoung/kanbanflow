@@ -18,6 +18,7 @@ class MCPSettings(BaseSettings):
     api_token: str
     base_url: str = "http://localhost:8000"
     timeout: float = 10
+    read_only: bool = True
 
     model_config = SettingsConfigDict(env_prefix="KANBANFLOW_", extra="ignore")
 
@@ -71,6 +72,10 @@ def _status_detail(status: int) -> str:
 async def api_request(method: str, path: str, json=None, *, transport=None):
     path = _api_path(path)
     settings = MCPSettings()
+    if settings.read_only and method.upper() != "GET":
+        raise ValueError(
+            "Kanban Flow MCP is read-only; set KANBANFLOW_READ_ONLY=false to enable writes"
+        )
     async with httpx.AsyncClient(
         base_url=f"{settings.base_url.rstrip('/')}/",
         headers={"Authorization": f"Bearer {settings.api_token}"},

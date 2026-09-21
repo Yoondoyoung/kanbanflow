@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
 from app.auth import hash_password
+from app.config import settings
 from app.models import (
     GitHubArtifact,
     GitHubConnectState,
@@ -195,26 +196,41 @@ def validate_webhook_url(url: str) -> None:
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook URL must be a safe https URL",
         )
+    addresses = []
     try:
-        address = ipaddress.ip_address(parsed.hostname)
+        addresses.append(ipaddress.ip_address(parsed.hostname))
     except ValueError:
         try:
-            address = ipaddress.ip_address(socket.inet_aton(parsed.hostname))
+            addresses.append(ipaddress.ip_address(socket.inet_aton(parsed.hostname)))
         except OSError:
-            return
-    if any(
-        (
-            address.is_loopback,
-            address.is_private,
-            address.is_link_local,
-            address.is_multicast,
-            address.is_reserved,
-            address.is_unspecified,
-        )
+            try:
+                resolved = socket.getaddrinfo(
+                    parsed.hostname, parsed.port or 443, type=socket.SOCK_STREAM
+                )
+                addresses.extend(
+                    ipaddress.ip_address(item[4][0].split("%", 1)[0]) for item in resolved
+                )
+            except (OSError, ValueError):
+                addresses = []
+    if not addresses or any(
+        not address.is_global
+        or address.is_multicast
+        or address.is_reserved
+        or address.is_unspecified
+        for address in addresses
     ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "webhook URL must be a safe https URL",
+        )
+    hostname = parsed.hostname.lower().rstrip(".")
+    if not any(
+        hostname == allowed or hostname.endswith(f".{allowed}")
+        for allowed in settings.webhook_allowed_hosts
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "webhook URL must use an approved webhook host",
         )
 
 

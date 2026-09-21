@@ -8,6 +8,25 @@ from app import mcp_server
 from app.mcp_server import MCPSettings, api_request, mcp
 
 
+@pytest.mark.anyio
+async def test_api_request_is_read_only_by_default(monkeypatch):
+    monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    seen = []
+
+    async def handler(request):
+        seen.append(request)
+        return httpx.Response(204)
+
+    with pytest.raises(ValueError, match="read-only"):
+        await api_request(
+            "DELETE",
+            "/api/v1/tickets/ticket-1",
+            transport=httpx.MockTransport(handler),
+        )
+
+    assert seen == []
+
+
 def test_mcp_server_loads_from_documented_cli_command():
     result = subprocess.run(
         ["mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
@@ -47,6 +66,7 @@ async def test_api_request_joins_base_url_and_sends_bearer_token(monkeypatch):
 @pytest.mark.anyio
 async def test_api_request_uses_ten_second_timeout(monkeypatch):
     monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    monkeypatch.setenv("KANBANFLOW_READ_ONLY", "false")
 
     async def handler(request):
         assert request.extensions["timeout"] == {
@@ -68,6 +88,7 @@ async def test_api_request_uses_ten_second_timeout(monkeypatch):
 @pytest.mark.anyio
 async def test_api_request_raises_concise_api_error_without_token(monkeypatch):
     monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+    monkeypatch.setenv("KANBANFLOW_READ_ONLY", "false")
 
     async def handler(request):
         return httpx.Response(

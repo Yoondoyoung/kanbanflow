@@ -38,12 +38,14 @@
 claude mcp add --scope user kanbanflow \
   --env KANBANFLOW_BASE_URL={{ base_url }} \
   --env KANBANFLOW_API_TOKEN={{ issued_token }} \
+  --env KANBANFLOW_READ_ONLY=true \
   -- uv --directory /path/to/kanbanflow run mcp run app/mcp_server.py:mcp --transport stdio
       {%- endset %}
       {% set codex_command -%}
 codex mcp add kanbanflow \
   --env KANBANFLOW_BASE_URL={{ base_url }} \
   --env KANBANFLOW_API_TOKEN={{ issued_token }} \
+  --env KANBANFLOW_READ_ONLY=true \
   -- uv --directory /path/to/kanbanflow run mcp run app/mcp_server.py:mcp --transport stdio
       {%- endset %}
       {% set cursor_config -%}
@@ -54,7 +56,8 @@ codex mcp add kanbanflow \
       "args": ["--directory", "/path/to/kanbanflow", "run", "mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
       "env": {
         "KANBANFLOW_BASE_URL": "{{ base_url }}",
-        "KANBANFLOW_API_TOKEN": "{{ issued_token }}"
+          "KANBANFLOW_API_TOKEN": "{{ issued_token }}",
+          "KANBANFLOW_READ_ONLY": "true"
       }
     }
   }
@@ -87,13 +90,14 @@ codex mcp add kanbanflow \
     <form class="app-form" method="post" action="/settings/tokens">
       <input type="hidden" name="_csrf" value="{{ csrf_token }}">
       <label>Token name<input name="label" maxlength="100" placeholder="Local MCP" required></label>
+      <label>Scope<select name="scope"><option value="read">Read only</option><option value="write">Read and write</option></select></label>
       <div class="app-form-actions"><button class="app-primary-button" type="submit">Create token</button></div>
     </form>
     {% if tokens %}
       <ul class="settings-token-list">
         {% for token in tokens %}
           <li class="settings-token">
-            <div class="settings-token-details"><strong>{{ token.label }}</strong><span><code>{{ token.prefix }}…</code> · {% if token.revoked_at %}Revoked{% else %}Active{% endif %}</span></div>
+          <div class="settings-token-details"><strong>{{ token.label }}</strong><span><code>{{ token.prefix }}…</code> · {{ token.scope }} · expires {{ token.expires_at.date() }} · {% if token.revoked_at %}Revoked{% else %}Active{% endif %}</span></div>
             {% if not token.revoked_at %}
               <form method="post" action="/settings/tokens/{{ token.id }}/revoke">
                 <input type="hidden" name="_csrf" value="{{ csrf_token }}">
