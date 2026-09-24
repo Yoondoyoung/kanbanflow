@@ -633,3 +633,38 @@ async def test_sprint_tools_quote_user_supplied_path_segments(monkeypatch):
             {"next_sprint_id": next_sprint_id},
         ),
     ]
+
+
+def _call_http_tool(client, token, name, arguments):
+    return client.post(
+        "/mcp",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json, text/event-stream",
+        },
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+    )
+
+
+def test_http_transport_uses_the_callers_token_and_scope(client, make_user, make_project, login_as):
+    owner = make_user(email="ada@example.com")
+    make_project(owner, "HTTP MCP")
+    login_as("ada@example.com")
+    token = client.post("/api/v1/tokens", json={"label": "HTTP", "scope": "read"}).json()["token"]
+    client.cookies.clear()
+
+    listed = _call_http_tool(client, token, "list_projects", {})
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["result"]["structuredContent"]["result"][0]["name"] == "HTTP MCP"
+
+    denied = _call_http_tool(client, token, "create_project", {"name": "Nope"})
+    assert denied.json()["result"]["isError"] is True
+    assert "403" in denied.json()["result"]["content"][0]["text"]
+
+    assert _call_http_tool(client, "wrong", "list_projects", {}).json()["result"]["isError"]
+    assert client.post("/mcp", json={}).status_code == 401

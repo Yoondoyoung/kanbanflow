@@ -1,10 +1,16 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import date
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 import httpx
 from mcp.server import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 try:
     from app.models import Priority, Role, TicketStatus, TicketType
@@ -24,6 +30,49 @@ class MCPSettings(BaseSettings):
 
 
 mcp = MCPServer("Kanban Flow")
+
+# (Authorization header, app base URL) of the HTTP MCP request being served; None under stdio.
+_http_caller: ContextVar[tuple[str, str] | None] = ContextVar("kanbanflow_mcp_caller", default=None)
+
+
+@asynccontextmanager
+async def http_session_manager(
+    allowed_hosts: list[str], allowed_origins: list[str]
+) -> AsyncIterator[None]:
+    """Run a fresh streamable HTTP session manager for one web app lifespan."""
+    # Stateless mode spawns each request's server from the request task, so _http_caller
+    # reaches the tools.
+    mcp.streamable_http_app(
+        stateless_http=True,
+        json_response=True,
+        transport_security=TransportSecuritySettings(
+            allowed_hosts=[*allowed_hosts, *(f"{host}:*" for host in allowed_hosts)],
+            allowed_origins=allowed_origins,
+        ),
+    )
+    async with mcp.session_manager.run():
+        yield
+
+
+class MCPHTTPApp:
+    """ASGI endpoint serving the MCP tools over streamable HTTP with the caller's API token."""
+
+    async def __call__(self, scope, receive, send) -> None:
+        request = Request(scope)
+        authorization = request.headers.get("authorization", "")
+        if not authorization.lower().startswith("bearer "):
+            response = JSONResponse(
+                {"detail": "Not authenticated"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            await response(scope, receive, send)
+            return
+        caller = _http_caller.set((authorization, str(request.base_url)))
+        try:
+            await mcp.session_manager.handle_request(scope, receive, send)
+        finally:
+            _http_caller.reset(caller)
 
 
 def _api_path(path: str) -> str:
@@ -71,15 +120,27 @@ def _status_detail(status: int) -> str:
 
 async def api_request(method: str, path: str, json=None, *, transport=None):
     path = _api_path(path)
-    settings = MCPSettings()
-    if settings.read_only and method.upper() != "GET":
-        raise ValueError(
-            "Kanban Flow MCP is read-only; set KANBANFLOW_READ_ONLY=false to enable writes"
-        )
+    caller = _http_caller.get()
+    if caller:
+        # HTTP mode: call this app in-process; the token's own scope decides read vs write.
+        from app.main import app  # main imports this module
+
+        authorization, base_url = caller
+        timeout = MCPSettings.model_fields["timeout"].default
+        transport = transport or httpx.ASGITransport(app=app)
+    else:
+        settings = MCPSettings()
+        if settings.read_only and method.upper() != "GET":
+            raise ValueError(
+                "Kanban Flow MCP is read-only; set KANBANFLOW_READ_ONLY=false to enable writes"
+            )
+        authorization = f"Bearer {settings.api_token}"
+        base_url = f"{settings.base_url.rstrip('/')}/"
+        timeout = settings.timeout
     async with httpx.AsyncClient(
-        base_url=f"{settings.base_url.rstrip('/')}/",
-        headers={"Authorization": f"Bearer {settings.api_token}"},
-        timeout=settings.timeout,
+        base_url=base_url,
+        headers={"Authorization": authorization},
+        timeout=timeout,
         transport=transport,
     ) as client:
         response = await client.request(method, path, json=json)

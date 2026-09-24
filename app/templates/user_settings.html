@@ -35,29 +35,20 @@
     {% if issued_token %}
       <div class="issued-token" role="status"><strong>Copy this token now. It will not be shown again.</strong><code data-testid="issued-token">{{ issued_token }}</code></div>
       {% set claude_command -%}
-claude mcp add --scope user kanbanflow \
-  --env KANBANFLOW_BASE_URL={{ base_url }} \
-  --env KANBANFLOW_API_TOKEN={{ issued_token }} \
-  --env KANBANFLOW_READ_ONLY=true \
-  -- uv --directory /path/to/kanbanflow run mcp run app/mcp_server.py:mcp --transport stdio
+claude mcp add --transport http --scope user kanbanflow {{ base_url }}/mcp \
+  --header "Authorization: Bearer {{ issued_token }}"
       {%- endset %}
       {% set codex_command -%}
-codex mcp add kanbanflow \
-  --env KANBANFLOW_BASE_URL={{ base_url }} \
-  --env KANBANFLOW_API_TOKEN={{ issued_token }} \
-  --env KANBANFLOW_READ_ONLY=true \
-  -- uv --directory /path/to/kanbanflow run mcp run app/mcp_server.py:mcp --transport stdio
+export KANBANFLOW_API_TOKEN={{ issued_token }}
+codex mcp add kanbanflow --url {{ base_url }}/mcp --bearer-token-env-var KANBANFLOW_API_TOKEN
       {%- endset %}
       {% set cursor_config -%}
 {
   "mcpServers": {
     "kanbanflow": {
-      "command": "uv",
-      "args": ["--directory", "/path/to/kanbanflow", "run", "mcp", "run", "app/mcp_server.py:mcp", "--transport", "stdio"],
-      "env": {
-        "KANBANFLOW_BASE_URL": "{{ base_url }}",
-          "KANBANFLOW_API_TOKEN": "{{ issued_token }}",
-          "KANBANFLOW_READ_ONLY": "true"
+      "url": "{{ base_url }}/mcp",
+      "headers": {
+        "Authorization": "Bearer {{ issued_token }}"
       }
     }
   }
@@ -65,7 +56,7 @@ codex mcp add kanbanflow \
       {%- endset %}
       <div class="mcp-setup" aria-labelledby="mcp-setup-heading">
         <h3 id="mcp-setup-heading">Connect your MCP client</h3>
-        <p>Install <code>uv</code>, then replace <code>/path/to/kanbanflow</code> with this repository's local path.</p>
+        <p>Kanban Flow serves MCP at <code>{{ base_url }}/mcp</code>. Nothing to install; the token's scope decides whether write tools work.</p>
         <details open>
           <summary>Claude Code</summary>
           <p>Run this command in a terminal:</p>
@@ -74,7 +65,7 @@ codex mcp add kanbanflow \
         </details>
         <details>
           <summary>Codex</summary>
-          <p>Run this command in a terminal:</p>
+          <p>Run these commands in a terminal. Keep <code>KANBANFLOW_API_TOKEN</code> exported in your shell profile.</p>
           <pre><code>{{ codex_command }}</code></pre>
           <div class="mcp-copy"><button type="button" class="app-secondary-button" data-copy-text="{{ codex_command }}">Copy command</button><span class="ticket-copy-status" role="status" aria-live="polite"></span></div>
         </details>

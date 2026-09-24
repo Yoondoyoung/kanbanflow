@@ -130,7 +130,8 @@ def test_mcp_setup_tutorial_only_appears_on_token_issue(client, make_user, login
     assert "~/.cursor/mcp.json" in issued.text
     assert '"mcpServers"' in issued.text
     assert "KANBANFLOW_API_TOKEN" in issued.text
-    assert "http://testserver" in issued.text
+    assert "http://testserver/mcp" in issued.text
+    assert "/path/to" not in issued.text
     assert "Connect your MCP client" not in client.get("/settings").text
 
 

@@ -171,6 +171,16 @@ when present, must be same-origin or allowed by the middleware. MCP calls use
 bearer authentication instead: an invalid bearer token returns `401` and never
 falls back to a session cookie.
 
+The web app serves MCP over streamable HTTP at `/mcp`; clients send the token
+as a bearer header, and the token's scope decides whether write tools work:
+
+```bash
+claude mcp add --transport http --scope user kanbanflow http://localhost:8000/mcp \
+  --header "Authorization: Bearer paste-the-token-shown-once"
+```
+
+To run the server locally over stdio instead, use:
+
 ```dotenv
 KANBANFLOW_BASE_URL=http://localhost:8000
 KANBANFLOW_API_TOKEN=paste-the-token-shown-once

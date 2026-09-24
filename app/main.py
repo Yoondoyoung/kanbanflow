@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -8,6 +9,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.auth import SESSION_COOKIE
 from app.config import settings
+from app.mcp_server import MCPHTTPApp, http_session_manager
 from app.rendering import render_markdown
 from app.routers import (
     api_auth,
@@ -21,7 +23,14 @@ from app.routers import (
 )
 from app.security import enforce_auth_rate_limit
 
-app = FastAPI(title="Kanban Flow")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    async with http_session_manager(settings.allowed_hosts, settings.allowed_origins):
+        yield
+
+
+app = FastAPI(title="Kanban Flow", lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 app.include_router(api_auth.router)
@@ -30,6 +39,7 @@ app.include_router(api_projects.router)
 app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
 app.include_router(github_webhook.router)
+app.add_route("/mcp", MCPHTTPApp(), methods=["GET", "POST", "DELETE"])
 
 UNSAFE_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 AUTH_ACTIONS = {
