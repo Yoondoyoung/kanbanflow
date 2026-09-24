@@ -270,8 +270,8 @@ async def list_tickets(
     cursor: int | None = None,
     limit: int | None = None,
 ) -> dict[str, object]:
-    """List tickets in a project."""
-    return await _tool_request(
+    """List ticket summaries in a project; description is cut to `summary`, use get_ticket for full detail."""  # noqa: E501
+    page = await _tool_request(
         "GET",
         _with_query(
             f"/api/v1/projects/{_path_segment(slug)}/tickets",
@@ -284,6 +284,36 @@ async def list_tickets(
             limit=limit,
         ),
     )
+    if isinstance(page, CallToolResult):
+        return page
+    fields = (
+        "id",
+        "ticket_number",
+        "title",
+        "type",
+        "status",
+        "priority",
+        "story_points",
+        "due_date",
+        "sprint_id",
+        "assignee_id",
+        "blocked_reason",
+    )
+    return {
+        "items": [
+            {
+                **{field: ticket[field] for field in fields},
+                "summary": _summary(ticket["description"]),
+            }
+            for ticket in page["items"]
+        ],
+        "next_cursor": page["next_cursor"],
+    }
+
+
+def _summary(description: str, limit: int = 120) -> str:
+    text = " ".join(description.split())
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
 
 
 @mcp.tool()

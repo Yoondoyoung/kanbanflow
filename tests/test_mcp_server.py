@@ -668,3 +668,42 @@ def test_http_transport_uses_the_callers_token_and_scope(client, make_user, make
 
     assert _call_http_tool(client, "wrong", "list_projects", {}).json()["result"]["isError"]
     assert client.post("/mcp", json={}).status_code == 401
+
+
+@pytest.mark.anyio
+async def test_list_tickets_returns_summaries_without_full_description(monkeypatch):
+    ticket = {
+        "id": "ticket-1",
+        "ticket_number": 7,
+        "project_id": "project-1",
+        "title": "Fix login",
+        "description": "Users see a 500\n\n" + "x" * 500,
+        "type": "BUG",
+        "status": "BLOCKED",
+        "priority": "HIGH",
+        "story_points": 3,
+        "due_date": None,
+        "sprint_id": "sprint-1",
+        "creator_id": "user-1",
+        "assignee_id": None,
+        "resolution_notes": None,
+        "blocked_reason": "Waiting on auth vendor",
+        "completed_at": None,
+        "meta": {},
+        "created_at": "2026-09-20T00:00:00",
+    }
+
+    async def fake_request(method, path, json=None):
+        return {"items": [ticket], "next_cursor": 7}
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+
+    async with Client(mcp) as client:
+        result = await client.call_tool("list_tickets", {"slug": "demo"})
+
+    [item] = result.structured_content["items"]
+    assert result.structured_content["next_cursor"] == 7
+    assert item["blocked_reason"] == "Waiting on auth vendor"
+    assert item["summary"].startswith("Users see a 500 xxx")
+    assert len(item["summary"]) == 120 and item["summary"].endswith("…")
+    assert not {"description", "project_id", "creator_id", "meta"} & item.keys()
