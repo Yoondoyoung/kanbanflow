@@ -90,6 +90,11 @@ class Priority(StrEnum):
     URGENT = "URGENT"
 
 
+class GmailConnectionStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    NEEDS_REAUTH = "NEEDS_REAUTH"
+
+
 class User(SQLModel, table=True):
     __tablename__ = "user"
 
@@ -362,3 +367,19 @@ class IntegrationDelivery(SQLModel, table=True):
     delivery_id: str = Field(max_length=255)
     event_type: str = Field(max_length=100)
     received_at: datetime = Field(default_factory=utcnow)
+
+
+class GmailConnection(SQLModel, table=True):
+    __tablename__ = "gmail_connection"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    project_id: str = Field(foreign_key="project.id", unique=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    google_email: str = Field(max_length=255)
+    refresh_token_enc: str
+    label_mapping: dict = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    history_id: str = Field(max_length=32)
+    status: GmailConnectionStatus = Field(default=GmailConnectionStatus.ACTIVE)
+    last_synced_at: datetime | None = None
+    last_error: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=utcnow)

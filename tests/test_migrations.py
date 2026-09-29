@@ -509,3 +509,12 @@ def test_github_migration_rejects_duplicate_rows(tmp_path):
         )
         with pytest.raises(IntegrityError):
             session.commit()
+
+
+def test_gmail_migration_round_trip(tmp_path):
+    db = tmp_path / "gmail.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    assert "gmail_connection" in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+    subprocess.run(["uv", "run", "alembic", "downgrade", "f2a1b3c4d5e6"], check=True, env=env)
+    assert "gmail_connection" not in inspect(make_engine(f"sqlite:///{db}")).get_table_names()

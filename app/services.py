@@ -16,6 +16,7 @@ from app.models import (
     GitHubArtifact,
     GitHubConnectState,
     GitHubInstallation,
+    GmailConnection,
     Priority,
     Project,
     ProjectChatWebhook,
@@ -402,6 +403,7 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
     session.execute(delete(Sprint).where(Sprint.project_id == project.id))
     session.execute(delete(ProjectMember).where(ProjectMember.project_id == project.id))
     session.execute(delete(ProjectChatWebhook).where(ProjectChatWebhook.project_id == project.id))
+    session.execute(delete(GmailConnection).where(GmailConnection.project_id == project.id))
     session.flush()
     session.delete(project)
     session.flush()
