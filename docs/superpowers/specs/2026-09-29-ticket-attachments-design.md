@@ -171,6 +171,9 @@ Decided while implementing (see the plan for detail):
 - The security-header middleware sets CSP with `setdefault`, so an attachment response keeps its `sandbox` policy.
 - Attachment pick and delete clicks go through the existing delegated document click handler in `app.js`.
 - On pointer devices, delete buttons appear on hover or focus; touch screens always show them. Thumbnails use an `auto-fill` grid of square tiles.
+- The browser uploads one file per request, so every request stays under the proxy's 25 MB body limit. The server is still all-or-nothing per request, and the first rejected file stops the files after it.
+- Image decodes run one at a time under a lock, and the image is resized before EXIF rotation. The peak for a 25 MP RGBA PNG dropped from +244 MB to +149 MB. GIFs, which are stored unchanged, get the same 25 MP cap, and larger ones become downloads.
+- Gmail notes and skips an attachment that fails with a 4xx other than 401/429, or whose data does not decode. Only transient errors hold `historyId`.
 
 ## Out of Scope
 
