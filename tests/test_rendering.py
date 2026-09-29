@@ -7,6 +7,14 @@ def test_basic_markdown_renders():
     assert "<code>code</code>" in html
 
 
+
+def test_tables_and_strikethrough_render():
+    html = render_markdown("| a | b |\n|---|---|\n| 1 | 2 |\n\n~~gone~~")
+    assert "<table>" in html
+    assert "<th>a</th>" in html
+    assert "<td>2</td>" in html
+    assert "<s>gone</s>" in html
+
 def test_ordinary_markdown_constructs_survive():
     # The board needs paragraphs, emphasis, lists, code spans, fenced code
     # blocks, and links to remain usable. Full-string assert: an allow-list

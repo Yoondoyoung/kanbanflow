@@ -177,6 +177,8 @@ button, input, select, textarea { font: inherit; }
 .ticket-description { color: var(--text-secondary); }
 .ticket-description > :first-child { margin-top: 0; }
 .ticket-description > :last-child { margin-bottom: 0; }
+.ticket-description table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
+.ticket-description :is(th, td) { border: 1px solid var(--line-strong); padding: var(--space-1) var(--space-2); text-align: left; }
 .ticket-description-fields { display: grid; gap: var(--space-2); }
 .ticket-description-fields[hidden] { display: none; }
 .ticket-description-fields .app-ghost-button { justify-self: start; }

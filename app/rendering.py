@@ -6,7 +6,7 @@ ALLOWED_TAGS = [
     "br",
     "strong",
     "em",
-    "del",  # strikethrough, and "table"..."td" below, are inert under the
+    "s",  # ~~strikethrough~~
     "code",
     "pre",
     "blockquote",
@@ -21,17 +21,17 @@ ALLOWED_TAGS = [
     "h6",
     "a",
     "hr",
-    "table",  # commonmark preset below (no plugins): no Markdown syntax
-    "thead",  # reaches these tags today. Kept on the allow-list anyway so a
-    "tbody",  # future preset change (GFM tables/strikethrough) needs no
-    "tr",  # second edit here — don't take their presence as "supported now".
+    "table",  # GFM tables
+    "thead",
+    "tbody",
+    "tr",
     "th",
     "td",
 ]
 ALLOWED_ATTRIBUTES = {"a": ["href", "title"]}
 ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
 
-_md = MarkdownIt("commonmark", {"html": False, "linkify": False})
+_md = MarkdownIt("commonmark", {"html": False, "linkify": False}).enable(["table", "strikethrough"])
 
 
 def render_markdown(text: str | None) -> str:
