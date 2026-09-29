@@ -444,7 +444,7 @@ def test_settings_card_shows_mapping_to_owner_and_status_to_member(
     login_as(world.owner.email)
     owner_page = client.get("/projects/marketing/settings").text
     assert "marketing@example.com" in owner_page
-    assert "Flyers → TASK · MEDIUM" in owner_page
+    assert "Flyers → Task · Medium" in owner_page
     assert "Edit labels" in owner_page
 
     login_as(world.member.email)
