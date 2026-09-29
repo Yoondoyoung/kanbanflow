@@ -59,6 +59,11 @@ def _not_imported(filename: str, size: int) -> str:
     return f"- {filename} ({size / (1024 * 1024):.1f} MB) — not imported, open in Gmail"
 
 
+def _permanent(status_code: int) -> bool:
+    """A 4xx that a retry cannot fix; 401 (stale token) and 429 (rate limit) can recover."""
+    return 400 <= status_code < 500 and status_code not in (401, 429)
+
+
 def _import_attachments(
     session: Session,
     connection: GmailConnection,
@@ -82,8 +87,11 @@ def _import_attachments(
             try:
                 data = gmail.attachment(token, message["id"], ref.attachment_id)
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code != 404:
+                if not _permanent(exc.response.status_code):
                     raise
+                notes.append(_not_imported(ref.filename, ref.size))
+                continue
+            except ValueError:  # undecodable body: retrying returns the same bytes
                 notes.append(_not_imported(ref.filename, ref.size))
                 continue
             row = attachments.store(

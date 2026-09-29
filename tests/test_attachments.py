@@ -1,4 +1,10 @@
 import io
+import os
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -108,3 +114,60 @@ def test_image_over_the_pixel_cap_is_kept_as_a_download(monkeypatch):
 def test_corrupt_image_is_kept_as_a_download():
     data = image_bytes()[:40]
     assert attachments.prepare(data, "image/png") == (data, "application/octet-stream", False)
+
+
+_PEAK_MEMORY_PROBE = """
+import io, resource, sys
+from PIL import Image
+from app import attachments
+out = io.BytesIO()
+Image.new("RGBA", (5000, 5000), (10, 20, 30, 40)).save(out, "PNG")
+data = out.getvalue()
+scale = 1 if sys.platform == "darwin" else 1024
+before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale
+attachments.prepare(data, None)
+print((resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * scale - before) // 2**20)
+"""
+
+
+def test_downscaling_a_25_megapixel_png_stays_within_a_nano_budget():
+    # The raw RGBA canvas alone is ~95 MB; the box has 512 MB for everything.
+    probe = subprocess.run(
+        [sys.executable, "-c", _PEAK_MEMORY_PROBE],
+        capture_output=True,
+        check=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
+    )
+    assert int(probe.stdout) < 180, f"prepare() added {probe.stdout.strip()} MB at peak"
+
+
+def test_image_decodes_run_one_at_a_time(monkeypatch):
+    active, peak = 0, 0
+    guard = threading.Lock()
+
+    def slow_reencode(data):
+        nonlocal active, peak
+        with guard:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with guard:
+            active -= 1
+        return data
+
+    monkeypatch.setattr(attachments, "_reencode", slow_reencode)
+    threads = [
+        threading.Thread(target=attachments.prepare, args=(image_bytes(), None)) for _ in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert peak == 1
+
+
+def test_gif_over_the_pixel_cap_is_kept_as_a_download(monkeypatch):
+    monkeypatch.setattr(attachments, "IMAGE_MAX_PIXELS", 100)
+    data = image_bytes((20, 20), "GIF")
+    assert attachments.prepare(data, "image/gif") == (data, "application/octet-stream", False)

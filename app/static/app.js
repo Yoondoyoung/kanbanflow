@@ -85,9 +85,12 @@
     section.querySelector("[data-attachment-status]").textContent = message;
   }
 
+  // Swap whichever section is live now: an earlier response may already have replaced the one
+  // this request started from. Resolves true when the server accepted the change.
   async function postAttachments(section, url, body, failure) {
     body.append("_csrf", section.dataset.csrf);
-    section.setAttribute("aria-busy", "true");
+    const live = () => document.querySelector(attachmentsSelector) || section;
+    live().setAttribute("aria-busy", "true");
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -100,22 +103,28 @@
       template.innerHTML = await response.text();
       const next = template.content.querySelector(attachmentsSelector);
       if (!next) throw new Error();
-      section.replaceWith(next);
+      live().replaceWith(next);
+      return response.ok;
     } catch {
-      section.removeAttribute("aria-busy");
-      setAttachmentStatus(section, failure);
+      live().removeAttribute("aria-busy");
+      setAttachmentStatus(live(), failure);
+      return false;
     }
   }
 
-  function uploadAttachments(section, fileList) {
+  // One request per file keeps each under the proxy's body limit; the first rejection stops the rest.
+  async function uploadAttachments(section, fileList) {
     const files = [...fileList];
     if (!section || !files.length) return;
     const tooLarge = files.find((file) => file.size > Number(section.dataset.maxBytes));
     if (tooLarge) return setAttachmentStatus(section, `${tooLarge.name} is larger than 10 MB.`);
-    const body = new FormData();
-    files.forEach((file) => body.append("files", file, file.name || "pasted-image.png"));
-    setAttachmentStatus(section, "Uploading…");
-    postAttachments(section, section.dataset.uploadUrl, body, "Upload failed. Try again.");
+    for (const [index, file] of files.entries()) {
+      const current = document.querySelector(attachmentsSelector) || section;
+      setAttachmentStatus(current, files.length > 1 ? `Uploading ${index + 1} of ${files.length}…` : "Uploading…");
+      const body = new FormData();
+      body.append("files", file, file.name || "pasted-image.png");
+      if (!(await postAttachments(current, section.dataset.uploadUrl, body, "Upload failed. Try again."))) return;
+    }
   }
 
   // The whole ticket panel is the drop target; the section shows where files land.

@@ -768,3 +768,17 @@ async def test_api_request_returns_type_and_bytes_when_raw(monkeypatch):
     assert await api_request(
         "GET", "/api/v1/attachments/att-1", raw=True, transport=httpx.MockTransport(handler)
     ) == ("image/png", b"\x89PNG")
+
+
+@pytest.mark.anyio
+async def test_get_attachment_refuses_images_too_large_to_decode(monkeypatch):
+    monkeypatch.setattr(mcp_server, "MCP_IMAGE_MAX_PIXELS", 100)
+
+    async def fake_request(method, path, json=None, *, raw=False):
+        return "image/gif", image_bytes((20, 20), "GIF")
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_attachment", {"attachment_id": "att-1"})
+    assert result.is_error is True
+    assert "too large" in result.content[0].text

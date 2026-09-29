@@ -8,6 +8,7 @@ directory; swap them to move storage to S3.
 import io
 import re
 import shutil
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -23,9 +24,10 @@ from app.models import AttachmentSource, Ticket, TicketAttachment
 ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
 PROJECT_QUOTA_BYTES = 1024 * 1024 * 1024
 IMAGE_MAX_EDGE = 2000
-# ponytail: a decode at the cap is ~100 MB of RGBA on a 512 MB nano, and two concurrent
-# uploads double it. Put a semaphore around prepare() if uploads become concurrent.
+# A decode at the cap peaks near 150 MB (RGBA PNG) on a 512 MB nano, so decodes run one at a
+# time: uploads and the Gmail poller share this process.
 IMAGE_MAX_PIXELS = 25_000_000
+_DECODE_LOCK = threading.Lock()
 FILENAME_MAX_LENGTH = 255
 CONTENT_TYPE_MAX_LENGTH = 100
 OCTET_STREAM = "application/octet-stream"
@@ -77,10 +79,12 @@ def _reencode(data: bytes) -> bytes | None:
         image_format = image.format
         icc_profile = image.info.get("icc_profile")  # keeps wide-gamut phone photos' colors
         image.draft(image.mode, (IMAGE_MAX_EDGE, IMAGE_MAX_EDGE))  # JPEG: decode at reduced scale
-        image = ImageOps.exif_transpose(image)
         if image.mode == "P" and max(image.size) > IMAGE_MAX_EDGE:
             image = image.convert("RGBA")  # palette images resize with nearest-neighbour
-        image.thumbnail((IMAGE_MAX_EDGE, IMAGE_MAX_EDGE))
+        # Shrink before rotating so only the small copy is duplicated; reducing_gap=None skips
+        # Pillow's full-size intermediate. The box is square, so rotation cannot change the fit.
+        image.thumbnail((IMAGE_MAX_EDGE, IMAGE_MAX_EDGE), reducing_gap=None)
+        image = ImageOps.exif_transpose(image)
         options = {"optimize": True} if image_format == "PNG" else {"quality": 85}
         out = io.BytesIO()
         image.save(out, image_format, icc_profile=icc_profile, **options)  # no exif= drops EXIF
@@ -93,9 +97,17 @@ def prepare(data: bytes, declared_type: str | None) -> tuple[bytes, str, bool]:
     if image_type is None:
         return data, (declared_type or OCTET_STREAM)[:CONTENT_TYPE_MAX_LENGTH], False
     if image_type == "image/gif":
-        return data, image_type, True  # resizing would drop the animation
+        # Stored as-is (resizing drops the animation), so the pixel cap is the only guard
+        # between a tiny file and every viewer's browser decoding a huge canvas.
+        try:
+            with Image.open(io.BytesIO(data)) as image:
+                too_large = image.width * image.height > IMAGE_MAX_PIXELS
+        except Exception:
+            too_large = True
+        return (data, OCTET_STREAM, False) if too_large else (data, image_type, True)
     try:
-        stored = _reencode(data)
+        with _DECODE_LOCK:
+            stored = _reencode(data)
     except Exception:  # corrupt, truncated, or over the pixel cap: keep it as a download
         return data, OCTET_STREAM, False
     return (data if stored is None else stored), image_type, True

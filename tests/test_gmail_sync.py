@@ -66,6 +66,7 @@ class FakeGmail:
         self.attachments = {}
         self.failing_attachment_ids = set()
         self.attachment_calls = []
+        self.attachment_errors = {}
 
     def __enter__(self):
         return self
@@ -111,6 +112,8 @@ class FakeGmail:
 
     def attachment(self, access_token, message_id, attachment_id):
         self.attachment_calls.append(attachment_id)
+        if attachment_id in self.attachment_errors:
+            raise self.attachment_errors[attachment_id]
         if attachment_id in self.failing_attachment_ids:
             raise httpx.ConnectError("gmail unavailable")
         if attachment_id not in self.attachments:
@@ -592,3 +595,33 @@ def test_rejected_ticket_leaves_no_attachment_files(session, world, monkeypatch)
     assert _tickets(session) == [] and _stored_files() == []
     session.refresh(connection)
     assert connection.last_error.startswith("Skipped Gmail message m1")
+
+
+def _status_error(status):
+    request = httpx.Request("GET", "https://gmail.googleapis.com/attachments/att-1")
+    return httpx.HTTPStatusError(
+        "failed", request=request, response=httpx.Response(status, request=request)
+    )
+
+
+@pytest.mark.parametrize(
+    "error", [_status_error(403), _status_error(400), ValueError("Incorrect padding")]
+)
+def test_attachment_that_can_never_download_is_noted_and_intake_moves_on(session, world, error):
+    _, _, connection = world
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "brief.pdf"))])
+    gmail.attachment_errors = {"att-1": error}
+    sync_connection(session, connection, gmail)
+    [ticket] = _tickets(session)
+    assert "brief.pdf (0.0 MB) — not imported, open in Gmail" in ticket.description
+    session.refresh(connection)
+    assert connection.history_id == "200"
+
+
+@pytest.mark.parametrize("status", [401, 429, 503])
+def test_retryable_attachment_errors_hold_the_batch(session, world, status):
+    _, _, connection = world
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "brief.pdf"))])
+    gmail.attachment_errors = {"att-1": _status_error(status)}
+    with pytest.raises(httpx.HTTPStatusError):
+        sync_connection(session, connection, gmail)

@@ -1,3 +1,4 @@
+import asyncio
 import io
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -34,6 +35,7 @@ class MCPSettings(BaseSettings):
 
 mcp = MCPServer("Kanban Flow")
 MCP_IMAGE_MAX_EDGE = 1568  # Claude resizes past this long edge anyway
+MCP_IMAGE_MAX_PIXELS = 25_000_000  # matches the upload cap; stored images never exceed it
 
 # (Authorization header, app base URL) of the HTTP MCP request being served; None under stdio.
 _http_caller: ContextVar[tuple[str, str] | None] = ContextVar("kanbanflow_mcp_caller", default=None)
@@ -331,6 +333,8 @@ async def get_ticket(ticket_id: str) -> dict[str, object]:
 
 def _fit_for_model(data: bytes) -> bytes:
     with PILImage.open(io.BytesIO(data)) as image:
+        if image.width * image.height > MCP_IMAGE_MAX_PIXELS:
+            raise ValueError("Image is too large to decode")
         if max(image.size) <= MCP_IMAGE_MAX_EDGE:
             return data
         image_format = image.format
@@ -355,7 +359,11 @@ async def get_attachment(attachment_id: str) -> Image:
         return _tool_error(
             "Only image attachments are readable through MCP; get_ticket lists this file's name and size"  # noqa: E501
         )
-    return Image(data=_fit_for_model(data), format=content_type.removeprefix("image/"))
+    try:
+        fitted = await asyncio.to_thread(_fit_for_model, data)  # keep decoding off the loop
+    except ValueError as error:
+        return _tool_error(str(error))
+    return Image(data=fitted, format=content_type.removeprefix("image/"))
 
 
 @mcp.tool()
