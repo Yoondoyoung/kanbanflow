@@ -30,6 +30,14 @@ def isolate_security_state(monkeypatch):
         [*settings.webhook_allowed_hosts, "example.com", "example.test"],
     )
     monkeypatch.setattr(socket, "getaddrinfo", stable_test_dns)
+    # A developer's .env may configure Gmail; tests opt in with their own fixtures instead.
+    for name in (
+        "google_client_id",
+        "google_client_secret",
+        "google_redirect_uri",
+        "token_encryption_key",
+    ):
+        monkeypatch.setattr(settings, name, None)
     yield
     _auth_attempts.clear()
 
