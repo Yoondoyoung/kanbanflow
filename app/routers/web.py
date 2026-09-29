@@ -4,11 +4,13 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
     Form,
     HTTPException,
     Query,
     Request,
     Response,
+    UploadFile,
     status,
 )
 from fastapi.responses import RedirectResponse
@@ -16,6 +18,7 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app import attachments
 from app.auth import (
     DUMMY_HASH,
     SESSION_COOKIE,
@@ -43,6 +46,7 @@ from app.models import (
     Sprint,
     SprintStatus,
     Ticket,
+    TicketAttachment,
     TicketComment,
     TicketStatus,
     TicketType,
@@ -80,6 +84,7 @@ _DEFAULT_TICKET_TYPE = Form(TicketType.TASK)
 _STATUS_FORM_FIELD = Form(..., alias="status")
 _TYPE_FILTER_QUERY = Query(None, alias="type")
 _MENTION_IDS_FORM = Form(None)
+_FILES_FORM = File(...)
 _DUE_DATE_FORM = Form(None)
 
 
@@ -620,6 +625,62 @@ def _render_ticket_comments(
     )
 
 
+def _attachment_context(
+    session: Session, project: Project, ticket: Ticket, viewer: User, error: str | None = None
+) -> dict:
+    role = session.exec(
+        select(ProjectMember.role).where(
+            ProjectMember.project_id == project.id, ProjectMember.user_id == viewer.id
+        )
+    ).one()
+    rows = session.exec(
+        select(TicketAttachment)
+        .where(TicketAttachment.ticket_id == ticket.id)
+        .order_by(TicketAttachment.created_at)
+    ).all()
+    items = [
+        {
+            "attachment": row,
+            "url": f"/projects/{project.slug}/attachments/{row.id}",
+            "delete_url": (
+                f"/projects/{project.slug}/tickets/{ticket.ticket_number}"
+                f"/attachments/{row.id}/delete"
+            ),
+            "can_delete": row.uploaded_by == viewer.id or role == Role.OWNER,
+        }
+        for row in rows
+    ]
+    return {
+        "attachment_images": [item for item in items if item["attachment"].is_image],
+        "attachment_files": [item for item in items if not item["attachment"].is_image],
+        "attachment_error": error,
+        "attachment_max_bytes": attachments.ATTACHMENT_MAX_BYTES,
+    }
+
+
+def _render_ticket_attachments(
+    request: Request,
+    session: Session,
+    user: User,
+    project: Project,
+    ticket: Ticket,
+    *,
+    error: str | None = None,
+    status_code: int = status.HTTP_200_OK,
+) -> Response:
+    return render(
+        request,
+        "partials/ticket_attachments.html",
+        {
+            "user": user,
+            "project": project,
+            "ticket": ticket,
+            **_attachment_context(session, project, ticket, user, error),
+        },
+        status_code=status_code,
+    )
+
+
 def _ticket_detail(
     request: Request,
     session: Session,
@@ -674,6 +735,7 @@ def _ticket_detail(
             "members": members,
             "comments": comments,
             "comment_error": comment_error,
+            **_attachment_context(session, project, ticket, user),
             "sprints": sprints,
             "ticket_types": TicketType,
             "priorities": Priority,
@@ -1102,6 +1164,85 @@ def delete_ticket_comment_form(
         f"/projects/{project.slug}/tickets/{ticket.ticket_number}#ticket-comments",
         status_code=status.HTTP_303_SEE_OTHER,
     )
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/attachments",
+    dependencies=[Depends(verify_csrf)],
+)
+def upload_ticket_attachments(
+    slug: str,
+    ticket_number: int,
+    request: Request,
+    files: list[UploadFile] = _FILES_FORM,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    uploads = (
+        (
+            upload.filename,
+            upload.content_type,
+            upload.file.read(attachments.ATTACHMENT_MAX_BYTES + 1),
+        )
+        for upload in files
+    )
+    try:
+        rows = attachments.attach_uploads(session, ticket, user.id, uploads)
+    except HTTPException as exc:
+        session.rollback()
+        return _render_ticket_attachments(
+            request, session, user, project, ticket, error=exc.detail, status_code=exc.status_code
+        )
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        attachments.discard(rows)
+        raise
+    return _render_ticket_attachments(request, session, user, project, ticket)
+
+
+@router.get("/projects/{slug}/attachments/{attachment_id}")
+def ticket_attachment_file(
+    slug: str,
+    attachment_id: str,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_reader),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, _ = project_and_member
+    row = session.get(TicketAttachment, attachment_id)
+    if row is None or row.project_id != project.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attachment not found")
+    return attachments.file_response(row)
+
+
+@router.post(
+    "/projects/{slug}/tickets/{ticket_number}/attachments/{attachment_id}/delete",
+    dependencies=[Depends(verify_csrf)],
+)
+def delete_ticket_attachment(
+    slug: str,
+    ticket_number: int,
+    attachment_id: str,
+    request: Request,
+    project_and_member: tuple[Project, ProjectMember] = Depends(project_writer),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, membership = project_and_member
+    ticket = _project_ticket(session, project, ticket_number)
+    row = session.get(TicketAttachment, attachment_id)
+    if row is None or row.ticket_id != ticket.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attachment not found")
+    if row.uploaded_by != user.id and membership.role != Role.OWNER:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot delete this attachment")
+    session.delete(row)
+    session.commit()
+    attachments.delete(project.id, attachment_id)
+    return _render_ticket_attachments(request, session, user, project, ticket)
 
 
 @router.post("/projects/{slug}/tickets/{ticket_number}", dependencies=[Depends(verify_csrf)])

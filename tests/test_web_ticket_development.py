@@ -281,7 +281,7 @@ def test_copy_controls_use_the_existing_delegated_document_handler(
 
     assert response.text.count('<button type="button"') >= 3
     assert response.text.count("data-copy-text=") == 2
-    assert response.text.count('role="status" aria-live="polite"') == 2
+    assert response.text.count('class="ticket-copy-status" role="status" aria-live="polite"') == 2
     copy_controls = re.findall(
         r'<button type="button"[^>]+data-copy-text=.*?</button>\s*'
         r'<span class="ticket-copy-status" role="status" aria-live="polite"></span>',

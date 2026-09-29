@@ -2,6 +2,7 @@ import ipaddress
 import json
 import re
 import socket
+from collections.abc import Sequence
 from datetime import date
 from urllib.parse import urlparse
 
@@ -10,6 +11,7 @@ from sqlalchemy import delete, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, select
 
+from app import attachments
 from app.auth import hash_password
 from app.config import settings
 from app.models import (
@@ -28,6 +30,7 @@ from app.models import (
     SprintStatus,
     SprintTicketHistory,
     Ticket,
+    TicketAttachment,
     TicketComment,
     TicketGitLink,
     TicketStatus,
@@ -362,15 +365,23 @@ def delete_ticket_record(session: Session, ticket: Ticket) -> None:
         select(SprintTicketHistory).where(SprintTicketHistory.ticket_id == ticket.id)
     ).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "Ticket belongs to closed sprint history")
+    project_id = ticket.project_id
+    attachment_ids = session.exec(
+        select(TicketAttachment.id).where(TicketAttachment.ticket_id == ticket.id)
+    ).all()
+    session.execute(delete(TicketAttachment).where(TicketAttachment.ticket_id == ticket.id))
     session.execute(delete(TicketGitLink).where(TicketGitLink.ticket_id == ticket.id))
     session.execute(delete(TicketComment).where(TicketComment.ticket_id == ticket.id))
     session.delete(ticket)
     session.commit()
+    for attachment_id in attachment_ids:  # after commit: a failure leaves an orphan file only
+        attachments.delete(project_id, attachment_id)
 
 
 def delete_project(session: Session, project: Project, confirm: str) -> None:
     if confirm != project.slug:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal the slug")
+    project_id = project.id
     repository_ids = select(ProjectGitHubRepository.id).where(
         ProjectGitHubRepository.project_id == project.id
     )
@@ -398,6 +409,7 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
         delete(SprintTicketHistory).where(SprintTicketHistory.sprint_id.in_(sprint_ids))
     )
     ticket_ids = select(Ticket.id).where(Ticket.project_id == project.id)
+    session.execute(delete(TicketAttachment).where(TicketAttachment.project_id == project.id))
     session.execute(delete(TicketComment).where(TicketComment.ticket_id.in_(ticket_ids)))
     session.execute(delete(Ticket).where(Ticket.project_id == project.id))
     session.execute(delete(Sprint).where(Sprint.project_id == project.id))
@@ -417,6 +429,7 @@ def delete_project(session: Session, project: Project, confirm: str) -> None:
             if installation:
                 session.delete(installation)
     session.commit()
+    attachments.delete_project_files(project_id)
 
 
 def create_sprint(
@@ -668,6 +681,7 @@ def create_ticket(
     assignee_id: str | None = None,
     meta: dict | None = None,
     tasks: BackgroundTasks | None = None,
+    attachment_rows: Sequence[TicketAttachment] = (),
 ) -> Ticket:
     clean_title = title.strip()
     if not clean_title:
@@ -711,6 +725,12 @@ def create_ticket(
         meta=meta,
     )
     session.add(ticket)
+    if attachment_rows:
+        # SQLite checks foreign keys per insert and the ORM does not order these tables.
+        session.flush()
+        for row in attachment_rows:
+            row.ticket_id = ticket.id
+        session.add_all(attachment_rows)
     session.commit()
     session.refresh(ticket)
     schedule(tasks, session, project, EVENT_TICKET_CREATED, ticket)
