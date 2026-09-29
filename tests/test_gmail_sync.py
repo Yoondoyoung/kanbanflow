@@ -9,9 +9,9 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import app.gmail_sync as gmail_sync
-from app import attachments
 import app.main as main
 import app.notifications as notifications
+from app import attachments
 from app.config import settings
 from app.gmail import GmailAuthError, encrypt_token
 from app.gmail_sync import sync_all, sync_connection
