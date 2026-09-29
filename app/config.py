@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
     token_encryption_key: str | None = None
+    attachments_dir: str = "data/attachments"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

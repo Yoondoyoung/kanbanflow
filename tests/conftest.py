@@ -42,6 +42,13 @@ def isolate_security_state(monkeypatch):
     _auth_attempts.clear()
 
 
+@pytest.fixture(autouse=True)
+def isolate_attachments(tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "attachments_dir", str(tmp_path / "attachments"))
+
+
 @pytest.fixture
 def engine(tmp_path):
     engine = make_engine(f"sqlite:///{tmp_path / 'test.db'}")

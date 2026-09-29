@@ -95,6 +95,11 @@ class GmailConnectionStatus(StrEnum):
     NEEDS_REAUTH = "NEEDS_REAUTH"
 
 
+class AttachmentSource(StrEnum):
+    UPLOAD = "UPLOAD"
+    GMAIL = "GMAIL"
+
+
 class User(SQLModel, table=True):
     __tablename__ = "user"
 
@@ -382,4 +387,19 @@ class GmailConnection(SQLModel, table=True):
     status: GmailConnectionStatus = Field(default=GmailConnectionStatus.ACTIVE)
     last_synced_at: datetime | None = None
     last_error: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class TicketAttachment(SQLModel, table=True):
+    __tablename__ = "ticket_attachment"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    ticket_id: str = Field(foreign_key="ticket.id", index=True)
+    project_id: str = Field(foreign_key="project.id", index=True)
+    filename: str = Field(max_length=255)  # display only; the file on disk is named by id
+    content_type: str = Field(max_length=100)
+    size_bytes: int
+    is_image: bool = False
+    source: AttachmentSource = Field(default=AttachmentSource.UPLOAD)
+    uploaded_by: str = Field(foreign_key="user.id")
     created_at: datetime = Field(default_factory=utcnow)

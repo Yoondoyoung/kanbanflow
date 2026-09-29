@@ -518,3 +518,17 @@ def test_gmail_migration_round_trip(tmp_path):
     assert "gmail_connection" in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
     subprocess.run(["uv", "run", "alembic", "downgrade", "f2a1b3c4d5e6"], check=True, env=env)
     assert "gmail_connection" not in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
+
+
+def test_attachment_migration_round_trip(tmp_path):
+    db = tmp_path / "attachments.db"
+    env = {"DATABASE_URL": f"sqlite:///{db}", "PATH": os.environ["PATH"]}
+    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], check=True, env=env)
+    inspector = inspect(make_engine(f"sqlite:///{db}"))
+    assert "ticket_attachment" in inspector.get_table_names()
+    assert {index["name"] for index in inspector.get_indexes("ticket_attachment")} == {
+        "ix_ticket_attachment_ticket_id",
+        "ix_ticket_attachment_project_id",
+    }
+    subprocess.run(["uv", "run", "alembic", "downgrade", "a3f7c9e2b815"], check=True, env=env)
+    assert "ticket_attachment" not in inspect(make_engine(f"sqlite:///{db}")).get_table_names()
