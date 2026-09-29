@@ -261,6 +261,33 @@ def test_label_picker_lists_only_user_labels(
     assert 'name="label_ids" value="Label_1" checked' in response.text
 
 
+def test_label_picker_opens_in_a_dialog_with_mapped_labels_first(
+    configured_gmail, client, world, login_as, session, monkeypatch
+):
+    _connection(
+        session,
+        world,
+        label_mapping={"Label_2": {"name": "Urgent", "type": "BUG", "priority": "URGENT"}},
+    )
+    _use_google(monkeypatch)
+    login_as(world.owner.email)
+    page = client.get("/projects/marketing/settings/integrations/gmail/labels").text
+    dialog = page[page.index('<dialog id="gmail-labels-dialog"') :]
+    assert 'type="search"' in dialog
+    assert dialog.index("Urgent") < dialog.index("Flyers")
+    assert 'name="label_ids" value="Label_2" checked' in dialog
+
+
+def test_settings_page_without_label_picker_has_no_dialog(
+    configured_gmail, client, world, login_as, session
+):
+    _connection(session, world)
+    login_as(world.owner.email)
+    page = client.get("/projects/marketing/settings").text
+    assert "gmail-labels-dialog" not in page
+    assert 'name="label_ids"' not in page
+
+
 def test_save_labels_stores_mapping(
     configured_gmail, client, world, login_as, session, monkeypatch
 ):

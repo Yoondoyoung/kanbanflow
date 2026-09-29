@@ -299,6 +299,16 @@ button, input, select, textarea { font: inherit; }
 .github-repository-list legend { font-weight: 650; margin-bottom: var(--space-1); }
 .github-repository-option { align-items: center; display: flex; gap: var(--space-2); min-height: 40px; }
 .integration-card .github-repository-option input { min-height: auto; }
+.gmail-labels-dialog { max-width: 560px; }
+.gmail-labels-form { display: grid; gap: var(--space-3); }
+/* block, not grid: grid rows in a height-capped scroller shrink to min-height and overlap */
+.gmail-label-list { border: 0; margin: 0; max-height: min(55dvh, 480px); overflow-y: auto; padding: 0; }
+.gmail-label-row { align-items: center; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: var(--space-2); min-height: 44px; padding: var(--space-1) 0; }
+.gmail-label-name { align-items: center; display: flex; flex: 1 1 12rem; gap: var(--space-2); min-width: 0; }
+.gmail-label-name span { overflow-wrap: anywhere; }
+.gmail-labels-form .gmail-label-name input { min-height: auto; width: auto; }
+.gmail-label-mapping { display: flex; gap: var(--space-2); }
+.gmail-labels-form .gmail-label-mapping select { width: auto; }
 .settings-member { align-items: center; border-top: 1px solid var(--line); display: flex; gap: var(--space-4); justify-content: space-between; padding: var(--space-3) 0; }
 .settings-member-controls, .settings-member-controls form { align-items: center; display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .settings-member-controls select { background: var(--control); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); min-height: 40px; padding: var(--space-2); }

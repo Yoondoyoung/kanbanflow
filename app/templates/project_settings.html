@@ -100,26 +100,6 @@
         {% endif %}
         {% if gmail_connection.last_error %}<p class="form-error">{{ gmail_connection.last_error }}</p>{% endif %}
         {% endif %}
-        {% if gmail_available_labels is not none %}
-        <form class="app-form" action="/projects/{{ project.slug }}/settings/integrations/gmail/labels" method="post" data-testid="owner-settings-controls">
-          <input type="hidden" name="_csrf" value="{{ csrf_token }}">
-          <fieldset class="github-repository-list">
-            <legend>Labels that create tickets</legend>
-            {% for label in gmail_available_labels %}
-            {% set current = gmail_connection.label_mapping.get(label['id'], {}) %}
-            <div class="github-repository-option">
-              <input type="hidden" name="all_label_ids" value="{{ label['id'] }}">
-              <label><input type="checkbox" name="label_ids" value="{{ label['id'] }}"{% if current %} checked{% endif %}> <span>{{ label['name'] }}</span></label>
-              <select name="types" aria-label="Ticket type for {{ label['name'] }}">{% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if current.get('type', 'TASK') == ticket_type.value %} selected{% endif %}>{{ ticket_type.value }}</option>{% endfor %}</select>
-              <select name="priorities" aria-label="Priority for {{ label['name'] }}">{% for priority in priorities %}<option value="{{ priority.value }}"{% if current.get('priority', 'MEDIUM') == priority.value %} selected{% endif %}>{{ priority.value }}</option>{% endfor %}</select>
-            </div>
-            {% else %}
-            <p>This mailbox has no labels yet. Create one in Gmail first.</p>
-            {% endfor %}
-          </fieldset>
-          <button class="app-primary-button" type="submit">Save labels</button>
-        </form>
-        {% else %}
         {% if gmail_status != 'Connected' %}
         <form action="/projects/{{ project.slug }}/settings/integrations/gmail/connect" method="post" data-testid="owner-settings-controls">
           <input type="hidden" name="_csrf" value="{{ csrf_token }}">
@@ -136,6 +116,39 @@
           <button class="app-danger-button" type="submit">Disconnect</button>
         </form>
         {% endif %}
+        {% if gmail_available_labels is not none %}
+        <dialog id="gmail-labels-dialog" class="app-dialog gmail-labels-dialog" aria-labelledby="gmail-labels-heading"
+                x-data="{ query: '' }"
+                x-init="$nextTick(() => { $el.showModal(); $refs.labelSearch.focus() })"
+                @close="history.replaceState(null, '', '/projects/{{ project.slug }}/settings')"
+                @click="$event.target === $el && $el.close()">
+          <div class="app-dialog-header">
+            <h2 id="gmail-labels-heading">Labels that create tickets</h2>
+            <button class="app-icon-button" type="button" @click="$el.closest('dialog').close()" aria-label="Close Gmail labels dialog">×</button>
+          </div>
+          <form class="app-form gmail-labels-form" action="/projects/{{ project.slug }}/settings/integrations/gmail/labels" method="post" data-testid="owner-settings-controls">
+            <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+            <label class="sr-only" for="gmail-label-search">Search labels</label>
+            <input id="gmail-label-search" class="app-input" type="search" x-ref="labelSearch" x-model="query" placeholder="Search labels" autocomplete="off">
+            <fieldset class="gmail-label-list">
+              <legend class="sr-only">Gmail labels</legend>
+              {% for label in gmail_available_labels %}
+              {% set current = gmail_connection.label_mapping.get(label['id'], {}) %}
+              <div class="gmail-label-row" data-label-name="{{ label['name']|lower }}" x-data="{ checked: {{ 'true' if current else 'false' }} }" x-show="$el.dataset.labelName.includes(query.trim().toLowerCase())">
+                <input type="hidden" name="all_label_ids" value="{{ label['id'] }}">
+                <label class="gmail-label-name"><input type="checkbox" x-model="checked" name="label_ids" value="{{ label['id'] }}"{% if current %} checked{% endif %}> <span>{{ label['name'] }}</span></label>
+                <div class="gmail-label-mapping" x-show="checked"{% if not current %} x-cloak{% endif %}>
+                  <select name="types" aria-label="Ticket type for {{ label['name'] }}">{% for ticket_type in ticket_types %}<option value="{{ ticket_type.value }}"{% if current.get('type', 'TASK') == ticket_type.value %} selected{% endif %}>{{ ticket_type.value }}</option>{% endfor %}</select>
+                  <select name="priorities" aria-label="Priority for {{ label['name'] }}">{% for priority in priorities %}<option value="{{ priority.value }}"{% if current.get('priority', 'MEDIUM') == priority.value %} selected{% endif %}>{{ priority.value }}</option>{% endfor %}</select>
+                </div>
+              </div>
+              {% else %}
+              <p>This mailbox has no labels yet. Create one in Gmail first.</p>
+              {% endfor %}
+            </fieldset>
+            <button class="app-primary-button" type="submit">Save labels</button>
+          </form>
+        </dialog>
         {% endif %}
         {% endif %}
       </article>

@@ -158,7 +158,8 @@ def gmail_label_selection(
     session: Session = Depends(get_session),
 ) -> Response:
     project, member = access
-    labels = _mailbox_labels(session, _connection(session, project))
+    connection = _connection(session, project)
+    labels = _mailbox_labels(session, connection)
     if labels is None:
         return _settings(
             request,
@@ -169,6 +170,9 @@ def gmail_label_selection(
             error=_REVOKED,
             status_code=status.HTTP_409_CONFLICT,
         )
+    labels.sort(
+        key=lambda label: (label["id"] not in connection.label_mapping, label["name"].lower())
+    )
     return _settings(request, session, user, project, member, gmail_available_labels=labels)
 
 
