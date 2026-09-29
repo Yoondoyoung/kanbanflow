@@ -137,6 +137,30 @@ ticket is created and when one moves to `DONE`. Delivery runs in the
 background: a failed webhook is logged as a `WARNING` and never reverses the
 ticket change.
 
+## Gmail ticket intake
+
+A project owner connects one Gmail mailbox and picks which Gmail labels create
+tickets (each with a ticket type and priority). About every 90 seconds the app
+reads new labeled mail and adds a backlog ticket: the subject becomes the title,
+and the description holds the sender plus the body without quoted replies,
+capped at 2000 characters. Replies in a thread that already has a ticket are
+skipped. Attachments are counted, not imported.
+
+One-time Google setup (needs a Workspace admin):
+
+1. Create a GCP project under the company Workspace org and enable the Gmail API.
+2. OAuth consent screen: type **Internal**. Scope: `gmail.readonly`.
+3. Create a Web OAuth client with redirect URI
+   `https://<host>/integrations/gmail/callback`.
+4. Admin console → Security → API controls: mark the client **Trusted**.
+5. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, and
+   `TOKEN_ENCRYPTION_KEY` in `.env`, then restart.
+
+If the mailbox password changes or access is revoked, the settings card shows
+"Reconnect required". Reconnecting the same mailbox keeps the label mapping and
+imports mail that arrived in the meantime. The poller runs inside the single
+uvicorn worker. Don't add workers without moving it out.
+
 ## Sprint API
 
 Sprints are available through the JSON API. An `OWNER` creates a dated
