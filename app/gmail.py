@@ -1,3 +1,4 @@
+import base64
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -135,12 +136,14 @@ class GmailClient:
         response = self._client.post(REVOKE_URL, data={"token": refresh_token}, timeout=10.0)
         response.raise_for_status()
 
-    def _get(self, access_token: str, path: str, params: dict | None = None) -> dict:
+    def _get(
+        self, access_token: str, path: str, params: dict | None = None, *, timeout: float = 10.0
+    ) -> dict:
         response = self._client.get(
             f"{API_URL}{path}",
             headers={"Authorization": f"Bearer {access_token}"},
             params=params,
-            timeout=10.0,
+            timeout=timeout,
         )
         response.raise_for_status()
         body = response.json()
@@ -185,3 +188,12 @@ class GmailClient:
 
     def message(self, access_token: str, message_id: str) -> dict:
         return self._get(access_token, f"messages/{quote(message_id, safe='')}", {"format": "full"})
+
+    def attachment(self, access_token: str, message_id: str, attachment_id: str) -> bytes:
+        body = self._get(
+            access_token,
+            f"messages/{quote(message_id, safe='')}/attachments/{quote(attachment_id, safe='')}",
+            timeout=30.0,  # up to 10 MB of base64
+        )
+        data = body.get("data") or ""
+        return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))

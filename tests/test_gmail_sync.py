@@ -1,27 +1,33 @@
 import asyncio
+from pathlib import Path
 
 import httpx
 import pytest
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import app.gmail_sync as gmail_sync
+from app import attachments
 import app.main as main
 import app.notifications as notifications
 from app.config import settings
 from app.gmail import GmailAuthError, encrypt_token
 from app.gmail_sync import sync_all, sync_connection
 from app.models import (
+    AttachmentSource,
     GmailConnection,
     GmailConnectionStatus,
     Priority,
     ProjectChatWebhook,
     Ticket,
+    TicketAttachment,
     TicketType,
     WebhookType,
 )
-from tests.gmail_messages import gmail_message
+from tests.gmail_messages import attachment_part, gmail_message, with_attachments
+from tests.images import image_bytes
 
 FLYERS = "Label_1"
 URGENT = "Label_2"
@@ -57,6 +63,9 @@ class FakeGmail:
         self.auth_error = False
         self.failing_message_ids = set()
         self.token_calls = 0
+        self.attachments = {}
+        self.failing_attachment_ids = set()
+        self.attachment_calls = []
 
     def __enter__(self):
         return self
@@ -99,6 +108,19 @@ class FakeGmail:
                 "gone", request=request, response=httpx.Response(404, request=request)
             )
         return self.messages[message_id]
+
+    def attachment(self, access_token, message_id, attachment_id):
+        self.attachment_calls.append(attachment_id)
+        if attachment_id in self.failing_attachment_ids:
+            raise httpx.ConnectError("gmail unavailable")
+        if attachment_id not in self.attachments:
+            request = httpx.Request(
+                "GET", f"https://gmail.googleapis.com/attachments/{attachment_id}"
+            )
+            raise httpx.HTTPStatusError(
+                "gone", request=request, response=httpx.Response(404, request=request)
+            )
+        return self.attachments[attachment_id]
 
 
 def _make_connection(session, project, owner, **overrides):
@@ -461,3 +483,112 @@ def test_lifespan_starts_poller_only_when_gmail_is_configured(monkeypatch):
     with TestClient(main.app):
         pass
     assert started == [True]
+
+
+def _stored_files():
+    root = Path(settings.attachments_dir)
+    return sorted(p for p in root.rglob("*") if p.is_file()) if root.exists() else []
+
+
+def _attachment_rows(session):
+    session.expire_all()
+    return session.exec(select(TicketAttachment).order_by(TicketAttachment.filename)).all()
+
+
+def _mail_with(*parts):
+    return gmail_message("m1", payload=with_attachments(*parts))
+
+
+def test_mail_attachments_are_stored_on_the_ticket(session, world):
+    owner, project, connection = world
+    gmail = FakeGmail(
+        [
+            _mail_with(
+                attachment_part("att-1", "brief.pdf"),
+                attachment_part("att-2", "shot.png", mime_type="image/png"),
+                attachment_part("att-3", "logo.png", mime_type="image/png", content_id="sig"),
+            )
+        ]
+    )
+    gmail.attachments = {"att-1": b"%PDF-1.4 brief", "att-2": image_bytes()}
+    sync_connection(session, connection, gmail)
+    [ticket] = _tickets(session)
+    brief, shot = _attachment_rows(session)
+    assert (brief.filename, brief.is_image, shot.filename, shot.is_image) == (
+        "brief.pdf",
+        False,
+        "shot.png",
+        True,
+    )
+    assert {row.ticket_id for row in (brief, shot)} == {ticket.id}
+    assert {row.source for row in (brief, shot)} == {AttachmentSource.GMAIL}
+    assert {row.uploaded_by for row in (brief, shot)} == {owner.id}
+    assert gmail.attachment_calls == ["att-1", "att-2"]  # the inline signature logo is skipped
+    assert len(_stored_files()) == 2
+    assert "not imported" not in ticket.description
+
+
+def test_oversize_attachment_is_noted_and_never_downloaded(session, world):
+    _, _, connection = world
+    size = attachments.ATTACHMENT_MAX_BYTES + 1
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "huge.zip", size, "application/zip"))])
+    sync_connection(session, connection, gmail)
+    [ticket] = _tickets(session)
+    assert gmail.attachment_calls == []
+    assert ticket.description.endswith("- huge.zip (10.0 MB) — not imported, open in Gmail")
+    assert _attachment_rows(session) == []
+
+
+def test_attachment_that_would_fill_the_project_is_noted(session, world, monkeypatch):
+    _, _, connection = world
+    monkeypatch.setattr(attachments, "PROJECT_QUOTA_BYTES", 100)
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "brief.pdf", 1234))])
+    gmail.attachments = {"att-1": b"x" * 1234}
+    sync_connection(session, connection, gmail)
+    [ticket] = _tickets(session)
+    assert "brief.pdf (0.0 MB) — not imported, open in Gmail" in ticket.description
+    assert gmail.attachment_calls == []
+
+
+def test_attachment_gone_from_gmail_is_noted_and_the_ticket_still_imports(session, world):
+    _, _, connection = world
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "brief.pdf"))])
+    sync_connection(session, connection, gmail)
+    [ticket] = _tickets(session)
+    assert "brief.pdf (0.0 MB) — not imported, open in Gmail" in ticket.description
+
+
+def test_transient_attachment_failure_commits_nothing_and_replays_once(session, world):
+    _, _, connection = world
+    gmail = FakeGmail(
+        [_mail_with(attachment_part("att-1", "brief.pdf"), attachment_part("att-2", "deck.pdf"))]
+    )
+    gmail.attachments = {"att-1": b"%PDF brief", "att-2": b"%PDF deck"}
+    gmail.failing_attachment_ids = {"att-2"}
+    with pytest.raises(httpx.ConnectError):
+        sync_connection(session, connection, gmail)
+    session.rollback()  # what sync_all does after a failed connection
+    session.refresh(connection)
+    assert connection.history_id == "100"
+    assert _tickets(session) == [] and _attachment_rows(session) == [] and _stored_files() == []
+
+    gmail.failing_attachment_ids = set()
+    sync_connection(session, connection, gmail)
+    assert len(_tickets(session)) == 1
+    assert [row.filename for row in _attachment_rows(session)] == ["brief.pdf", "deck.pdf"]
+    assert len(_stored_files()) == 2
+
+
+def test_rejected_ticket_leaves_no_attachment_files(session, world, monkeypatch):
+    _, _, connection = world
+
+    def reject(*args, **kwargs):
+        raise HTTPException(422, "title must not be empty")
+
+    monkeypatch.setattr(gmail_sync, "create_ticket", reject)
+    gmail = FakeGmail([_mail_with(attachment_part("att-1", "brief.pdf"))])
+    gmail.attachments = {"att-1": b"%PDF brief"}
+    sync_connection(session, connection, gmail)
+    assert _tickets(session) == [] and _stored_files() == []
+    session.refresh(connection)
+    assert connection.last_error.startswith("Skipped Gmail message m1")

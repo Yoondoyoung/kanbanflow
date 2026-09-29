@@ -24,19 +24,23 @@ _CHARSET = re.compile(r'charset="?([\w.:-]+)', re.IGNORECASE)
 
 
 @dataclass(frozen=True)
+class GmailAttachmentRef:
+    filename: str
+    mime_type: str
+    size: int
+    attachment_id: str
+
+
+@dataclass(frozen=True)
 class ParsedEmail:
     title: str
     body: str
     sender: str
-    attachment_count: int
+    attachments: tuple[GmailAttachmentRef, ...] = ()
 
     @property
     def description(self) -> str:
-        parts = [f"From: {self.sender}", self.body]
-        if self.attachment_count:
-            noun = "attachment" if self.attachment_count == 1 else "attachments"
-            parts.append(f"({self.attachment_count} {noun} not imported)")
-        return "\n\n".join(part for part in parts if part)
+        return "\n\n".join(part for part in (f"From: {self.sender}", self.body) if part)
 
 
 class _TextExtractor(HTMLParser):
@@ -84,6 +88,28 @@ def _parts(part: dict) -> Iterator[dict]:
     yield part
     for child in part.get("parts") or []:
         yield from _parts(child)
+
+
+def _is_inline(part: dict) -> bool:
+    """Signature logos and pasted-in images: inline parts the HTML body refers to by Content-ID."""
+    headers = part.get("headers") or []
+    disposition = _header(headers, "Content-Disposition").strip().lower()
+    return disposition.startswith("inline") and bool(_header(headers, "Content-ID"))
+
+
+def _attachment_refs(payload: dict) -> tuple[GmailAttachmentRef, ...]:
+    return tuple(
+        GmailAttachmentRef(
+            filename=part["filename"],
+            mime_type=part.get("mimeType") or "",
+            size=int(part["body"].get("size") or 0),
+            attachment_id=part["body"]["attachmentId"],
+        )
+        for part in _parts(payload)
+        if part.get("filename")
+        and (part.get("body") or {}).get("attachmentId")
+        and not _is_inline(part)
+    )
 
 
 def _decode(part: dict) -> str:
@@ -140,7 +166,6 @@ def parse_message(message: dict) -> ParsedEmail:
     title = (subject or f"(no subject) from {sender}")[:TITLE_MAX_LENGTH]
     raw = _collapse(_raw_body(payload).replace("\r\n", "\n"))
     body = _collapse(_strip_quoted(raw)) or raw or html.unescape(message.get("snippet") or "")
-    attachments = sum(1 for part in _parts(payload) if part.get("filename"))
     return ParsedEmail(
-        title=title, body=_truncate(body), sender=sender, attachment_count=attachments
+        title=title, body=_truncate(body), sender=sender, attachments=_attachment_refs(payload)
     )

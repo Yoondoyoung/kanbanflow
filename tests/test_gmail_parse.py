@@ -1,5 +1,5 @@
-from app.gmail_parse import EMAIL_BODY_MAX_CHARS, parse_message
-from tests.gmail_messages import b64, gmail_message
+from app.gmail_parse import EMAIL_BODY_MAX_CHARS, GmailAttachmentRef, parse_message
+from tests.gmail_messages import attachment_part, b64, gmail_message, with_attachments
 
 
 def _headers(subject="Need a flyer", sender="Jane Doe <jane@example.com>", *extra):
@@ -16,7 +16,7 @@ def test_plain_text_message_becomes_title_body_and_sender():
     assert parsed.title == "Need a flyer"
     assert parsed.sender == "Jane Doe <jane@example.com>"
     assert parsed.body == "Please make a flyer.\n\nThanks!"
-    assert parsed.attachment_count == 0
+    assert parsed.attachments == ()
     assert parsed.description == (
         "From: Jane Doe <jane@example.com>\n\nPlease make a flyer.\n\nThanks!"
     )
@@ -89,28 +89,19 @@ def test_long_body_is_capped():
     assert parsed.body == "x" * EMAIL_BODY_MAX_CHARS + "\n\n…(truncated, 500 chars omitted)"
 
 
-def test_attachments_are_counted_not_decoded():
-    payload = {
-        "mimeType": "multipart/mixed",
-        "headers": _headers(),
-        "parts": [
-            {"mimeType": "text/plain", "body": {"data": b64("See attached")}},
-            {
-                "mimeType": "application/pdf",
-                "filename": "brief.pdf",
-                "body": {"attachmentId": "att-1", "size": 1234},
-            },
-            {
-                "mimeType": "image/png",
-                "filename": "logo.png",
-                "body": {"attachmentId": "att-2", "size": 99},
-            },
-        ],
-    }
+def test_real_attachments_are_listed_and_inline_images_skipped():
+    payload = with_attachments(
+        attachment_part("att-1", "brief.pdf", 1234),
+        attachment_part("att-2", "logo.png", 99, "image/png", content_id="logo@sig"),
+        attachment_part("att-3", "photo.jpg", 5000, "image/jpeg"),
+    )
     parsed = parse_message(gmail_message(payload=payload))
-    assert parsed.attachment_count == 2
+    assert parsed.attachments == (
+        GmailAttachmentRef("brief.pdf", "application/pdf", 1234, "att-1"),
+        GmailAttachmentRef("photo.jpg", "image/jpeg", 5000, "att-3"),
+    )
     assert parsed.body == "See attached"
-    assert parsed.description.endswith("(2 attachments not imported)")
+    assert parsed.description == "From: Jane Doe <jane@example.com>\n\nSee attached"
 
 
 def test_declared_charset_is_respected():

@@ -8,15 +8,18 @@ from sqlalchemy import Engine, and_, or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from app import attachments
 from app.db import get_engine
 from app.gmail import GmailAuthError, GmailClient, decrypt_token
-from app.gmail_parse import parse_message
+from app.gmail_parse import ParsedEmail, parse_message
 from app.models import (
+    AttachmentSource,
     GmailConnection,
     GmailConnectionStatus,
     IntegrationDelivery,
     Priority,
     Project,
+    TicketAttachment,
     TicketType,
     User,
     utcnow,
@@ -52,7 +55,56 @@ def _labeled_message_ids(history: list[dict], mapped: set[str]) -> list[str]:
     return sorted(threads, key=lambda message_id: threads[message_id] != message_id)
 
 
-def _import_message(session: Session, connection: GmailConnection, message: dict) -> str | None:
+def _not_imported(filename: str, size: int) -> str:
+    return f"- {filename} ({size / (1024 * 1024):.1f} MB) — not imported, open in Gmail"
+
+
+def _import_attachments(
+    session: Session,
+    connection: GmailConnection,
+    gmail: GmailClient,
+    token: str,
+    message: dict,
+    parsed: ParsedEmail,
+) -> tuple[list[TicketAttachment], list[str]]:
+    """Download what fits. Transient errors propagate with nothing left on disk."""
+    rows: list[TicketAttachment] = []
+    notes: list[str] = []
+    used = attachments.project_usage(session, connection.project_id)
+    try:
+        for ref in parsed.attachments:
+            if (
+                ref.size > attachments.ATTACHMENT_MAX_BYTES
+                or used + ref.size > attachments.PROJECT_QUOTA_BYTES
+            ):
+                notes.append(_not_imported(ref.filename, ref.size))
+                continue
+            try:
+                data = gmail.attachment(token, message["id"], ref.attachment_id)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 404:
+                    raise
+                notes.append(_not_imported(ref.filename, ref.size))
+                continue
+            row = attachments.store(
+                project_id=connection.project_id,
+                uploaded_by=connection.user_id,
+                filename=ref.filename,
+                declared_type=ref.mime_type,
+                data=data,
+                source=AttachmentSource.GMAIL,
+            )
+            rows.append(row)
+            used += row.size_bytes
+    except BaseException:
+        attachments.discard(rows)
+        raise
+    return rows, notes
+
+
+def _import_message(
+    session: Session, connection: GmailConnection, gmail: GmailClient, token: str, message: dict
+) -> str | None:
     """Create a ticket for one message. Returns an error for mail that can never import."""
     label_id = next(
         (label for label in message.get("labelIds") or [] if label in connection.label_mapping),
@@ -84,6 +136,11 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
         parsed = parse_message(message)
     except Exception as exc:  # parse_message is pure: any failure is this mail, not Gmail
         return f"{_SKIPPED} {message['id']}: {type(exc).__name__}: {exc}"
+    rows, notes = _import_attachments(session, connection, gmail, token, message, parsed)
+    description = (
+        "\n\n".join([parsed.description, "\n".join(notes)]) if notes else parsed.description
+    )
+    committed = False
     tasks = BackgroundTasks()
     try:
         session.add(
@@ -99,7 +156,7 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
             session.get(Project, connection.project_id),
             session.get(User, connection.user_id),
             title=parsed.title,
-            description=parsed.description,
+            description=description,
             type=ticket_type,
             priority=priority,
             meta={
@@ -109,13 +166,18 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
                 "thread_id": message.get("threadId"),
             },
             tasks=tasks,
+            attachment_rows=rows,
         )
+        committed = True
     except IntegrityError:
         session.rollback()  # another worker imported this message first
         return None
     except HTTPException as exc:  # ticket validation; a retry would fail the same way
         session.rollback()
         return f"{_SKIPPED} {message['id']}: {exc.detail}"
+    finally:
+        if not committed:
+            attachments.discard(rows)
     for task in tasks.tasks:  # same chat notification as web-created tickets
         task.func(*task.args, **task.kwargs)
     return None
@@ -151,7 +213,7 @@ def sync_connection(session: Session, connection: GmailConnection, gmail: GmailC
             if exc.response.status_code != 404:
                 raise
             continue  # deleted after the history entry was written; nothing to import
-        error = _import_message(session, connection, message)
+        error = _import_message(session, connection, gmail, token, message)
         if error:
             logger.warning("gmail message skipped: connection_id=%s %s", connection.id, error)
             errors.append(error)

@@ -1,3 +1,4 @@
+import base64
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -230,3 +231,14 @@ def test_revoke_posts_the_refresh_token(gmail_settings):
 
     with _client(gmail_settings, handler) as gmail:
         gmail.revoke("1//refresh")
+
+
+def test_attachment_downloads_and_decodes_the_data(gmail_settings):
+    def handler(request):
+        assert request.url.path == "/gmail/v1/users/me/messages/m1/attachments/att-1"
+        assert request.headers["Authorization"] == "Bearer ya29.access"
+        data = base64.urlsafe_b64encode(b"%PDF-1.4 brief").decode().rstrip("=")
+        return httpx.Response(200, json={"size": 14, "data": data})
+
+    with _client(gmail_settings, handler) as gmail:
+        assert gmail.attachment("ya29.access", "m1", "att-1") == b"%PDF-1.4 brief"

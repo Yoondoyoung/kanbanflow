@@ -32,3 +32,35 @@ def gmail_message(
             "body": {"data": b64(body)},
         },
     }
+
+
+def attachment_part(
+    attachment_id: str,
+    filename: str,
+    size: int = 1234,
+    mime_type: str = "application/pdf",
+    *,
+    content_id: str | None = None,
+) -> dict:
+    disposition = "inline" if content_id else "attachment"
+    headers = [{"name": "Content-Disposition", "value": f'{disposition}; filename="{filename}"'}]
+    if content_id:
+        headers.append({"name": "Content-ID", "value": f"<{content_id}>"})
+    return {
+        "mimeType": mime_type,
+        "filename": filename,
+        "headers": headers,
+        "body": {"attachmentId": attachment_id, "size": size},
+    }
+
+
+def with_attachments(*parts: dict, body: str = "See attached") -> dict:
+    """A multipart/mixed payload: a plain-text body followed by `parts`."""
+    return {
+        "mimeType": "multipart/mixed",
+        "headers": [
+            {"name": "Subject", "value": "Need a flyer"},
+            {"name": "From", "value": "Jane Doe <jane@example.com>"},
+        ],
+        "parts": [{"mimeType": "text/plain", "body": {"data": b64(body)}}, *parts],
+    }
