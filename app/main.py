@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -9,6 +10,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.auth import SESSION_COOKIE
 from app.config import settings
+from app.gmail import gmail_is_configured
+from app.gmail_sync import poll_forever
 from app.mcp_server import MCPHTTPApp, http_session_manager
 from app.rendering import render_markdown
 from app.routers import (
@@ -26,8 +29,15 @@ from app.security import enforce_auth_rate_limit
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    async with http_session_manager(settings.allowed_hosts, settings.allowed_origins):
-        yield
+    poller = asyncio.create_task(poll_forever()) if gmail_is_configured() else None
+    try:
+        async with http_session_manager(settings.allowed_hosts, settings.allowed_origins):
+            yield
+    finally:
+        if poller is not None:
+            poller.cancel()
+            with suppress(asyncio.CancelledError):
+                await poller
 
 
 app = FastAPI(title="Kanban Flow", lifespan=lifespan)

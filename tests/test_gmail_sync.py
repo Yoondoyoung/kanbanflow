@@ -3,9 +3,11 @@ import asyncio
 import httpx
 import pytest
 from cryptography.fernet import Fernet
+from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 import app.gmail_sync as gmail_sync
+import app.main as main
 import app.notifications as notifications
 from app.config import settings
 from app.gmail import GmailAuthError, encrypt_token
@@ -371,3 +373,26 @@ def test_poll_loop_survives_a_failed_cycle(monkeypatch):
 
     asyncio.run(asyncio.wait_for(run(), timeout=5))
     assert len(calls) >= 2
+
+
+def test_lifespan_starts_poller_only_when_gmail_is_configured(monkeypatch):
+    started = []
+
+    def fake_poll():
+        started.append(True)
+        return asyncio.sleep(3600)
+
+    monkeypatch.setattr(main, "poll_forever", fake_poll)
+    with TestClient(main.app):
+        pass
+    assert started == []
+
+    for name, value in {
+        "google_client_id": "gid",
+        "google_client_secret": "gsecret",
+        "google_redirect_uri": "https://kanban.example.com/integrations/gmail/callback",
+    }.items():
+        monkeypatch.setattr(settings, name, value)
+    with TestClient(main.app):
+        pass
+    assert started == [True]
