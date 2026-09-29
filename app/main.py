@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -110,6 +111,11 @@ async def block_foreign_origin_cookie_writes(request: Request, call_next):
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["markdown"] = render_markdown
+# Content hash per file, so a deploy changes the URL and browsers drop their cached copy.
+templates.env.globals["asset_version"] = {
+    name: hashlib.sha256((Path(__file__).parent / "static" / name).read_bytes()).hexdigest()[:10]
+    for name in ("app.js", "app.css")
+}
 
 app.include_router(web.router)
 # Before web_sprints: its /settings/integrations/{provider}/disconnect would swallow gmail.

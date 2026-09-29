@@ -79,7 +79,7 @@ def test_ticket_detail_includes_the_comment_composer_and_project_members(
     assert 'data-description-fields hidden>' in response.text
 
     page = client.get(f"/projects/{comment_world.project.slug}/tickets/1")
-    assert '<script src="/static/app.js" defer></script>' in page.text
+    assert '<script src="/static/app.js?v=' in page.text
 
 
 def test_comment_actions_are_positioned_at_the_card_top_right(client):

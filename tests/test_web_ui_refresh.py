@@ -291,3 +291,11 @@ def test_project_board_shares_chrome_without_leaking_board_effects(client):
     )
     assert ".sketch-board .ticket-card:nth-child(4n + 1)" in css
     assert ".project-board .ticket-card:nth-child" not in css
+
+
+def test_app_assets_are_versioned_by_content_so_deploys_bust_the_browser_cache(client):
+    page = client.get("/login").text
+    for asset in ("app.js", "app.css"):
+        version = re.search(rf'/static/{asset}\?v=(\w+)"', page)
+        assert version, f"{asset} is not versioned"
+        assert client.get(f"/static/{asset}?v={version[1]}").status_code == 200

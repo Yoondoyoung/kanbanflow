@@ -6,8 +6,8 @@
   <title>{% block title %}Kanban Flow{% endblock %}</title>
   <link rel="preload" href="/static/fonts/Kalam-Bold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/static/fonts/PatrickHand-Regular.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_version['app.css'] }}">
+  <script src="/static/app.js?v={{ asset_version['app.js'] }}" defer></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous" defer></script>
   <script src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js" integrity="sha384-l8f0VcPi/M1iHPv8egOnY/15TDwqgbOR1anMIJWvU6nLRgZVLTLSaNqi/TOoT5Fh" crossorigin="anonymous" defer></script>
 </head>
