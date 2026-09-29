@@ -79,6 +79,88 @@
     });
   }
 
+  const attachmentsSelector = "[data-ticket-attachments]";
+
+  function setAttachmentStatus(section, message) {
+    section.querySelector("[data-attachment-status]").textContent = message;
+  }
+
+  async function postAttachments(section, url, body, failure) {
+    body.append("_csrf", section.dataset.csrf);
+    section.setAttribute("aria-busy", "true");
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        body,
+        credentials: "same-origin",
+        headers: { "HX-Request": "true" },
+      });
+      // Errors come back as the section too (with its message); anything else is a failure.
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      const next = template.content.querySelector(attachmentsSelector);
+      if (!next) throw new Error();
+      section.replaceWith(next);
+    } catch {
+      section.removeAttribute("aria-busy");
+      setAttachmentStatus(section, failure);
+    }
+  }
+
+  function uploadAttachments(section, fileList) {
+    const files = [...fileList];
+    if (!section || !files.length) return;
+    const tooLarge = files.find((file) => file.size > Number(section.dataset.maxBytes));
+    if (tooLarge) return setAttachmentStatus(section, `${tooLarge.name} is larger than 10 MB.`);
+    const body = new FormData();
+    files.forEach((file) => body.append("files", file, file.name || "pasted-image.png"));
+    setAttachmentStatus(section, "Uploading…");
+    postAttachments(section, section.dataset.uploadUrl, body, "Upload failed. Try again.");
+  }
+
+  // The whole ticket panel is the drop target; the section shows where files land.
+  const attachmentsIn = (target) => target.closest?.("#ticket-detail-panel")?.querySelector(attachmentsSelector);
+  const carriesFiles = (event) => [...(event.dataTransfer?.types || [])].includes("Files");
+
+  document.addEventListener("change", (event) => {
+    if (!event.target.matches("[data-attachment-input]")) return;
+    uploadAttachments(event.target.closest(attachmentsSelector), event.target.files);
+    event.target.value = "";
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const section = carriesFiles(event) && attachmentsIn(event.target);
+    if (!section) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    section.classList.add("is-drag-over");
+  });
+
+  document.addEventListener("dragleave", (event) => {
+    const panel = event.target.closest?.("#ticket-detail-panel");
+    if (panel && !panel.contains(event.relatedTarget)) {
+      panel.querySelector(attachmentsSelector)?.classList.remove("is-drag-over");
+    }
+  });
+
+  document.addEventListener("drop", (event) => {
+    const section = carriesFiles(event) && attachmentsIn(event.target);
+    if (!section) return;
+    event.preventDefault();
+    section.classList.remove("is-drag-over");
+    uploadAttachments(section, event.dataTransfer.files);
+  });
+
+  document.addEventListener("paste", (event) => {
+    const section = document.querySelector(attachmentsSelector);
+    const clipboard = event.clipboardData;
+    if (!section || !clipboard?.files.length) return;
+    // Office apps add a picture of copied text; in a text field that stays a text paste.
+    if (event.target.matches?.("input, textarea") && clipboard.types.includes("text/plain")) return;
+    event.preventDefault();
+    uploadAttachments(section, clipboard.files);
+  });
+
   document.addEventListener("DOMContentLoaded", () => localizeTimes());
   document.addEventListener("htmx:afterSwap", (event) => localizeTimes(event.target));
 
@@ -133,6 +215,23 @@
         () => { status.textContent = "Copied"; },
         () => { status.textContent = "Copy failed"; },
       );
+      return;
+    }
+    const pickAttachments = event.target.closest("[data-attachment-pick]");
+    if (pickAttachments) {
+      pickAttachments.closest(attachmentsSelector).querySelector("[data-attachment-input]").click();
+      return;
+    }
+    const deleteAttachment = event.target.closest("[data-attachment-delete]");
+    if (deleteAttachment) {
+      if (window.confirm("Delete this file?")) {
+        postAttachments(
+          deleteAttachment.closest(attachmentsSelector),
+          deleteAttachment.dataset.attachmentDelete,
+          new FormData(),
+          "Could not delete the file. Try again.",
+        );
+      }
       return;
     }
     const option = event.target.closest("[data-mention-id]");

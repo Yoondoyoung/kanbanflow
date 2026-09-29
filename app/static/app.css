@@ -191,6 +191,27 @@ button, input, select, textarea { font: inherit; }
 .ticket-development-title a { color: var(--text); font-weight: 650; overflow-wrap: anywhere; text-underline-offset: 3px; }
 .ticket-development-row p { color: var(--muted); font-size: 12px; margin: var(--space-1) 0 0; }
 .ticket-development-empty { color: var(--muted); margin: 0; padding: var(--space-3) 0; }
+.ticket-attachments { border: 2px dashed transparent; border-radius: var(--sketch-radius-card); display: grid; gap: var(--space-2); margin: 0 calc(-1 * var(--space-2)); padding: var(--space-2); transition: background-color 120ms ease, border-color 120ms ease; }
+.ticket-attachments.is-drag-over { background: var(--sketch-post-it); border-color: var(--sketch-blue-ink); }
+.ticket-attachments[aria-busy="true"] { cursor: progress; opacity: 0.7; }
+.ticket-attachment-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); list-style: none; margin: 0; padding: var(--space-2) var(--space-2) 0 0; }
+.ticket-attachment-tile { aspect-ratio: 1; position: relative; }
+.ticket-attachment-tile a { border: var(--sketch-border); border-radius: var(--sketch-radius-card); display: block; height: 100%; overflow: hidden; }
+.ticket-attachment-tile a:focus-visible { outline: 3px solid var(--sketch-blue-ink); outline-offset: 2px; }
+.ticket-attachment-tile img { display: block; height: 100%; object-fit: cover; width: 100%; }
+.ticket-attachment-source { background: var(--surface); border-radius: 4px; bottom: 4px; font-size: 11px; font-weight: 700; left: 4px; padding: 0 4px; position: absolute; }
+.ticket-attachment-delete { align-items: center; background: var(--surface); border: var(--sketch-border); border-radius: 50%; color: var(--sketch-pencil); cursor: pointer; display: inline-flex; flex: none; font-size: 16px; height: 28px; justify-content: center; line-height: 1; padding: 0; width: 28px; }
+.ticket-attachment-delete:hover { border-color: var(--danger); color: var(--danger); }
+.ticket-attachment-tile .ticket-attachment-delete { position: absolute; right: -10px; top: -10px; }
+.ticket-attachment-files { display: grid; gap: var(--space-1); list-style: none; margin: 0; padding: 0; }
+.ticket-attachment-file { align-items: center; display: flex; gap: var(--space-2); min-height: 40px; }
+.ticket-attachment-file a { color: var(--sketch-blue-ink); min-width: 0; overflow-wrap: anywhere; }
+.ticket-attachment-meta, .ticket-attachments-empty, .ticket-attachments-status { color: var(--muted); font-size: 12px; margin: 0; }
+.ticket-attachment-meta { margin-right: auto; white-space: nowrap; }
+.ticket-attachments-status:empty { display: none; }
+/* pointer devices reveal delete on hover or focus; touch screens keep it visible */
+@media (hover: hover) { .ticket-attachment-delete { opacity: 0; transition: opacity 120ms ease; } :is(.ticket-attachment-tile, .ticket-attachment-file):is(:hover, :focus-within) .ticket-attachment-delete { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ticket-attachments, .ticket-attachment-delete { transition: none; } }
 .ticket-comments { border-top: 1px solid var(--line); margin-top: var(--space-6); padding-top: var(--space-5); }
 .ticket-comments-header, .ticket-comment header, .ticket-comment-actions { align-items: center; display: flex; gap: var(--space-2); }
 .ticket-comments-header { justify-content: space-between; margin-bottom: var(--space-3); }
