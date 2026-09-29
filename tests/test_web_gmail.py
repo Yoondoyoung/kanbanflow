@@ -360,6 +360,32 @@ def test_disconnect_revokes_and_deletes(
     assert parse_qs(revoke.content.decode()) == {"token": ["1//refresh"]}
 
 
+def test_disconnect_keeps_google_grant_when_another_project_uses_the_mailbox(
+    configured_gmail, client, world, login_as, session, monkeypatch, make_project
+):
+    _connection(session, world)
+    other = make_project(world.owner, name="Events")
+    session.add(
+        GmailConnection(
+            project_id=other.id,
+            user_id=world.owner.id,
+            google_email="marketing@example.com",
+            refresh_token_enc=encrypt_token("1//other"),
+            history_id="100",
+        )
+    )
+    session.commit()
+    requests = []
+    _use_google(monkeypatch, requests=requests)
+    login_as(world.owner.email)
+    client.post(
+        "/projects/marketing/settings/integrations/gmail/disconnect",
+        data={**_csrf(world.owner), "confirm": "Disconnect Gmail"},
+    )
+    assert _stored(session, world) is None
+    assert [r for r in requests if r.url.path == "/revoke"] == []
+
+
 def test_disconnect_still_deletes_when_revoke_fails(
     configured_gmail, client, world, login_as, session, monkeypatch
 ):

@@ -247,11 +247,19 @@ def disconnect_gmail(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "confirm must equal Disconnect Gmail"
         )
     connection = _connection(session, project)
-    try:
-        with GmailClient() as gmail:
-            gmail.revoke(decrypt_token(connection.refresh_token_enc))
-    except (httpx.HTTPError, InvalidToken):
-        pass  # best effort: the stored token is deleted either way
+    # Revoking ends the whole Google grant, so leave it while another project reads this mailbox.
+    shared = session.exec(
+        select(GmailConnection.id).where(
+            GmailConnection.google_email == connection.google_email,
+            GmailConnection.id != connection.id,
+        )
+    ).first()
+    if shared is None:
+        try:
+            with GmailClient() as gmail:
+                gmail.revoke(decrypt_token(connection.refresh_token_enc))
+        except (httpx.HTTPError, InvalidToken):
+            pass  # best effort: the stored token is deleted either way
     session.delete(connection)
     session.commit()
     return _settings_redirect(project)

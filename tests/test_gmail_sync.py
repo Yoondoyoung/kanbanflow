@@ -93,6 +93,11 @@ class FakeGmail:
     def message(self, access_token, message_id):
         if message_id in self.failing_message_ids:
             raise httpx.ConnectError("gmail unavailable")
+        if message_id not in self.messages:
+            request = httpx.Request("GET", f"https://gmail.googleapis.com/messages/{message_id}")
+            raise httpx.HTTPStatusError(
+                "gone", request=request, response=httpx.Response(404, request=request)
+            )
         return self.messages[message_id]
 
 
@@ -289,6 +294,66 @@ def test_unparseable_message_is_skipped_and_history_advances(session, world, mon
     session.refresh(connection)
     assert connection.history_id == "200"
     assert "m1" in connection.last_error
+
+
+def test_message_deleted_before_fetch_is_skipped_and_history_advances(session, world):
+    _, _, connection = world
+    history = _added([gmail_message("gone"), gmail_message("m2", subject="Still here")])
+    sync_connection(
+        session, connection, FakeGmail([gmail_message("m2", subject="Still here")], history)
+    )
+    assert [t.title for t in _tickets(session)] == ["Still here"]
+    session.refresh(connection)
+    assert connection.history_id == "200"
+
+
+def test_any_parser_bug_skips_only_that_message(session, world, monkeypatch):
+    _, _, connection = world
+    real_parse = gmail_sync.parse_message
+
+    def parse(message):
+        if message["id"] == "m1":
+            raise AttributeError("'NoneType' object has no attribute 'get'")
+        return real_parse(message)
+
+    monkeypatch.setattr(gmail_sync, "parse_message", parse)
+    sync_connection(
+        session, connection, FakeGmail([gmail_message("m1"), gmail_message("m2", subject="Ok")])
+    )
+    assert [t.title for t in _tickets(session)] == ["Ok"]
+    session.refresh(connection)
+    assert connection.history_id == "200"
+
+
+def test_skipped_message_is_logged_and_stays_visible(session, world, monkeypatch, caplog):
+    _, _, connection = world
+    monkeypatch.setattr(gmail_sync, "parse_message", lambda message: 1 / 0)
+    with caplog.at_level("WARNING", logger="app.gmail_sync"):
+        sync_connection(session, connection, FakeGmail([gmail_message("m1")]))
+    assert "m1" in caplog.text
+    sync_connection(session, connection, FakeGmail(history=[], latest="300"))
+    session.refresh(connection)
+    assert "m1" in connection.last_error
+
+
+def test_clean_cycle_clears_a_transient_error(session, world):
+    _, _, connection = world
+    connection.last_error = "HTTPStatusError; retrying next cycle"
+    session.add(connection)
+    session.commit()
+    sync_connection(session, connection, FakeGmail(history=[]))
+    session.refresh(connection)
+    assert connection.last_error is None
+
+
+def test_labeled_conversation_uses_the_first_message(session, world):
+    _, _, connection = world
+    original = gmail_message("t1", subject="Need a flyer", body="Original request")
+    reply = gmail_message("m2", thread_id="t1", subject="Re: Need a flyer", body="Any update?")
+    sync_connection(session, connection, FakeGmail([original, reply], _added([reply, original])))
+    [ticket] = _tickets(session)
+    assert ticket.meta["message_id"] == "t1"
+    assert "Original request" in ticket.description
 
 
 def test_access_token_is_cached_between_cycles(session, world):

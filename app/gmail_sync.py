@@ -26,8 +26,7 @@ from app.services import create_ticket
 logger = logging.getLogger(__name__)
 
 POLL_SECONDS = 90
-# Errors a retry can never fix: bad mail content, a mapping that fails validation.
-_PERMANENT_ERRORS = (HTTPException, ValueError, KeyError, TypeError)
+_SKIPPED = "Skipped Gmail message"
 _access_tokens: dict[str, tuple[str, float]] = {}  # connection id -> (token, monotonic expiry)
 
 
@@ -41,14 +40,16 @@ def _access_token(connection: GmailConnection, gmail: GmailClient) -> str:
 
 
 def _labeled_message_ids(history: list[dict], mapped: set[str]) -> list[str]:
-    ids: dict[str, None] = {}
+    threads: dict[str, str] = {}  # message id -> thread id
     for record in history:
         for item in (record.get("messagesAdded") or []) + (record.get("labelsAdded") or []):
             message = item.get("message") or {}
             labels = set(item.get("labelIds") or []) | set(message.get("labelIds") or [])
             if message.get("id") and labels & mapped:
-                ids[message["id"]] = None
-    return list(ids)
+                threads[message["id"]] = message.get("threadId") or message["id"]
+    # Labeling a conversation labels every message in it; a thread's first message has
+    # id == threadId, so importing it first makes the ticket the request, not a reply.
+    return sorted(threads, key=lambda message_id: threads[message_id] != message_id)
 
 
 def _import_message(session: Session, connection: GmailConnection, message: dict) -> str | None:
@@ -77,10 +78,14 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
     ).first()
     if seen is not None:
         return None
-    tasks = BackgroundTasks()
     try:
         mapping = connection.label_mapping[label_id]
+        ticket_type, priority = TicketType(mapping["type"]), Priority(mapping["priority"])
         parsed = parse_message(message)
+    except Exception as exc:  # parse_message is pure: any failure is this mail, not Gmail
+        return f"{_SKIPPED} {message['id']}: {type(exc).__name__}: {exc}"
+    tasks = BackgroundTasks()
+    try:
         session.add(
             IntegrationDelivery(provider="GMAIL", delivery_id=message_key, event_type="message")
         )
@@ -95,8 +100,8 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
             session.get(User, connection.user_id),
             title=parsed.title,
             description=parsed.description,
-            type=TicketType(mapping["type"]),
-            priority=Priority(mapping["priority"]),
+            type=ticket_type,
+            priority=priority,
             meta={
                 "source": "gmail",
                 "from": parsed.sender,
@@ -108,10 +113,9 @@ def _import_message(session: Session, connection: GmailConnection, message: dict
     except IntegrityError:
         session.rollback()  # another worker imported this message first
         return None
-    except _PERMANENT_ERRORS as exc:
+    except HTTPException as exc:  # ticket validation; a retry would fail the same way
         session.rollback()
-        detail = exc.detail if isinstance(exc, HTTPException) else f"{type(exc).__name__}: {exc}"
-        return f"Skipped Gmail message {message['id']}: {detail}"
+        return f"{_SKIPPED} {message['id']}: {exc.detail}"
     for task in tasks.tasks:  # same chat notification as web-created tickets
         task.func(*task.args, **task.kwargs)
     return None
@@ -141,12 +145,22 @@ def sync_connection(session: Session, connection: GmailConnection, gmail: GmailC
         latest = str(gmail.profile(token)["historyId"])
     errors = []
     for message_id in message_ids:
-        error = _import_message(session, connection, gmail.message(token, message_id))
+        try:
+            message = gmail.message(token, message_id)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise
+            continue  # deleted after the history entry was written; nothing to import
+        error = _import_message(session, connection, message)
         if error:
+            logger.warning("gmail message skipped: connection_id=%s %s", connection.id, error)
             errors.append(error)
     connection.history_id = latest
     connection.last_synced_at = utcnow()
-    connection.last_error = errors[-1][:500] if errors else None
+    if errors:
+        connection.last_error = errors[-1][:500]
+    elif not (connection.last_error or "").startswith(_SKIPPED):
+        connection.last_error = None  # transient errors clear on success; skips stay visible
     session.add(connection)
     session.commit()
 

@@ -105,3 +105,9 @@ def test_build_payload_is_a_flat_orm_free_json_serializable_dict(session, make_u
         # guard would stop catching the regression it exists to catch.
         assert type(value) is str or type(value) is int or value is None
     json.dumps(payload)
+
+
+def test_slack_escapes_ticket_title_from_outside_senders():
+    body = json.dumps(format_slack({**PAYLOAD, "title": "<!channel> <https://evil|ok>"}))
+    assert "<!channel>" not in body
+    assert "&lt;!channel&gt;" in body

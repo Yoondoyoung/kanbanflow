@@ -66,10 +66,15 @@ def _escape_slack(text: str) -> str:
 
 
 def format_slack(payload: dict) -> dict:
+    # Titles can come from outside senders (Gmail intake), so escape them for every event.
+    payload = {
+        **payload,
+        "title": _escape_slack(payload["title"]),
+        "project_name": _escape_slack(payload["project_name"]),
+    }
     if payload["event"] == EVENT_COMMENT_MENTION:
         payload = {
             **payload,
-            "project_name": _escape_slack(payload["project_name"]),
             "author_name": _escape_slack(payload["author_name"]),
             "mentioned_names": [_escape_slack(name) for name in payload["mentioned_names"]],
             "comment_excerpt": _escape_slack(payload["comment_excerpt"]),
