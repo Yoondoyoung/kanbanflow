@@ -22,14 +22,17 @@ from app.github_sync import (
     save_project_repositories,
     sync_open_pull_requests,
 )
+from app.gmail import gmail_is_configured
 from app.models import (
     GitHubConnectState,
     GitHubInstallation,
+    GmailConnection,
+    GmailConnectionStatus,
+    Priority,
     Project,
     ProjectGitHubConnection,
     ProjectGitHubRepository,
     ProjectMember,
-    Priority,
     Role,
     Sprint,
     SprintStatus,
@@ -70,6 +73,11 @@ _GITHUB_ERRORS = {
     "verification_failed": "GitHub could not verify that installation.",
 }
 
+_GMAIL_ERRORS = {
+    "oauth_denied": "Gmail authorization was denied.",
+    "verification_failed": "Gmail could not be connected. Try again.",
+}
+
 
 def _settings(
     request: Request,
@@ -84,6 +92,7 @@ def _settings(
     saved: bool = False,
     github_selection_state: str | None = None,
     github_available_repositories: list[AvailableRepository] | None = None,
+    gmail_available_labels: list[dict] | None = None,
 ) -> Response:
     github_repositories = session.exec(
         select(ProjectGitHubRepository)
@@ -104,6 +113,16 @@ def _settings(
     if binding is not None and member.role is Role.OWNER:
         installation = session.get(GitHubInstallation, binding.installation_id)
         github_account_login = installation.account_login if installation else None
+    gmail_connection = session.exec(
+        select(GmailConnection).where(GmailConnection.project_id == project.id)
+    ).first()
+    if gmail_connection is None:
+        gmail_status = "Not connected"
+    elif gmail_connection.status == GmailConnectionStatus.NEEDS_REAUTH:
+        gmail_status = "Reconnect required"
+    else:
+        gmail_status = "Connected"
+    is_owner = member.role is Role.OWNER
     return render(
         request,
         "project_settings.html",
@@ -128,6 +147,12 @@ def _settings(
             "github_available_repositories": (
                 (github_available_repositories or []) if member.role is Role.OWNER else []
             ),
+            "gmail_status": gmail_status,
+            "gmail_connection": gmail_connection if is_owner else None,
+            "gmail_configured": gmail_is_configured() if is_owner else None,
+            "gmail_available_labels": gmail_available_labels if is_owner else None,
+            "ticket_types": TicketType,
+            "priorities": Priority,
         },
         status_code=status_code,
         session=session,
@@ -334,6 +359,7 @@ def project_settings(
     request: Request,
     saved: bool = False,
     github_error: str | None = None,
+    gmail_error: str | None = None,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -346,7 +372,7 @@ def project_settings(
         project,
         member,
         saved=saved,
-        error=_GITHUB_ERRORS.get(github_error) if github_error else None,
+        error=_GITHUB_ERRORS.get(github_error or "") or _GMAIL_ERRORS.get(gmail_error or ""),
     )
 
 

@@ -21,6 +21,7 @@ from app.routers import (
     api_tickets,
     api_tokens,
     github_webhook,
+    gmail,
     web,
     web_sprints,
 )
@@ -111,6 +112,8 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["markdown"] = render_markdown
 
 app.include_router(web.router)
+# Before web_sprints: its /settings/integrations/{provider}/disconnect would swallow gmail.
+app.include_router(gmail.router)
 app.include_router(web_sprints.router)
 
 
