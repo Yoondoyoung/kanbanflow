@@ -1,3 +1,4 @@
+import io
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
@@ -6,8 +7,10 @@ from urllib.parse import quote, unquote, urlencode, urlsplit
 
 import httpx
 from mcp.server import MCPServer
+from mcp.server.mcpserver import Image
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import CallToolResult, TextContent
+from PIL import Image as PILImage
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -30,6 +33,7 @@ class MCPSettings(BaseSettings):
 
 
 mcp = MCPServer("Kanban Flow")
+MCP_IMAGE_MAX_EDGE = 1568  # Claude resizes past this long edge anyway
 
 # (Authorization header, app base URL) of the HTTP MCP request being served; None under stdio.
 _http_caller: ContextVar[tuple[str, str] | None] = ContextVar("kanbanflow_mcp_caller", default=None)
@@ -118,7 +122,7 @@ def _status_detail(status: int) -> str:
     }.get(status, "Request failed")
 
 
-async def api_request(method: str, path: str, json=None, *, transport=None):
+async def api_request(method: str, path: str, json=None, *, transport=None, raw: bool = False):
     path = _api_path(path)
     caller = _http_caller.get()
     if caller:
@@ -148,17 +152,20 @@ async def api_request(method: str, path: str, json=None, *, transport=None):
         raise ValueError(
             f"Kanban Flow API {response.status_code}: {_status_detail(response.status_code)}"
         )
+    if raw:
+        return response.headers.get("content-type", ""), response.content
     return response.json() if response.content else None
+
+
+def _tool_error(text: str) -> CallToolResult:
+    return CallToolResult(content=[TextContent(type="text", text=text)], isError=True)
 
 
 async def _tool_request(method: str, path: str, json=None):
     try:
         return await api_request(method, path, json)
     except ValueError as error:
-        return CallToolResult(
-            content=[TextContent(type="text", text=str(error))],
-            isError=True,
-        )
+        return _tool_error(str(error))
 
 
 @mcp.tool()
@@ -320,6 +327,35 @@ def _summary(description: str, limit: int = 120) -> str:
 async def get_ticket(ticket_id: str) -> dict[str, object]:
     """Get a ticket available to the token's user."""
     return await _tool_request("GET", f"/api/v1/tickets/{_path_segment(ticket_id)}")
+
+
+def _fit_for_model(data: bytes) -> bytes:
+    with PILImage.open(io.BytesIO(data)) as image:
+        if max(image.size) <= MCP_IMAGE_MAX_EDGE:
+            return data
+        image_format = image.format
+        image.thumbnail((MCP_IMAGE_MAX_EDGE, MCP_IMAGE_MAX_EDGE))
+        out = io.BytesIO()
+        image.save(out, image_format)
+        return out.getvalue()
+
+
+@mcp.tool()
+async def get_attachment(attachment_id: str) -> Image:
+    """View an image attached to a ticket; get_ticket lists attachment ids. Other files are not readable here."""  # noqa: E501
+    # ponytail: a non-image is fetched in full only to be refused; add a metadata route if
+    # clients start calling this on large PDFs.
+    try:
+        content_type, data = await api_request(
+            "GET", f"/api/v1/attachments/{_path_segment(attachment_id)}", raw=True
+        )
+    except ValueError as error:
+        return _tool_error(str(error))
+    if not content_type.startswith("image/"):
+        return _tool_error(
+            "Only image attachments are readable through MCP; get_ticket lists this file's name and size"  # noqa: E501
+        )
+    return Image(data=_fit_for_model(data), format=content_type.removeprefix("image/"))
 
 
 @mcp.tool()

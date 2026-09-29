@@ -1,11 +1,15 @@
+import base64
+import io
 import subprocess
 
 import httpx
 import pytest
 from mcp.client import Client
+from PIL import Image
 
 from app import mcp_server
 from app.mcp_server import MCPSettings, api_request, mcp
+from tests.images import image_bytes
 
 
 @pytest.mark.anyio
@@ -380,6 +384,7 @@ async def test_sprint_tools_expose_typed_input_schemas():
         "create_ticket",
         "list_tickets",
         "get_ticket",
+        "get_attachment",
         "update_ticket",
         "update_ticket_status",
         "delete_ticket",
@@ -707,3 +712,59 @@ async def test_list_tickets_returns_summaries_without_full_description(monkeypat
     assert item["summary"].startswith("Users see a 500 xxx")
     assert len(item["summary"]) == 120 and item["summary"].endswith("…")
     assert not {"description", "project_id", "creator_id", "meta"} & item.keys()
+
+
+@pytest.mark.anyio
+async def test_get_attachment_returns_an_image_sized_for_the_model(monkeypatch):
+    calls = []
+
+    async def fake_request(method, path, json=None, *, raw=False):
+        calls.append((method, path, raw))
+        return "image/png", image_bytes((3000, 1000))
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_attachment", {"attachment_id": "att/1"})
+
+    assert calls == [("GET", "/api/v1/attachments/att%2F1", True)]
+    [content] = result.content
+    assert (content.type, content.mime_type) == ("image", "image/png")
+    with Image.open(io.BytesIO(base64.b64decode(content.data))) as image:
+        assert image.size == (1568, 523)
+
+
+@pytest.mark.anyio
+async def test_get_attachment_keeps_small_images_as_they_are(monkeypatch):
+    png = image_bytes((800, 600))
+
+    async def fake_request(method, path, json=None, *, raw=False):
+        return "image/png", png
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_attachment", {"attachment_id": "att-1"})
+    assert base64.b64decode(result.content[0].data) == png
+
+
+@pytest.mark.anyio
+async def test_get_attachment_refuses_non_images(monkeypatch):
+    async def fake_request(method, path, json=None, *, raw=False):
+        return "application/octet-stream", b"%PDF-1.4"
+
+    monkeypatch.setattr(mcp_server, "api_request", fake_request)
+    async with Client(mcp) as client:
+        result = await client.call_tool("get_attachment", {"attachment_id": "att-1"})
+    assert result.is_error is True
+    assert "Only image attachments" in result.content[0].text
+
+
+@pytest.mark.anyio
+async def test_api_request_returns_type_and_bytes_when_raw(monkeypatch):
+    monkeypatch.setenv("KANBANFLOW_API_TOKEN", "test-token")
+
+    def handler(request):
+        return httpx.Response(200, content=b"\x89PNG", headers={"content-type": "image/png"})
+
+    assert await api_request(
+        "GET", "/api/v1/attachments/att-1", raw=True, transport=httpx.MockTransport(handler)
+    ) == ("image/png", b"\x89PNG")

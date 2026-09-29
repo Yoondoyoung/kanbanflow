@@ -1,6 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from sqlmodel import Session, select
 
+from app import attachments
 from app.auth import current_user, load_project_and_membership, project_reader, require_member
 from app.db import get_session
 from app.models import (
@@ -9,11 +10,20 @@ from app.models import (
     ProjectMember,
     Role,
     Ticket,
+    TicketAttachment,
     TicketStatus,
     TicketType,
     User,
 )
-from app.schemas import StatusUpdate, TicketCreate, TicketOut, TicketPage, TicketUpdate
+from app.schemas import (
+    AttachmentOut,
+    StatusUpdate,
+    TicketCreate,
+    TicketDetailOut,
+    TicketOut,
+    TicketPage,
+    TicketUpdate,
+)
 from app.services import create_ticket, delete_ticket_record, set_status, update_ticket
 
 router = APIRouter(prefix="/api/v1", tags=["tickets"])
@@ -124,14 +134,34 @@ def list_tickets(
     return TicketPage(items=rows, next_cursor=next_cursor)
 
 
-@router.get("/tickets/{ticket_id}", response_model=TicketOut)
+@router.get("/tickets/{ticket_id}", response_model=TicketDetailOut)
 def get_ticket(
     ticket_id: str,
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
-) -> Ticket:
+) -> TicketDetailOut:
     ticket, _, _ = load_ticket_for_read(ticket_id, user, session)
-    return ticket
+    rows = session.exec(
+        select(TicketAttachment)
+        .where(TicketAttachment.ticket_id == ticket.id)
+        .order_by(TicketAttachment.created_at)
+    ).all()
+    return TicketDetailOut.model_validate(ticket).model_copy(
+        update={"attachments": [AttachmentOut.model_validate(row) for row in rows]}
+    )
+
+
+@router.get("/attachments/{attachment_id}")
+def get_attachment_content(
+    attachment_id: str,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    row = session.get(TicketAttachment, attachment_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attachment not found")
+    load_ticket_for_read(row.ticket_id, user, session)  # non-members get the same 404
+    return attachments.file_response(row)
 
 
 @router.patch("/tickets/{ticket_id}", response_model=TicketOut)

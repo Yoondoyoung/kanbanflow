@@ -154,7 +154,7 @@ def test_patch_rejects_unknown_fields(client, seeded):
     response = client.patch(f"/api/v1/tickets/{ticket['id']}", json={"titel": "Renamed"})
 
     assert response.status_code == 422
-    assert client.get(f"/api/v1/tickets/{ticket['id']}").json() == ticket
+    assert client.get(f"/api/v1/tickets/{ticket['id']}").json() == {**ticket, "attachments": []}
 
 
 def test_get_ticket_returns_ticket(client, seeded):
@@ -162,7 +162,7 @@ def test_get_ticket_returns_ticket(client, seeded):
     item = client.get(f"/api/v1/projects/{project.slug}/tickets").json()["items"][0]
     response = client.get(f"/api/v1/tickets/{item['id']}")
     assert response.status_code == 200
-    assert response.json() == item
+    assert response.json() == {**item, "attachments": []}
 
 
 def test_non_member_gets_404_on_ticket_read(client, seeded, make_user, login_as):
@@ -197,7 +197,7 @@ def test_patch_rejects_explicit_null_on_non_nullable_field(client, seeded, field
     response = client.patch(f"/api/v1/tickets/{before['id']}", json={field: None})
     assert response.status_code == 422
     assert response.json()["detail"] == f"{field} may not be null"
-    assert client.get(f"/api/v1/tickets/{before['id']}").json() == before
+    assert client.get(f"/api/v1/tickets/{before['id']}").json() == {**before, "attachments": []}
 
 
 def test_patch_null_meta_does_not_poison_the_project_ticket_list(client, seeded):

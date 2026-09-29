@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import Priority, Role, SprintStatus, TicketStatus, TicketType
+from app.models import AttachmentSource, Priority, Role, SprintStatus, TicketStatus, TicketType
 from app.services import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
@@ -149,6 +149,22 @@ class TicketOut(BaseModel):
     completed_at: datetime | None
     meta: dict
     created_at: datetime
+
+
+class AttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    is_image: bool
+    source: AttachmentSource
+    created_at: datetime
+
+
+class TicketDetailOut(TicketOut):
+    attachments: list[AttachmentOut] = []
 
 
 class TicketUpdate(BaseModel):
