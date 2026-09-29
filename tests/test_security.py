@@ -1,6 +1,7 @@
 import secrets
 
 import pytest
+from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
 from app.config import Settings
@@ -60,3 +61,36 @@ def test_origin_rejection_includes_security_headers(client):
 
     assert response.status_code == 403
     assert response.headers["x-content-type-options"] == "nosniff"
+
+
+_GMAIL = {
+    "google_client_id": "gid",
+    "google_client_secret": "gsecret",
+    "google_redirect_uri": "https://kanban.example.com/integrations/gmail/callback",
+}
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        _GMAIL,
+        {**_GMAIL, "token_encryption_key": "not-a-fernet-key"},
+        {
+            **_GMAIL,
+            "token_encryption_key": Fernet.generate_key().decode(),
+            "google_redirect_uri": "http://kanban.example.com/integrations/gmail/callback",
+        },
+    ],
+)
+def test_production_gmail_settings_reject_unsafe_values(overrides):
+    with pytest.raises(ValidationError):
+        _production_settings(**overrides)
+
+
+def test_production_gmail_settings_accept_a_fernet_key():
+    config = _production_settings(**_GMAIL, token_encryption_key=Fernet.generate_key().decode())
+    assert config.google_client_id == "gid"
+
+
+def test_production_without_gmail_needs_no_encryption_key():
+    assert _production_settings().token_encryption_key is None

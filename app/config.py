@@ -1,5 +1,6 @@
 from typing import Literal
 
+from cryptography.fernet import Fernet
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     github_webhook_secret: str | None = None
     github_api_url: str = "https://api.github.com"
     github_web_url: str = "https://github.com"
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    token_encryption_key: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
@@ -55,6 +60,15 @@ class Settings(BaseSettings):
             raise ValueError("production ALLOWED_ORIGINS must contain only https origins")
         if not self.allowed_hosts or any("*" in host for host in self.allowed_hosts):
             raise ValueError("production ALLOWED_HOSTS must contain explicit hostnames")
+        if self.google_client_id:
+            if not (self.google_redirect_uri or "").startswith("https://"):
+                raise ValueError("production GOOGLE_REDIRECT_URI must be an https URL")
+            try:
+                Fernet(self.token_encryption_key or "")
+            except ValueError:
+                raise ValueError(
+                    "production TOKEN_ENCRYPTION_KEY must come from Fernet.generate_key()"
+                ) from None
         return self
 
 
