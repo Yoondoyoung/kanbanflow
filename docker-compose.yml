@@ -8,5 +8,6 @@ services:
     environment:
       DATABASE_URL: sqlite:////data/kanbanflow.db
       FORWARDED_ALLOW_IPS: "*"
+      ATTACHMENTS_DIR: /data/attachments
     volumes:
       - ./data:/data

@@ -144,7 +144,7 @@ tickets (each with a ticket type and priority). About every 90 seconds the app
 reads new labeled mail and adds a backlog ticket: the subject becomes the title,
 and the description holds the sender plus the body without quoted replies,
 capped at 2000 characters. Replies in a thread that already has a ticket are
-skipped. Attachments are counted, not imported.
+skipped. Real attachments come along with the ticket (see Ticket attachments).
 
 One-time Google setup (needs a Workspace admin):
 
@@ -160,6 +160,20 @@ If the mailbox password changes or access is revoked, the settings card shows
 "Reconnect required". Reconnecting the same mailbox keeps the label mapping and
 imports mail that arrived in the meantime. The poller runs inside the single
 uvicorn worker. Don't add workers without moving it out.
+
+## Ticket attachments
+
+Drop files onto an open ticket, paste a screenshot with ⌘V, or use **Add files**. Images show as
+thumbnails and open full size in a new tab; other files download. Mail imported by Gmail intake
+brings its real attachments along (not inline signature images).
+
+- Limits: 10 MB per file, 1 GB per project. Oversize mail attachments are listed in the ticket
+  description instead of imported.
+- Images over 2000 px on the long edge are downscaled on arrival and their EXIF (including GPS)
+  is removed; the original is not kept. GIFs and animated images are stored as-is.
+- Files are stored under `ATTACHMENTS_DIR` (`/data/attachments` in Docker), so back up `./data`
+  as a whole. Nginx allows 25 MB request bodies for multi-file uploads.
+- MCP: `get_ticket` lists attachments; `get_attachment` returns an image resized to 1568 px.
 
 ## Sprint API
 

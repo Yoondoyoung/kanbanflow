@@ -161,6 +161,17 @@ Skipped files get one line each at the end of the description, for example `repo
 - `.env.example` and README: document `ATTACHMENTS_DIR` and the limits.
 - `pyproject.toml`: add `pillow`.
 
+## Implementation Notes
+
+Decided while implementing (see the plan for detail):
+
+- `create_ticket` takes `attachment_rows`. SQLAlchemy does not order inserts by foreign key without a `relationship()`, and SQLite checks foreign keys per insert, so `create_ticket` flushes the ticket first and then adds the Gmail attachment rows in the same commit.
+- Only `get_ticket` returns attachments, through `TicketDetailOut`. `TicketOut` and `list_tickets` are unchanged, so listing tickets costs no extra query per ticket.
+- Upload and delete are JavaScript-driven and always return the section partial. The section sits inside the ticket form, and HTML cannot nest forms.
+- The security-header middleware sets CSP with `setdefault`, so an attachment response keeps its `sandbox` policy.
+- Attachment pick and delete clicks go through the existing delegated document click handler in `app.js`.
+- On pointer devices, delete buttons appear on hover or focus; touch screens always show them. Thumbnails use an `auto-fill` grid of square tiles.
+
 ## Out of Scope
 
 - Inline images in the description (GitHub style).
