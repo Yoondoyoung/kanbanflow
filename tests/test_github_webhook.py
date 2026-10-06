@@ -966,3 +966,73 @@ def test_unexpected_processing_error_rolls_back_delivery(
         )
     ).first() is None
     assert session.exec(select(GitHubArtifact)).all() == []
+
+
+def _send_pull(signed_webhook, project, action, **changes):
+    pull = {**_pull(project.key), **changes}
+    return signed_webhook(
+        "pull_request",
+        {
+            "action": action,
+            "installation": {"id": 7001},
+            "repository": {"id": 501},
+            "pull_request": pull,
+        },
+    )
+
+
+@pytest.mark.parametrize("action", ["opened", "reopened", "ready_for_review"])
+def test_opened_pull_request_starts_backlog_and_selected_tickets_only(
+    action, signed_webhook, connected_repo, session
+):
+    connected_repo.second.status = TicketStatus.DONE
+    session.add(connected_repo.second)
+    session.commit()
+
+    assert _send_pull(signed_webhook, connected_repo.project, action).status_code == 200
+
+    session.refresh(connected_repo.first)
+    session.refresh(connected_repo.second)
+    assert connected_repo.first.status is TicketStatus.IN_PROGRESS
+    assert connected_repo.second.status is TicketStatus.DONE
+
+
+def test_pull_request_edit_never_moves_a_ticket_back_to_in_progress(
+    signed_webhook, connected_repo, session
+):
+    assert connected_repo.first.status is TicketStatus.BACKLOG
+
+    _send_pull(signed_webhook, connected_repo.project, "synchronize")
+
+    session.refresh(connected_repo.first)
+    assert connected_repo.first.status is TicketStatus.BACKLOG
+
+
+def test_merged_pull_request_finishes_every_mentioned_ticket(
+    signed_webhook, connected_repo, session
+):
+    connected_repo.first.status = TicketStatus.IN_PROGRESS
+    session.add(connected_repo.first)
+    session.commit()
+
+    _send_pull(
+        signed_webhook,
+        connected_repo.project,
+        "closed",
+        state="closed",
+        merged_at="2026-09-17T13:00:00Z",
+    )
+
+    for ticket in (connected_repo.first, connected_repo.second):
+        session.refresh(ticket)
+        assert ticket.status is TicketStatus.DONE
+        assert ticket.completed_at is not None
+
+
+def test_pull_request_closed_without_merge_leaves_tickets_alone(
+    signed_webhook, connected_repo, session
+):
+    _send_pull(signed_webhook, connected_repo.project, "closed", state="closed")
+
+    session.refresh(connected_repo.first)
+    assert connected_repo.first.status is TicketStatus.BACKLOG

@@ -772,7 +772,10 @@ def set_status(
     *,
     project: Project | None = None,
     tasks: BackgroundTasks | None = None,
+    commit: bool = True,
 ) -> Ticket:
+    # commit=False leaves the transaction to the caller (the GitHub webhook
+    # moves tickets inside its delivery-dedupe transaction).
     # Any status may move to any other; there is no transition graph to
     # enforce. completed_at tracks DONE membership: entering DONE stamps it,
     # leaving clears it. Re-affirming DONE (a double-clicked dropdown) must
@@ -790,6 +793,9 @@ def set_status(
     if resolution_notes is not None:
         ticket.resolution_notes = resolution_notes
     session.add(ticket)
+    if not commit:
+        session.flush()
+        return ticket
     session.commit()
     session.refresh(ticket)
     if entered_done and project is not None:

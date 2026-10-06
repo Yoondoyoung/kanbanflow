@@ -25,9 +25,10 @@ from app.models import (
     ProjectGitHubRepository,
     Ticket,
     TicketGitLink,
+    TicketStatus,
     utcnow,
 )
-from app.services import slugify
+from app.services import set_status, slugify
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +427,36 @@ def reconcile_pull_request_links(
         session.add(TicketGitLink(ticket_id=ticket_id, artifact_id=artifact.id))
 
 
+_PR_START_ACTIONS = {"opened", "reopened", "ready_for_review"}
+
+
+def advance_tickets_for_pull_request(
+    session: Session,
+    connection: ProjectGitHubRepository,
+    artifact: GitHubArtifact,
+    action: str,
+    texts: Iterable[str | None],
+) -> None:
+    """Move the tickets a PR mentions: start work on open, finish on merge.
+
+    Never moves a ticket backward, so a manual move or a later push to the
+    same PR is left alone. The board has no review column, so a review
+    request changes nothing.
+    """
+    if action in _PR_START_ACTIONS and artifact.state in (
+        GitHubArtifactState.OPEN,
+        GitHubArtifactState.DRAFT,
+    ):
+        target, movable = TicketStatus.IN_PROGRESS, {TicketStatus.BACKLOG, TicketStatus.SELECTED}
+    elif action == "closed" and artifact.state is GitHubArtifactState.MERGED:
+        target, movable = TicketStatus.DONE, set(TicketStatus) - {TicketStatus.DONE}
+    else:
+        return
+    for ticket in _matching_tickets(session, connection, texts):
+        if ticket.status in movable:
+            set_status(session, ticket, target, commit=False)
+
+
 def sync_open_pull_requests(
     session: Session,
     connection: ProjectGitHubRepository,
@@ -619,12 +650,9 @@ def dispatch_github_event(
         head_ref = head.get("ref") if isinstance(head, dict) else None
         for connection in connections:
             artifact = upsert_pull_request(session, connection, pull)
-            reconcile_pull_request_links(
-                session,
-                connection,
-                artifact,
-                [pull.get("title"), pull.get("body"), head_ref],
-            )
+            texts = [pull.get("title"), pull.get("body"), head_ref]
+            reconcile_pull_request_links(session, connection, artifact, texts)
+            advance_tickets_for_pull_request(session, connection, artifact, action, texts)
         return
     if event_type == "pull_request_review" and action in _REVIEW_ACTIONS:
         number = _pull_number(payload)
