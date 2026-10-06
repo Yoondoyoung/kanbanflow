@@ -3,7 +3,18 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
-from app.models import AttachmentSource, Priority, Role, SprintStatus, TicketStatus, TicketType
+from app.models import (
+    AttachmentSource,
+    GitHubArtifactKind,
+    GitHubArtifactState,
+    GitHubCIState,
+    GitHubReviewState,
+    Priority,
+    Role,
+    SprintStatus,
+    TicketStatus,
+    TicketType,
+)
 from app.services import DESCRIPTION_MAX_LENGTH, TITLE_MAX_LENGTH
 
 STORY_POINTS = Literal[1, 2, 3, 5, 8, 13]
@@ -163,8 +174,25 @@ class AttachmentOut(BaseModel):
     created_at: datetime
 
 
+class DevelopmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    repository_full_name: str
+    kind: GitHubArtifactKind
+    number: int | None
+    title: str
+    html_url: str | None
+    author_login: str
+    state: GitHubArtifactState | None
+    review_state: GitHubReviewState | None
+    ci_state: GitHubCIState
+    occurred_at: datetime
+
+
 class TicketDetailOut(TicketOut):
     attachments: list[AttachmentOut] = []
+    branch_command: str | None = None
+    development: list[DevelopmentOut] = []
 
 
 class TicketUpdate(BaseModel):

@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 from app import attachments
 from app.auth import current_user, load_project_and_membership, project_reader, require_member
 from app.db import get_session
+from app.github_sync import branch_command, ticket_development
 from app.models import (
     Priority,
     Project,
@@ -17,6 +18,7 @@ from app.models import (
 )
 from app.schemas import (
     AttachmentOut,
+    DevelopmentOut,
     StatusUpdate,
     TicketCreate,
     TicketDetailOut,
@@ -140,14 +142,20 @@ def get_ticket(
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ) -> TicketDetailOut:
-    ticket, _, _ = load_ticket_for_read(ticket_id, user, session)
+    ticket, project, _ = load_ticket_for_read(ticket_id, user, session)
     rows = session.exec(
         select(TicketAttachment)
         .where(TicketAttachment.ticket_id == ticket.id)
         .order_by(TicketAttachment.created_at)
     ).all()
     return TicketDetailOut.model_validate(ticket).model_copy(
-        update={"attachments": [AttachmentOut.model_validate(row) for row in rows]}
+        update={
+            "attachments": [AttachmentOut.model_validate(row) for row in rows],
+            "branch_command": branch_command(project, ticket),
+            "development": [
+                DevelopmentOut.model_validate(row) for row in ticket_development(session, ticket)
+            ],
+        }
     )
 
 

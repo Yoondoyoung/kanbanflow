@@ -295,3 +295,21 @@ def test_copy_controls_use_the_existing_delegated_document_handler(
     assert 'status.textContent = "Copied"' in javascript
     assert 'status.textContent = "Copy failed"' in javascript
     assert 'querySelectorAll("[data-copy-text]")' not in javascript
+
+
+def test_api_ticket_detail_exposes_active_development_for_members(client, development_world, login_as):
+    login_as(development_world.member.email)
+
+    body = client.get(f"/api/v1/tickets/{development_world.ticket_id}").json()
+
+    assert body["branch_command"] == "git checkout -b feature/pay-104-fix-timeout"
+    prs = [row for row in body["development"] if row["kind"] == "PULL_REQUEST"]
+    safe = next(row for row in prs if row["number"] == 17)
+    assert (safe["state"], safe["review_state"], safe["ci_state"]) == (
+        "OPEN",
+        "APPROVED",
+        "PASSED",
+    )
+    assert safe["html_url"] == "https://github.com/acme/api/pull/17"
+    assert next(row for row in prs if row["number"] == 16)["html_url"] is None
+    assert all(row["repository_full_name"] != "acme/archived" for row in body["development"])
