@@ -60,7 +60,7 @@ def test_unknown_email_login_still_runs_verify_password(client, monkeypatch):
     # and a non-existent account isn't distinguishable from a wrong password by timing. This
     # asserts the behaviour (verify_password is actually invoked, against DUMMY_HASH) rather
     # than the wall-clock, which HTTP-level timing is too noisy to assert reliably.
-    import app.routers.web as web
+    import app.routers.web_auth as web
 
     calls = []
     original_verify_password = web.verify_password
