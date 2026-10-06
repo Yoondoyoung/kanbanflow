@@ -26,7 +26,6 @@ from app.auth import (
     hash_password,
     issue_api_token,
     load_project_and_membership,
-    make_csrf_token,
     optional_user,
     project_owner,
     project_reader,
@@ -55,6 +54,7 @@ from app.models import (
 )
 from app.notifications import schedule_comment_mention
 from app.routers.api_auth import _set_session
+from app.routers.web_common import COLUMNS, render
 from app.schemas import StatusUpdate, TicketUpdate
 from app.services import (
     create_project,
@@ -67,12 +67,6 @@ from app.services import (
 
 router = APIRouter(tags=["web"])
 
-COLUMNS = (
-    TicketStatus.BACKLOG,
-    TicketStatus.SELECTED,
-    TicketStatus.IN_PROGRESS,
-    TicketStatus.DONE,
-)
 BOARD_TICKETS_PER_COLUMN = 200
 
 # Reused to give the register form the same EmailStr format check RegisterRequest gives the
@@ -86,47 +80,6 @@ _TYPE_FILTER_QUERY = Query(None, alias="type")
 _MENTION_IDS_FORM = Form(None)
 _FILES_FORM = File(...)
 _DUE_DATE_FORM = Form(None)
-
-
-def render(
-    request: Request,
-    name: str,
-    context: dict,
-    status_code: int = 200,
-    session: Session | None = None,
-) -> Response:
-    from app.main import templates
-
-    user = context.get("user")
-    shell_context = {}
-    if session and user and not name.startswith("partials/"):
-        shell_context = _shell_context(session, user)
-        project = context.get("project")
-        if project is not None:
-            status_order = {
-                SprintStatus.ACTIVE: 0,
-                SprintStatus.PLANNING: 1,
-                SprintStatus.CLOSED: 2,
-            }
-            shell_context["sprint_options"] = sorted(
-                session.exec(select(Sprint).where(Sprint.project_id == project.id)).all(),
-                key=lambda sprint: (status_order[sprint.status], sprint.start_date),
-            )
-            shell_context["current_sprint"] = next(
-                (
-                    sprint
-                    for sprint in shell_context["sprint_options"]
-                    if sprint.status in (SprintStatus.ACTIVE, SprintStatus.PLANNING)
-                ),
-                None,
-            )
-    context = {
-        **shell_context,
-        "request": request,
-        "csrf_token": make_csrf_token(user.id) if user else "",
-        **context,
-    }
-    return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 
 @router.get("/")
@@ -495,19 +448,6 @@ def delete_user_account(
     response = RedirectResponse("/login", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response
-
-
-def _shell_context(session: Session, user: User) -> dict:
-    rows = session.exec(
-        select(Project, ProjectMember)
-        .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == user.id)
-        .order_by(Project.created_at.desc())
-    ).all()
-    return {
-        "projects": [project for project, _ in rows],
-        "roles": {project.id: member.role.value for project, member in rows},
-    }
 
 
 def _project_ticket(session: Session, project: Project, ticket_number: int) -> Ticket:
