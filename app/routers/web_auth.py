@@ -45,6 +45,7 @@ router = APIRouter(tags=["web"])
 # JSON route, without hand-rolling a regex.
 _email_adapter = TypeAdapter(EmailStr)
 
+
 @router.get("/")
 def index(user: User | None = Depends(optional_user)) -> Response:
     target = "/dashboard" if user else "/login"

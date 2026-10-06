@@ -26,6 +26,7 @@ from app.routers import (
     web,
     web_auth,
     web_sprints,
+    web_tickets,
 )
 from app.security import enforce_auth_rate_limit
 
@@ -120,6 +121,7 @@ templates.env.globals["asset_version"] = {
 
 app.include_router(web_auth.router)
 app.include_router(web.router)
+app.include_router(web_tickets.router)
 # Before web_sprints: its /settings/integrations/{provider}/disconnect would swallow gmail.
 app.include_router(gmail.router)
 app.include_router(web_sprints.router)
