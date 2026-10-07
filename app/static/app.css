@@ -1029,6 +1029,9 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
   }
   .sketch-board .ticket-card { transform: none; }
   .sketch-board .ticket-card:nth-child(n) { transform: none; }
+  .project-tabs { flex-wrap: nowrap; min-width: 0; overflow-x: auto; }
+  .project-tab { flex: none; padding-left: 8px; padding-right: 8px; }
+  .ticket-list-row { align-items: flex-start; flex-direction: column; gap: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

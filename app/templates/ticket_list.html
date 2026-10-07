@@ -35,7 +35,7 @@
       </select>
       <select name="sprint" aria-label="Sprint">
         <option value="">Any sprint</option>
-        <option value="none"{% if sprint_filter == 'none' %} selected{% endif %}>Backlog (no sprint)</option>
+        <option value="none"{% if sprint_filter == 'none' %} selected{% endif %}>No sprint</option>
         {% for row in sprints %}<option value="{{ row.id }}"{% if sprint_filter == row.id %} selected{% endif %}>{{ row.name }}</option>{% endfor %}
       </select>
       <select name="sort" aria-label="Sort">
@@ -49,14 +49,14 @@
       {% endif %}
     </form>
     {% for ticket in tickets %}
-    <div id="ticket-{{ ticket.id }}" class="backlog-ticket">
+    <div id="ticket-{{ ticket.id }}" class="backlog-ticket ticket-list-row">
       <a class="backlog-ticket-open" href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a>
       <span class="sprint-meta">
         {{ ticket.status.value|replace('_', ' ')|capitalize }}
         · {{ ticket.type.value|replace('_', ' ')|capitalize }}
         · {{ ticket.priority.value|capitalize }}
         · {{ assignee_names.get(ticket.assignee_id, "Unassigned") if ticket.assignee_id else "Unassigned" }}
-        · {{ sprint_names.get(ticket.sprint_id, "Backlog") if ticket.sprint_id else "Backlog" }}
+        · {{ sprint_names.get(ticket.sprint_id, "No sprint") if ticket.sprint_id else "No sprint" }}
         {% if ticket.due_date %}· <time datetime="{{ ticket.due_date.isoformat() }}" class="ticket-due-date{% if ticket.status.value != 'DONE' and ticket.due_date < today %} is-overdue{% endif %}">Due {{ ticket.due_date.strftime('%b %-d') }}</time>{% endif %}
       </span>
     </div>
