@@ -19,6 +19,7 @@ from app.auth import (
     current_user,
     load_project_and_membership,
     optional_user,
+    project_reader,
     verify_csrf,
 )
 from app.db import get_session
@@ -44,6 +45,7 @@ BOARD_TICKETS_PER_COLUMN = 200
 
 # Hoisted so `Query(...)` isn't called in an argument default (ruff B008).
 _TYPE_FILTER_QUERY = Query(None, alias="type")
+_STATUS_FILTER_QUERY = Query(None, alias="status")
 
 
 def _dashboard_context(session: Session, user: User) -> dict:
@@ -265,6 +267,87 @@ def board(
                 )
                 .order_by(Sprint.start_date)
             ).all(),
+            "today": date.today(),
+        },
+        session=session,
+    )
+
+
+LIST_TICKET_LIMIT = 200
+
+
+@router.get("/projects/{slug}/list")
+def ticket_list(
+    request: Request,
+    q: str = "",
+    status_filter: TicketStatus | None = _STATUS_FILTER_QUERY,
+    type_filter: TicketType | None = _TYPE_FILTER_QUERY,
+    priority: Priority | None = None,
+    assignee: str = "",
+    sprint: str = "",
+    access: tuple[Project, ProjectMember] = Depends(project_reader),
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> Response:
+    project, member = access
+    filters = [Ticket.project_id == project.id]
+    if q.strip():
+        filters.append(Ticket.title.ilike(f"%{q.strip()}%"))
+    if status_filter:
+        filters.append(Ticket.status == status_filter)
+    if type_filter:
+        filters.append(Ticket.type == type_filter)
+    if priority:
+        filters.append(Ticket.priority == priority)
+    if assignee == "me":
+        filters.append(Ticket.assignee_id == user.id)
+    elif assignee == "none":
+        filters.append(Ticket.assignee_id.is_(None))
+    elif assignee:
+        filters.append(Ticket.assignee_id == assignee)
+    if sprint == "none":
+        filters.append(Ticket.sprint_id.is_(None))
+    elif sprint:
+        filters.append(Ticket.sprint_id == sprint)
+
+    tickets = session.exec(
+        select(Ticket)
+        .where(*filters)
+        .order_by(Ticket.ticket_number.desc())
+        .limit(LIST_TICKET_LIMIT + 1)
+    ).all()
+    members = session.exec(
+        select(User)
+        .join(ProjectMember, ProjectMember.user_id == User.id)
+        .where(ProjectMember.project_id == project.id)
+        .order_by(User.name)
+    ).all()
+    sprints = session.exec(
+        select(Sprint).where(Sprint.project_id == project.id).order_by(Sprint.start_date.desc())
+    ).all()
+    return render(
+        request,
+        "ticket_list.html",
+        {
+            "user": user,
+            "project": project,
+            "role": member.role.value,
+            "active_tab": "list",
+            "tickets": tickets[:LIST_TICKET_LIMIT],
+            "truncated": len(tickets) > LIST_TICKET_LIMIT,
+            "members": members,
+            "assignee_names": {row.id: row.name or row.email for row in members},
+            "sprints": sprints,
+            "sprint_names": {row.id: row.name for row in sprints},
+            "statuses": COLUMNS,
+            "ticket_types": TicketType,
+            "priorities": Priority,
+            "q": q,
+            "status_filter": status_filter,
+            "type_filter": type_filter,
+            "priority_filter": priority,
+            "assignee": assignee,
+            "sprint_filter": sprint,
             "today": date.today(),
         },
         session=session,

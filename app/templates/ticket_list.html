@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} Tickets · Kanban Flow{% endblock %}
+{% block content %}
+<div class="project-board">
+  <header class="project-header">
+    <div>
+      <h1 class="project-title">{{ project.name }}</h1>
+      <p class="sprint-meta">All tickets</p>
+    </div>
+  </header>
+
+  {% include "partials/project_nav.html" %}
+
+  <section class="backlog-list" aria-labelledby="ticket-list-heading">
+    <div class="backlog-list-header"><h2 id="ticket-list-heading">Tickets</h2></div>
+    <form class="board-filters" method="get" aria-label="Ticket filters">
+      <input class="app-input" type="search" name="q" value="{{ q }}" placeholder="Search titles" aria-label="Search titles">
+      <select name="status" aria-label="Status">
+        <option value="">All statuses</option>
+        {% for value in statuses %}<option value="{{ value.value }}"{% if status_filter == value %} selected{% endif %}>{{ value.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+      </select>
+      <select name="assignee" aria-label="Assignee">
+        <option value="">Anyone</option>
+        <option value="me"{% if assignee == 'me' %} selected{% endif %}>Me</option>
+        <option value="none"{% if assignee == 'none' %} selected{% endif %}>Unassigned</option>
+        {% for member_user in members %}<option value="{{ member_user.id }}"{% if assignee == member_user.id %} selected{% endif %}>{{ member_user.name or member_user.email }}</option>{% endfor %}
+      </select>
+      <select name="type" aria-label="Type">
+        <option value="">All types</option>
+        {% for value in ticket_types %}<option value="{{ value.value }}"{% if type_filter == value %} selected{% endif %}>{{ value.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+      </select>
+      <select name="priority" aria-label="Priority">
+        <option value="">All priorities</option>
+        {% for value in priorities %}<option value="{{ value.value }}"{% if priority_filter == value %} selected{% endif %}>{{ value.value|capitalize }}</option>{% endfor %}
+      </select>
+      <select name="sprint" aria-label="Sprint">
+        <option value="">Any sprint</option>
+        <option value="none"{% if sprint_filter == 'none' %} selected{% endif %}>Backlog (no sprint)</option>
+        {% for row in sprints %}<option value="{{ row.id }}"{% if sprint_filter == row.id %} selected{% endif %}>{{ row.name }}</option>{% endfor %}
+      </select>
+      <button class="app-secondary-button" type="submit">Filter</button>
+      {% if q or status_filter or assignee or type_filter or priority_filter or sprint_filter %}
+      <a class="app-ghost-button" href="/projects/{{ project.slug }}/list">Clear filters</a>
+      {% endif %}
+    </form>
+    {% for ticket in tickets %}
+    <div id="ticket-{{ ticket.id }}" class="backlog-ticket">
+      <a class="backlog-ticket-open" href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a>
+      <span class="sprint-meta">
+        {{ ticket.status.value|replace('_', ' ')|capitalize }}
+        · {{ ticket.type.value|replace('_', ' ')|capitalize }}
+        · {{ ticket.priority.value|capitalize }}
+        · {{ assignee_names.get(ticket.assignee_id, "Unassigned") if ticket.assignee_id else "Unassigned" }}
+        · {{ sprint_names.get(ticket.sprint_id, "Backlog") if ticket.sprint_id else "Backlog" }}
+        {% if ticket.due_date %}· <time datetime="{{ ticket.due_date.isoformat() }}" class="ticket-due-date{% if ticket.status.value != 'DONE' and ticket.due_date < today %} is-overdue{% endif %}">Due {{ ticket.due_date.strftime('%b %-d') }}</time>{% endif %}
+      </span>
+    </div>
+    {% else %}
+    <p class="app-empty-state">No matching tickets.</p>
+    {% endfor %}
+    {% if truncated %}<p class="app-empty-state">Showing the newest {{ tickets|length }} tickets. Narrow the filters to see the rest.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}
