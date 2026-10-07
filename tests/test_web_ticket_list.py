@@ -154,3 +154,16 @@ def test_list_rejects_unknown_sort(client, list_world, login_as):
     login_as(list_world.owner.email)
     response = client.get(f"/projects/{list_world.project.slug}/list", params={"sort": "title"})
     assert response.status_code == 422
+
+
+def test_project_tabs_link_to_the_list_and_mark_it_current(client, list_world, login_as):
+    login_as(list_world.owner.email)
+    slug = list_world.project.slug
+
+    page = client.get(f"/projects/{slug}/list").text
+
+    assert (
+        f'<a class="project-tab is-active" href="/projects/{slug}/list" aria-current="page">'
+        "List</a>"
+    ) in page
+    assert f'href="/projects/{slug}/list"' in client.get(f"/projects/{slug}/backlog").text
