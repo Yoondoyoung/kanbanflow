@@ -38,6 +38,11 @@
         <option value="none"{% if sprint_filter == 'none' %} selected{% endif %}>Backlog (no sprint)</option>
         {% for row in sprints %}<option value="{{ row.id }}"{% if sprint_filter == row.id %} selected{% endif %}>{{ row.name }}</option>{% endfor %}
       </select>
+      <select name="sort" aria-label="Sort">
+        <option value="number"{% if sort == 'number' %} selected{% endif %}>Newest first</option>
+        <option value="priority"{% if sort == 'priority' %} selected{% endif %}>Priority</option>
+        <option value="due"{% if sort == 'due' %} selected{% endif %}>Due date</option>
+      </select>
       <button class="app-secondary-button" type="submit">Filter</button>
       {% if q or status_filter or assignee or type_filter or priority_filter or sprint_filter %}
       <a class="app-ghost-button" href="/projects/{{ project.slug }}/list">Clear filters</a>

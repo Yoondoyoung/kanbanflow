@@ -129,3 +129,28 @@ def test_list_is_hidden_from_non_members(client, list_world, make_user, login_as
     make_user(email="eve@example.com")
     login_as("eve@example.com")
     assert client.get(f"/projects/{list_world.project.slug}/list").status_code == 404
+
+
+def _order(client, world, sort):
+    page = client.get(f"/projects/{world.project.slug}/list", params={"sort": sort}).text
+    titles = ["Card declines", "Refund flow", "Receipt email"]
+    return sorted(titles, key=page.index)
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected"),
+    [
+        ("number", ["Receipt email", "Refund flow", "Card declines"]),
+        ("priority", ["Card declines", "Receipt email", "Refund flow"]),
+        ("due", ["Receipt email", "Card declines", "Refund flow"]),
+    ],
+)
+def test_list_sorts(client, list_world, login_as, sort, expected):
+    login_as(list_world.owner.email)
+    assert _order(client, list_world, sort) == expected
+
+
+def test_list_rejects_unknown_sort(client, list_world, login_as):
+    login_as(list_world.owner.email)
+    response = client.get(f"/projects/{list_world.project.slug}/list", params={"sort": "title"})
+    assert response.status_code == 422

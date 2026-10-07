@@ -1,6 +1,7 @@
 """Dashboard, project creation and the sprint board."""
 
 from datetime import date
+from typing import Literal
 
 from fastapi import (
     APIRouter,
@@ -13,6 +14,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import RedirectResponse
+from sqlalchemy import case
 from sqlmodel import Session, select
 
 from app.auth import (
@@ -274,6 +276,16 @@ def board(
 
 
 LIST_TICKET_LIMIT = 200
+_PRIORITY_RANK = case(
+    {Priority.URGENT: 0, Priority.HIGH: 1, Priority.MEDIUM: 2, Priority.LOW: 3},
+    value=Ticket.priority,
+)
+# Newest first is the tie-breaker for every sort.
+_LIST_SORTS = {
+    "number": (),
+    "priority": (_PRIORITY_RANK,),
+    "due": (Ticket.due_date.is_(None), Ticket.due_date),
+}
 
 
 @router.get("/projects/{slug}/list")
@@ -285,6 +297,7 @@ def ticket_list(
     priority: Priority | None = None,
     assignee: str = "",
     sprint: str = "",
+    sort: Literal["number", "priority", "due"] = "number",
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),
@@ -313,7 +326,7 @@ def ticket_list(
     tickets = session.exec(
         select(Ticket)
         .where(*filters)
-        .order_by(Ticket.ticket_number.desc())
+        .order_by(*_LIST_SORTS[sort], Ticket.ticket_number.desc())
         .limit(LIST_TICKET_LIMIT + 1)
     ).all()
     members = session.exec(
@@ -348,6 +361,7 @@ def ticket_list(
             "priority_filter": priority,
             "assignee": assignee,
             "sprint_filter": sprint,
+            "sort": sort,
             "today": date.today(),
         },
         session=session,
