@@ -48,21 +48,30 @@
       <a class="app-ghost-button" href="/projects/{{ project.slug }}/list">Clear filters</a>
       {% endif %}
     </form>
-    {% for ticket in tickets %}
-    <div id="ticket-{{ ticket.id }}" class="backlog-ticket ticket-list-row">
-      <a class="backlog-ticket-open" href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a>
-      <span class="sprint-meta">
-        {{ ticket.status.value|replace('_', ' ')|capitalize }}
-        · {{ ticket.type.value|replace('_', ' ')|capitalize }}
-        · {{ ticket.priority.value|capitalize }}
-        · {{ assignee_names.get(ticket.assignee_id, "Unassigned") if ticket.assignee_id else "Unassigned" }}
-        · {{ sprint_names.get(ticket.sprint_id, "No sprint") if ticket.sprint_id else "No sprint" }}
-        {% if ticket.due_date %}· <time datetime="{{ ticket.due_date.isoformat() }}" class="ticket-due-date{% if ticket.status.value != 'DONE' and ticket.due_date < today %} is-overdue{% endif %}">Due {{ ticket.due_date.strftime('%b %-d') }}</time>{% endif %}
-      </span>
+    {% if tickets %}
+    <div class="ticket-list-scroll">
+      <table class="ticket-list-table">
+        <thead>
+          <tr><th scope="col">Ticket</th><th scope="col">Status</th><th scope="col">Type</th><th scope="col">Priority</th><th scope="col">Assignee</th><th scope="col">Sprint</th><th scope="col">Due</th></tr>
+        </thead>
+        <tbody>
+          {% for ticket in tickets %}
+          <tr id="ticket-{{ ticket.id }}">
+            <td><a href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a></td>
+            <td>{{ ticket.status.value|replace('_', ' ')|capitalize }}</td>
+            <td>{{ ticket.type.value|replace('_', ' ')|capitalize }}</td>
+            <td>{{ ticket.priority.value|capitalize }}</td>
+            <td>{{ assignee_names.get(ticket.assignee_id, "Unassigned") if ticket.assignee_id else "Unassigned" }}</td>
+            <td>{{ sprint_names.get(ticket.sprint_id, "No sprint") if ticket.sprint_id else "No sprint" }}</td>
+            <td>{% if ticket.due_date %}<time datetime="{{ ticket.due_date.isoformat() }}" class="ticket-due-date{% if ticket.status.value != 'DONE' and ticket.due_date < today %} is-overdue{% endif %}">{{ ticket.due_date.strftime('%b %-d') }}</time>{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
     {% else %}
     <p class="app-empty-state">No matching tickets.</p>
-    {% endfor %}
+    {% endif %}
     {% if truncated %}<p class="app-empty-state">Showing the newest {{ tickets|length }} tickets. Narrow the filters to see the rest.</p>{% endif %}
   </section>
 </div>

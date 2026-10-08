@@ -167,3 +167,15 @@ def test_project_tabs_link_to_the_list_and_mark_it_current(client, list_world, l
         "List</a>"
     ) in page
     assert f'href="/projects/{slug}/list"' in client.get(f"/projects/{slug}/backlog").text
+
+
+def test_list_lines_fields_up_in_fixed_columns(client, list_world, login_as):
+    login_as(list_world.owner.email)
+    page = client.get(f"/projects/{list_world.project.slug}/list").text
+
+    headers = ["Ticket", "Status", "Type", "Priority", "Assignee", "Sprint", "Due"]
+    assert "".join(f'<th scope="col">{name}</th>' for name in headers) in page
+    # A ticket with no assignee, sprint or due date still fills every column.
+    assert "<td>Unassigned</td>" in page
+    assert "<td>No sprint</td>" in page
+    assert "<td>—</td>" in page

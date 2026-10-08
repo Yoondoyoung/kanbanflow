@@ -273,6 +273,15 @@ button, input, select, textarea { font: inherit; }
 .backlog-ticket { align-items: center; border-bottom: 1px solid var(--line); color: var(--text); display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
 .backlog-ticket-open { background: transparent; border: 0; color: inherit; flex: 1; font: inherit; min-height: 44px; padding: var(--space-1); text-align: left; }
 .backlog-ticket-open:hover { color: var(--sketch-blue-ink); text-decoration: underline; }
+.ticket-list-scroll { overflow-x: auto; }
+.ticket-list-table { border-collapse: collapse; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; width: 100%; }
+.ticket-list-table th, .ticket-list-table td { border-bottom: 2px solid var(--sketch-pencil); padding: var(--space-2) var(--space-3); text-align: left; vertical-align: middle; white-space: nowrap; }
+.ticket-list-table th { color: var(--muted); font-size: 12px; font-weight: 600; }
+.ticket-list-table td:first-child { min-width: 220px; white-space: normal; width: 100%; }
+.ticket-list-table td:first-child a { color: var(--text); font-family: var(--sketch-font-hand); font-size: 18px; line-height: 1.35; }
+.ticket-list-table td:first-child a:hover { color: var(--sketch-blue-ink); }
+.ticket-list-table td:not(:first-child) { color: var(--muted); }
+.ticket-list-table tbody tr:hover { background: var(--sketch-erased); }
 .backlog-selection .app-secondary-button { justify-self: end; margin: var(--space-3); }
 
 .sprint-history, .settings-section { margin-bottom: var(--space-4); }
@@ -1031,7 +1040,6 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
   .sketch-board .ticket-card:nth-child(n) { transform: none; }
   .project-tabs { flex-wrap: nowrap; min-width: 0; overflow-x: auto; }
   .project-tab { flex: none; padding-left: 8px; padding-right: 8px; }
-  .ticket-list-row { align-items: flex-start; flex-direction: column; gap: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
