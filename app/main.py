@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.auth import SESSION_COOKIE
@@ -54,6 +56,29 @@ app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
 app.include_router(github_webhook.router)
 app.add_route("/mcp", MCPHTTPApp(), methods=["GET", "POST", "DELETE"])
+
+@app.exception_handler(StarletteHTTPException)
+async def send_signed_out_visitors_to_login(request: Request, exc: StarletteHTTPException):
+    """A signed-out browser opening a page gets the login screen, not a JSON 401.
+
+    Only page loads (GET asking for HTML) are redirected; API calls, bearer
+    clients, form posts and resource fetches such as <img> keep the 401. An
+    htmx request gets HX-Redirect so the login page doesn't land in a panel.
+    """
+    if (
+        exc.status_code == 401
+        and request.method == "GET"
+        and not request.url.path.startswith(("/api/", "/mcp"))
+        and "authorization" not in request.headers
+    ):
+        if request.headers.get("HX-Request"):
+            return JSONResponse(
+                {"detail": exc.detail}, status_code=401, headers={"HX-Redirect": "/login"}
+            )
+        if "text/html" in request.headers.get("accept", ""):
+            return RedirectResponse("/login", status_code=303)
+    return await http_exception_handler(request, exc)
+
 
 UNSAFE_METHODS = {"POST", "PATCH", "PUT", "DELETE"}
 AUTH_ACTIONS = {
