@@ -4,9 +4,6 @@
 <div x-data="{ projectDialog: {{ 'true' if error else 'false' }} }" class="app-page app-dashboard">
   <section class="my-work" aria-labelledby="my-work-heading">
     <h1 id="my-work-heading" class="app-page-title">My Work</h1>
-    {% if not overdue_tickets and not in_progress_tickets and not next_tickets and not recently_completed_tickets %}
-    <p class="app-empty-state">No assigned work.</p>
-    {% endif %}
     <div class="my-work-grid">
       {% for group_id, heading, tickets in [
         ('overdue', 'Overdue', overdue_tickets),
