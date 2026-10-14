@@ -988,6 +988,26 @@ code, .ticket-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospa
   overflow-wrap: anywhere;
 }
 
+.project-sprint-actions { position: relative; }
+.project-sprint-actions summary { list-style: none; }
+.project-sprint-actions summary::-webkit-details-marker { display: none; }
+.project-sprint-actions-menu { background: var(--sketch-paper); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); box-shadow: var(--sketch-shadow); display: grid; gap: var(--space-2); padding: var(--space-2); position: absolute; right: 0; top: calc(100% + var(--space-1)); width: max-content; z-index: 12; }
+
+.board-filter-details { margin-bottom: var(--space-4); }
+.board-filter-details > summary { align-items: center; cursor: pointer; display: inline-flex; min-height: 44px; }
+.board-filter-details[open] > summary { margin-bottom: var(--space-2); }
+.sketch-board .board-filter-details > summary { background: var(--sketch-paper); border: var(--sketch-border); border-radius: var(--sketch-radius-control); color: var(--sketch-pencil); font-family: var(--sketch-font-hand); font-size: 17px; line-height: 1.2; padding: var(--space-2) var(--space-3); }
+.sketch-board .board-filters { background: var(--sketch-paper); border: var(--sketch-border); border-radius: var(--sketch-radius-panel); padding: var(--space-2) var(--space-3); }
+.sketch-board .board-filters :is(select, .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button) { border-radius: var(--sketch-radius-control); font-family: var(--sketch-font-hand); font-size: 17px; min-height: 44px; }
+.sketch-board .board-filters select { background: var(--sketch-erased); border: var(--sketch-border); color: var(--sketch-pencil); }
+.sketch-board .board-filters .app-secondary-button { background: var(--sketch-paper); border: var(--sketch-border); color: var(--sketch-pencil); }
+.sketch-board .board-filters :is(select, input, .app-primary-button, .app-secondary-button, .app-ghost-button, .app-danger-button):focus-visible,
+.sketch-board .board-filter-details > summary:focus-visible { outline: 3px solid var(--sketch-blue-ink); outline-offset: 2px; }
+
+.sprint-summary { align-items: center; grid-template-columns: repeat(2, minmax(0, 1fr)) auto auto; }
+.sprint-summary-primary { border-color: var(--line-strong) !important; }
+.sprint-summary-secondary { background: transparent !important; border-color: transparent !important; padding-left: 0 !important; padding-right: 0 !important; }
+
 @media (max-width: 767px) {
   .my-work-grid { grid-template-columns: 1fr; }
   .app-shell { display: block; }
