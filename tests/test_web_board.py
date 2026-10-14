@@ -244,6 +244,30 @@ def test_board_uses_a_drawer_and_exposes_clear_filters(client, active_sprint_wor
     assert f'href="/projects/{project.slug}">Clear filters</a>' in page
 
 
+def test_board_collapses_filters_until_one_is_active(client, active_sprint_world, login_as):
+    project = active_sprint_world.project
+    login_as(active_sprint_world.owner.email)
+
+    unfiltered = client.get(f"/projects/{project.slug}").text
+    filtered = client.get(f"/projects/{project.slug}?mine=1").text
+
+    assert '<details class="board-filter-details">' in unfiltered
+    assert '<details class="board-filter-details" open>' in filtered
+    assert "Filter tickets" in unfiltered
+
+
+def test_board_groups_owner_sprint_actions(client, active_sprint_world, login_as):
+    project = active_sprint_world.project
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{project.slug}").text
+
+    assert '<details class="project-sprint-actions">' in page
+    assert "Sprint actions" in page
+    assert "Plan sprint" in page
+    assert "Close sprint" in page
+
+
 def test_board_enables_the_sketch_scope_without_theming_nested_dialogs(
     client, active_sprint_world, login_as
 ):
