@@ -3,16 +3,19 @@ import hashlib
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
+from sqlmodel import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.auth import SESSION_COOKIE
 from app.config import settings
+from app.db import get_session
 from app.gmail import gmail_is_configured
 from app.gmail_sync import poll_forever
 from app.mcp_server import MCPHTTPApp, http_session_manager
@@ -153,5 +156,7 @@ app.include_router(web_sprints.router)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
+def health(session: Session = Depends(get_session)) -> dict[str, str]:
+    # deploy.sh and container healthchecks wait on this, so it must fail when the database does.
+    session.execute(text("SELECT 1"))
     return {"status": "ok"}
