@@ -9,7 +9,7 @@
           hx-target="#ticket-detail-root" hx-swap="innerHTML">
     <span class="ticket-label-top">
       <span class="ticket-number">{{ project.key }}-{{ ticket.ticket_number }}</span>
-      <span class="ticket-type">{{ ticket.type.value|replace('_', ' ')|capitalize }}</span>
+      <span class="ticket-type">{{ type_labels[ticket.type.value] }}</span>
     </span>
     <span class="ticket-card-title">{{ ticket.title }}</span>
     <span class="ticket-card-meta">

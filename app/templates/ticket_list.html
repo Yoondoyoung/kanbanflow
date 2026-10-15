@@ -6,6 +6,7 @@
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
       <p class="sprint-meta">All tickets</p>
+      {% include "partials/sprint_selector.html" %}
     </div>
   </header>
 
@@ -15,26 +16,26 @@
     <div class="backlog-list-header"><h2 id="ticket-list-heading">Tickets</h2></div>
     <form class="board-filters" method="get" aria-label="Ticket filters">
       <input class="app-input" type="search" name="q" value="{{ q }}" placeholder="Search titles" aria-label="Search titles">
-      <select name="status" aria-label="Status">
-        <option value="">All statuses</option>
-        {% for value in statuses %}<option value="{{ value.value }}"{% if status_filter == value %} selected{% endif %}>{{ value.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+      <select name="status" aria-label="Progress">
+        <option value="">Any progress</option>
+        {% for value in statuses %}<option value="{{ value.value }}"{% if status_filter == value %} selected{% endif %}>{{ status_labels[value.value] }}</option>{% endfor %}
       </select>
-      <select name="assignee" aria-label="Assignee">
+      <select name="assignee" aria-label="Owner">
         <option value="">Anyone</option>
         <option value="me"{% if assignee == 'me' %} selected{% endif %}>Me</option>
         <option value="none"{% if assignee == 'none' %} selected{% endif %}>Unassigned</option>
         {% for member_user in members %}<option value="{{ member_user.id }}"{% if assignee == member_user.id %} selected{% endif %}>{{ member_user.name or member_user.email }}</option>{% endfor %}
       </select>
-      <select name="type" aria-label="Type">
-        <option value="">All types</option>
-        {% for value in ticket_types %}<option value="{{ value.value }}"{% if type_filter == value %} selected{% endif %}>{{ value.value|replace('_', ' ')|capitalize }}</option>{% endfor %}
+      <select name="type" aria-label="Category">
+        <option value="">All categories</option>
+        {% for value in ticket_types %}<option value="{{ value.value }}"{% if type_filter == value %} selected{% endif %}>{{ type_labels[value.value] }}</option>{% endfor %}
       </select>
       <select name="priority" aria-label="Priority">
         <option value="">All priorities</option>
         {% for value in priorities %}<option value="{{ value.value }}"{% if priority_filter == value %} selected{% endif %}>{{ value.value|capitalize }}</option>{% endfor %}
       </select>
-      <select name="sprint" aria-label="Sprint">
-        <option value="">Any sprint</option>
+      <select name="sprint" aria-label="Schedule">
+        <option value="">Any schedule</option>
         <option value="none"{% if sprint_filter == 'none' %} selected{% endif %}>No sprint</option>
         {% for row in sprints %}<option value="{{ row.id }}"{% if sprint_filter == row.id %} selected{% endif %}>{{ row.name }}</option>{% endfor %}
       </select>
@@ -52,14 +53,14 @@
     <div class="ticket-list-scroll">
       <table class="ticket-list-table">
         <thead>
-          <tr><th scope="col">Ticket</th><th scope="col">Status</th><th scope="col">Type</th><th scope="col">Priority</th><th scope="col">Assignee</th><th scope="col">Sprint</th><th scope="col">Due</th></tr>
+          <tr><th scope="col">Ticket</th><th scope="col">Progress</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Owner</th><th scope="col">Schedule</th><th scope="col">Due</th></tr>
         </thead>
         <tbody>
           {% for ticket in tickets %}
           <tr id="ticket-{{ ticket.id }}">
-            <td><a href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">#{{ ticket.ticket_number }}</span> {{ ticket.title }}</a></td>
-            <td>{{ ticket.status.value|replace('_', ' ')|capitalize }}</td>
-            <td>{{ ticket.type.value|replace('_', ' ')|capitalize }}</td>
+            <td><a href="/projects/{{ project.slug }}/tickets/{{ ticket.ticket_number }}"><span class="ticket-number">{{ project.key }}-{{ ticket.ticket_number }}</span> {{ ticket.title }}</a></td>
+            <td>{{ status_labels[ticket.status.value] }}</td>
+            <td>{{ type_labels[ticket.type.value] }}</td>
             <td>{{ ticket.priority.value|capitalize }}</td>
             <td>{{ assignee_names.get(ticket.assignee_id, "Unassigned") if ticket.assignee_id else "Unassigned" }}</td>
             <td>{{ sprint_names.get(ticket.sprint_id, "No sprint") if ticket.sprint_id else "No sprint" }}</td>

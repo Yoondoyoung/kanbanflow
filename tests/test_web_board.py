@@ -219,7 +219,7 @@ def test_active_sprint_summary_uses_current_ticket_metrics(
 
     assert 'data-testid="sprint-summary"' in page
     assert "<dt>Completed</dt><dd>2 / 7 · 29%</dd>" in page
-    assert "<dt>Points</dt><dd>5 / 8</dd>" in page
+    assert "<dt>Effort</dt><dd>5 / 8</dd>" in page
     assert "<dt>Rollover</dt><dd>2</dd>" in page
     assert "<dt>At risk</dt><dd>4</dd>" in page
 
@@ -438,13 +438,8 @@ def test_board_caps_each_column_and_shows_a_truncation_notice(
 
 
 def test_ticket_card_partial_renders_standalone():
-    from fastapi.templating import Jinja2Templates
-
+    from app.main import templates
     from app.models import Priority, Ticket, TicketStatus, TicketType
-    from app.rendering import render_markdown
-
-    templates = Jinja2Templates(directory="app/templates")
-    templates.env.filters["markdown"] = render_markdown
 
     class FakeProject:
         slug = "payment-gateway"
@@ -472,6 +467,7 @@ def test_ticket_card_partial_renders_standalone():
     )
     assert f'id="ticket-{ticket.id}"' in html
     assert "Card declines" in html
+    assert '<span class="ticket-type">Issue</span>' in html
     assert "<strong>bold</strong>" not in html
 
 
@@ -573,8 +569,8 @@ def test_board_accessibility_uses_labeled_filters_and_human_status_text(
     page = client.get(f"/projects/{active_sprint_world.project.slug}").text
 
     assert 'aria-label="Board filters"' in page
-    assert '<label for="assignee-filter">Assignee</label>' in page
-    assert '<label for="type-filter">Type</label>' in page
+    assert '<label for="assignee-filter">Owner</label>' in page
+    assert '<label for="type-filter">Category</label>' in page
     assert '<label for="priority-filter">Priority</label>' in page
     assert 'role="region" aria-label="Board columns" tabindex="0"' in page
     assert 'aria-current="page">Board</a>' in page
@@ -807,9 +803,9 @@ def test_board_tracks_my_requests_by_stage(
     assert "Someone else&#39;s" not in strip and "Someone else's" not in strip
     assert strip.index("Moving request") < strip.index("Shipped request")
     moving = strip.split("Moving request", 1)[1].split("</li>", 1)[0]
-    assert "Stage: Selected" in moving
+    assert "Stage: Ready" in moving
     assert (
-        '<span class="is-passed">Backlog</span><span class="is-current">Selected</span>' in moving
+        '<span class="is-passed">Not planned</span><span class="is-current">Ready</span>' in moving
     )
     assert "my-request-steps is-done" in strip.split("Shipped request", 1)[1]
 
