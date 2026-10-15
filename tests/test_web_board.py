@@ -762,3 +762,61 @@ def test_board_card_labels_unassigned_ticket(client, active_sprint_world, engine
 
     assert "Unassigned" in card
 
+
+def test_board_tracks_my_requests_by_stage(
+    client, active_sprint_world, engine, make_user, login_as
+):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    other = make_user(email="grace@example.com")
+    sprint_id = active_sprint_world.sprint.id
+    with Session(engine) as session:
+        session.add_all(
+            [
+                Ticket(
+                    ticket_number=1,
+                    project_id=project.id,
+                    title="Shipped request",
+                    status=TicketStatus.DONE,
+                    sprint_id=sprint_id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=2,
+                    project_id=project.id,
+                    title="Moving request",
+                    status=TicketStatus.SELECTED,
+                    sprint_id=sprint_id,
+                    creator_id=owner.id,
+                ),
+                Ticket(
+                    ticket_number=3,
+                    project_id=project.id,
+                    title="Someone else's",
+                    sprint_id=sprint_id,
+                    creator_id=other.id,
+                ),
+            ]
+        )
+        session.commit()
+    login_as(owner.email)
+
+    page = client.get(f"/projects/{project.slug}").text
+    strip = page.split('class="my-requests"', 1)[1].split("</section>", 1)[0]
+
+    assert "Someone else&#39;s" not in strip and "Someone else's" not in strip
+    assert strip.index("Moving request") < strip.index("Shipped request")
+    moving = strip.split("Moving request", 1)[1].split("</li>", 1)[0]
+    assert "Stage: Selected" in moving
+    assert (
+        '<span class="is-passed">Backlog</span><span class="is-current">Selected</span>' in moving
+    )
+    assert "my-request-steps is-done" in strip.split("Shipped request", 1)[1]
+
+
+def test_board_hides_my_requests_when_user_filed_nothing(client, active_sprint_world, login_as):
+    login_as(active_sprint_world.owner.email)
+
+    page = client.get(f"/projects/{active_sprint_world.project.slug}").text
+
+    assert 'class="my-requests"' not in page

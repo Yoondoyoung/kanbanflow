@@ -262,6 +262,20 @@ html { accent-color: var(--accent); caret-color: var(--text); scrollbar-color: v
 .ticket-card[draggable="true"] { cursor: grab; }
 .ticket-card.is-dragging { cursor: grabbing; opacity: .45; }
 [data-drop-status].is-drag-over { background: var(--highlight); outline: 2px dashed var(--signal); outline-offset: 4px; }
+.my-requests { border: 1px solid var(--line); border-radius: var(--radius-md); margin-bottom: var(--space-5); padding: var(--space-3) var(--space-4); }
+.my-requests h2 { font-size: 15px; font-weight: 700; margin: 0 0 var(--space-1); }
+.my-requests ol { list-style: none; margin: 0; padding: 0; }
+.my-request + .my-request { border-top: 1px solid var(--line); }
+.my-request-open { align-items: center; background: transparent; border: 0; color: var(--text); cursor: pointer; display: grid; font: inherit; gap: var(--space-2) var(--space-4); grid-template-columns: 72px minmax(0, 260px) minmax(0, 1fr); min-height: 44px; padding: 0; text-align: left; width: 100%; }
+.my-request-number { font-size: 15px; font-variant-numeric: tabular-nums; font-weight: 800; }
+.my-request-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.my-request-open:hover .my-request-title { text-decoration: underline; text-underline-offset: 3px; }
+.my-request-steps { color: var(--muted); display: grid; font-size: 12px; gap: var(--space-1); grid-template-columns: repeat(4, minmax(0, 1fr)); padding: var(--space-2) 0; }
+.my-request-steps > span { border-top: 4px solid var(--line); padding-top: var(--space-1); }
+.my-request-steps > .is-passed { border-color: var(--text); color: var(--text); }
+.my-request-steps > .is-current { border-color: var(--signal); color: var(--accent-text); font-weight: 700; }
+.my-request-steps.is-done > span { border-color: var(--done); }
+.my-request-steps.is-done > .is-current { color: var(--done); }
 .board-drag-status { color: var(--text); margin: 0 0 var(--space-3); }
 .board-drag-status[hidden] { display: none; }
 .backlog-planning-sprint, .backlog-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); }
@@ -415,6 +429,10 @@ html { accent-color: var(--accent); caret-color: var(--text); scrollbar-color: v
   .project-navigation { flex-wrap: nowrap; overflow-x: auto; }
   .project-tabs { flex: none; flex-wrap: nowrap; }
   .project-tab, .project-settings-link { flex: none; }
+  .my-request-steps { gap: 2px; }
+  .my-request-steps > span { white-space: nowrap; }
+  .my-request-open { grid-template-columns: auto minmax(0, 1fr); }
+  .my-request-steps { grid-column: 1 / -1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -43,6 +43,7 @@ from app.services import (
 
 router = APIRouter(tags=["web"])
 
+MY_REQUESTS_LIMIT = 5
 BOARD_TICKETS_PER_COLUMN = 200
 
 # Hoisted so `Query(...)` isn't called in an argument default (ruff B008).
@@ -233,6 +234,13 @@ def board(
         if len(tickets) > BOARD_TICKETS_PER_COLUMN:
             truncated_columns.add(column.value)
         tickets_by_status[column.value] = tickets[:BOARD_TICKETS_PER_COLUMN]
+    # Tickets this user filed, under the same board filters, open ones first.
+    my_requests = session.exec(
+        select(Ticket)
+        .where(*filters, Ticket.creator_id == user.id)
+        .order_by((Ticket.status == TicketStatus.DONE), Ticket.ticket_number.desc())
+        .limit(MY_REQUESTS_LIMIT)
+    ).all()
     members = session.exec(
         select(User)
         .join(ProjectMember, ProjectMember.user_id == User.id)
@@ -252,6 +260,7 @@ def board(
             "selected_sprint_id": sprint.id,
             "columns": COLUMNS,
             "tickets_by_status": tickets_by_status,
+            "my_requests": my_requests,
             "truncated_columns": truncated_columns,
             "mine": mine,
             "assignee_id": assignee_id,

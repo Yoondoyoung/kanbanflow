@@ -38,6 +38,28 @@
   </dl>
   {% endif %}
 
+  {% if my_requests %}
+  <section class="my-requests" aria-labelledby="my-requests-heading">
+    <h2 id="my-requests-heading">My requests</h2>
+    <ol>
+      {% for request_ticket in my_requests %}
+      {% set stage = ['BACKLOG', 'SELECTED', 'IN_PROGRESS', 'DONE'].index(request_ticket.status.value) %}
+      <li class="my-request">
+        <button type="button" class="my-request-open" @click="ticketOpener = '{{ request_ticket.id }}'"
+                hx-get="/projects/{{ project.slug }}/tickets/{{ request_ticket.ticket_number }}"
+                hx-target="#ticket-detail-root" hx-swap="innerHTML">
+          <span class="my-request-number">{{ project.key }}-{{ request_ticket.ticket_number }}</span>
+          <span class="my-request-title">{{ request_ticket.title }}</span>
+          <span class="sr-only">Stage: {{ columns[stage].value|replace('_', ' ')|capitalize }}</span>
+          <span class="my-request-steps{% if stage == 3 %} is-done{% endif %}" aria-hidden="true">
+            {% for column in columns %}<span{% if loop.index0 < stage %} class="is-passed"{% elif loop.index0 == stage %} class="is-current"{% endif %}>{{ column.value|replace('_', ' ')|capitalize }}</span>{% endfor %}
+          </span>
+        </button>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
 
   <details class="board-filter-details"{% if mine or assignee_id or type_filter or priority_filter %} open{% endif %}>
     <summary>Filter tickets</summary>
