@@ -10,8 +10,8 @@
 
 - Color: white ground, carbon ink `#15171c`, label gray `#5b6068`, rules `#e3e5e9` / `#c9ccd2`.
   Orange `--signal` marks the current stage; `--accent` (darker orange) fills the primary action;
-  `--done` green marks delivered work; `--danger` red is for overdue and destructive text.
-- Navigation: carbon sidebar; the active project carries a 3px orange inset bar.
+  `--done` green marks delivered work; overdue dates use `--accent-text` orange; `--danger` red is only for destructive actions.
+- Navigation: carbon sidebar; the active project gets a `--nav-active` fill (no colored side stripe).
 - Spacing: 4px base unit, `--space-1` through `--space-6`.
 - Corners: 4px controls and cards, 8px panels and dialogs.
 - Controls: 44px minimum height, white fields with a 3:1 `--control-border`, visible `:focus-visible` ring.
