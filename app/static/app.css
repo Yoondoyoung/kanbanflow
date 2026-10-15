@@ -179,7 +179,7 @@ html { accent-color: var(--accent); caret-color: var(--text); scrollbar-color: v
 .ticket-detail-grid { display: grid; gap: var(--space-3); grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ticket-description-header { align-items: center; display: flex; justify-content: space-between; }
 .ticket-description-label { color: var(--text); font-size: 14px; font-weight: 700; }
-.ticket-description { color: var(--text-secondary); }
+.ticket-description { color: var(--text-secondary); overflow-wrap: anywhere; }
 .ticket-description > :first-child { margin-top: 0; }
 .ticket-description > :last-child { margin-bottom: 0; }
 .ticket-description table { border-collapse: collapse; display: block; max-width: 100%; overflow-x: auto; }
