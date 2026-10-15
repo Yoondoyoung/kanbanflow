@@ -1,5 +1,5 @@
 {% if detail_drawer %}
-<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal sketch-ticket-detail" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('#ticket-detail-heading').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
+<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal" aria-labelledby="ticket-detail-heading" x-init="$nextTick(() => { $el.showModal(); $el.querySelector('#ticket-detail-heading').focus() })" @cancel="$event.preventDefault(); $el.close()" @close="$dispatch('ticket-drawer-closed'); $el.remove()">
 {% else %}
 <section id="ticket-detail-panel" class="ticket-detail-page" aria-labelledby="ticket-detail-heading">
 {% endif %}

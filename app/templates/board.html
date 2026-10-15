@@ -3,11 +3,11 @@
 {% block title %}{{ project.name }}{% endblock %}
 
 {% block content %}
-<div class="project-board sketch-board" data-board-csrf="{{ csrf_token }}" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus())">
+<div class="project-board" data-board-csrf="{{ csrf_token }}" x-data="{ ticketError: '', ticketOpener: null }" @ticket-drawer-closed.window="$nextTick(() => document.getElementById(`ticket-${ticketOpener}`)?.querySelector('button')?.focus())">
   <header class="project-header">
     <div>
       <h1 class="project-title">{{ project.name }}</h1>
-      <p class="sprint-title">{{ sprint.name }} <span class="sprint-status">{{ sprint.status.value|capitalize }}</span></p>
+      {% if not sprint_options %}<p class="sprint-title">{{ sprint.name }} <span class="sprint-status">{{ sprint.status.value|capitalize }}</span></p>{% endif %}
       <p class="sprint-meta">{{ sprint.start_date.strftime('%b %-d') }} – {{ sprint.end_date.strftime('%b %-d, %Y') }}{% if sprint.goal %} · {{ sprint.goal }}{% endif %}</p>
       {% include "partials/sprint_selector.html" %}
     </div>
@@ -37,6 +37,7 @@
     <div class="sprint-summary-secondary"><dt>Rollover</dt><dd>{{ sprint_summary.rollover_count }}</dd></div>
   </dl>
   {% endif %}
+
 
   <details class="board-filter-details"{% if mine or assignee_id or type_filter or priority_filter %} open{% endif %}>
     <summary>Filter tickets</summary>

@@ -107,7 +107,7 @@ def test_board_marks_only_open_past_due_tickets_overdue(
         session.commit()
     login_as(owner.email)
 
-    page = client.get(f"/projects/{project.slug}").text
+    page = client.get(f"/projects/{project.slug}").text.split('class="board-workspace"', 1)[1]
     open_card = page.split("Open overdue", 1)[1].split("</article>", 1)[0]
     done_card = page.split("Done overdue", 1)[1].split("</article>", 1)[0]
 
@@ -268,61 +268,67 @@ def test_board_groups_owner_sprint_actions(client, active_sprint_world, login_as
     assert "Close sprint" in page
 
 
-def test_board_enables_the_sketch_scope_without_theming_nested_dialogs(
-    client, active_sprint_world, login_as
-):
+def test_board_renders_filter_state_and_plain_nested_dialogs(client, active_sprint_world, login_as):
     login_as(active_sprint_world.owner.email)
     response = client.get(f"/projects/{active_sprint_world.project.slug}?mine=1")
 
     assert response.status_code == 200
-    assert 'class="project-board sketch-board"' in response.text
+    assert 'class="project-board"' in response.text
     assert 'class="board-filter-summary">Filters active</p>' in response.text
     assert '<dialog id="ticket-modal"' in response.text
     assert 'id="ticket-modal" x-ref="ticketModal" class="app-dialog"' in response.text
-    assert "sketch-ticket-detail" not in response.text
+    assert "sketch" not in response.text
 
 
-def test_board_sketch_css_is_scoped_deterministic_and_responsive(client):
-    response = client.get("/static/app.css")
-    assert response.status_code == 200
-    css = response.text
+def test_board_css_draws_label_cards_with_a_stage_bar(client):
+    css = client.get("/static/app.css").text
 
-    root_tokens = css.split(":root {", 1)[1].split("}", 1)[0]
-    assert "--sketch-paper: #fdfbf7;" in root_tokens
+    assert "grid-template-columns: repeat(4, minmax(240px, 1fr));" in css
+    assert ".board-scroll { overflow-x: auto;" in css
     for selector in (
-        ".project-board > .project-header",
-        ".project-board > .project-navigation",
-        ".sketch-board > .board-filters",
-        ".sketch-board .board-workspace",
+        ".ticket-label-top {",
+        ".ticket-stage {",
+        ".ticket-stage > .is-current {",
+        ".ticket-stage.is-done > span {",
     ):
         assert selector in css
-    for forbidden_selector in (
-        ".sketch-board .app-dialog",
-        ".sketch-board .app-form",
-        ".sketch-board .app-primary-button",
-    ):
-        assert forbidden_selector not in css
-
-    assert "radial-gradient(circle, var(--sketch-erased) 1px, transparent 1px)" in css
-    assert "background-size: var(--sketch-dot-size) var(--sketch-dot-size);" in css
-    assert "grid-template-columns: repeat(4, minmax(240px, 1fr));" in css
-    assert ".sketch-board .board-workspace .board-scroll {" in css
-    assert "overflow-x: auto;" in css
-    for index, angle in enumerate(("-0.25deg", "0.35deg", "-0.15deg", "0.2deg"), 1):
-        rule = css.split(f".sketch-board .ticket-card:nth-child(4n + {index}) {{", 1)[1].split(
-            "}", 1
-        )[0]
-        assert f"transform: rotate({angle});" in rule
-    assert ".sketch-board .ticket-card:hover {" in css
-    hover_rule = css.split(".sketch-board .ticket-card:hover {", 1)[1].split("}", 1)[0]
-    assert "border-color: var(--sketch-blue-ink);" in hover_rule
-    assert "transform:" not in hover_rule
-
+    column_heading = css.split(".board-column h2 {", 1)[1].split("}", 1)[0]
+    assert "border-bottom: 2px solid var(--text);" in column_heading
     mobile = css.split("@media (max-width: 767px)", 1)[1]
-    reduced = css.split("@media (prefers-reduced-motion: reduce)", 1)[1]
     assert ".project-board { padding: var(--space-4); }" in mobile
-    assert ".sketch-board .ticket-card { transform: none; }" in mobile
-    assert ".sketch-board .ticket-card { transform: none; }" in reduced
+
+
+def test_board_card_is_a_label_with_reference_and_stage(
+    client, active_sprint_world, engine, login_as
+):
+    owner = active_sprint_world.owner
+    project = active_sprint_world.project
+    with Session(engine) as session:
+        session.add(
+            Ticket(
+                ticket_number=7,
+                project_id=project.id,
+                title="Label me",
+                status=TicketStatus.IN_PROGRESS,
+                priority=Priority.MEDIUM,
+                sprint_id=active_sprint_world.sprint.id,
+                creator_id=owner.id,
+            )
+        )
+        session.commit()
+    login_as(owner.email)
+
+    board = client.get(f"/projects/{project.slug}").text.split('class="board-workspace"', 1)[1]
+    card = (
+        board.split("Label me", 1)[0].rsplit("<article", 1)[1]
+        + board.split("Label me", 1)[1].split("</article>", 1)[0]
+    )
+
+    assert f'<span class="ticket-number">{project.key}-7</span>' in card
+    assert '<span class="ticket-stage" aria-hidden="true">' in card
+    assert card.count('class="is-passed"') == 2
+    assert card.count('class="is-current"') == 1
+    assert "Medium" not in card
 
 
 def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
@@ -346,8 +352,7 @@ def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
 
     assert fragment.status_code == 200
     assert (
-        '<dialog id="ticket-detail-panel" '
-        'class="app-dialog ticket-detail-modal sketch-ticket-detail"' in fragment.text
+        '<dialog id="ticket-detail-panel" class="app-dialog ticket-detail-modal"' in fragment.text
     )
     assert 'aria-labelledby="ticket-detail-heading"' in fragment.text
     assert '@cancel="$event.preventDefault(); $el.close()"' in fragment.text
@@ -364,11 +369,11 @@ def test_board_ticket_detail_fragment_uses_a_centered_native_dialog(
     assert "border-left: 1px solid var(--line)" in comments_css
 
 
-def test_board_filter_checkbox_has_a_40px_hit_target():
+def test_board_filter_checkbox_has_a_44px_hit_target():
     stylesheet = Path("app/static/app.css").read_text()
 
     assert ".board-filter-check" in stylesheet
-    assert "min-height: 40px" in stylesheet.split(".board-filter-check", 1)[1].split("}", 1)[0]
+    assert "min-height: 44px" in stylesheet.split(".board-filter-check", 1)[1].split("}", 1)[0]
 
 
 def test_blank_select_filters_render_the_html_board(client, active_sprint_world, login_as):
@@ -381,7 +386,7 @@ def test_blank_select_filters_render_the_html_board(client, active_sprint_world,
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert 'class="project-board sketch-board"' in response.text
+    assert 'class="project-board"' in response.text
 
 
 def test_board_exposes_native_drag_and_drop_contract():
@@ -756,3 +761,4 @@ def test_board_card_labels_unassigned_ticket(client, active_sprint_world, engine
     card = page.split(f'id="ticket-{ticket_id}"', 1)[1].split("</article>", 1)[0]
 
     assert "Unassigned" in card
+
