@@ -173,7 +173,7 @@ def test_list_lines_fields_up_in_fixed_columns(client, list_world, login_as):
     login_as(list_world.owner.email)
     page = client.get(f"/projects/{list_world.project.slug}/list").text
 
-    headers = ["Ticket", "Status", "Type", "Priority", "Assignee", "Sprint", "Due"]
+    headers = ["Ticket", "Progress", "Category", "Priority", "Owner", "Schedule", "Due"]
     assert "".join(f'<th scope="col">{name}</th>' for name in headers) in page
     # A ticket with no assignee, sprint or due date still fills every column.
     assert "<td>Unassigned</td>" in page

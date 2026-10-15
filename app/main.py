@@ -18,6 +18,7 @@ from app.config import settings
 from app.db import get_session
 from app.gmail import gmail_is_configured
 from app.gmail_sync import poll_forever
+from app.labels import STATUS_LABELS, TYPE_LABELS
 from app.mcp_server import MCPHTTPApp, http_session_manager
 from app.rendering import render_markdown
 from app.routers import (
@@ -59,6 +60,7 @@ app.include_router(api_sprints.router)
 app.include_router(api_tickets.router)
 app.include_router(github_webhook.router)
 app.add_route("/mcp", MCPHTTPApp(), methods=["GET", "POST", "DELETE"])
+
 
 @app.exception_handler(StarletteHTTPException)
 async def send_signed_out_visitors_to_login(request: Request, exc: StarletteHTTPException):
@@ -141,6 +143,8 @@ async def block_foreign_origin_cookie_writes(request: Request, call_next):
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.filters["markdown"] = render_markdown
+templates.env.globals["type_labels"] = TYPE_LABELS
+templates.env.globals["status_labels"] = STATUS_LABELS
 # Content hash per file, so a deploy changes the URL and browsers drop their cached copy.
 templates.env.globals["asset_version"] = {
     name: hashlib.sha256((Path(__file__).parent / "static" / name).read_bytes()).hexdigest()[:10]
