@@ -25,10 +25,13 @@ FORM: Courier waybill & parcel tracking, IMPECCABLE'S PICK (rank 1 of 7) chosen 
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
+## Resolved
+- Kickers removed from every surface; ticket references read KEY-n everywhere.
+- Ticket modal: reference stamp + category header, title as heading, 4-step tracker, Save pinned while the form scrolls, branch command under Development.
+- Vocabulary unified on plain-language labels (app/labels.py), chosen by the user.
+
 ## Unresolved
 - STORY's "leaves knowing what moved" has no carrier yet: tickets have no status-change timestamp, so tracking rows cannot show scan times.
-- Ceiling ideas from the finish review: priority as a service class in the label header, a stage-fill moment on drop.
-- Kickers (`.section-eyebrow`) remain on backlog, history, login and register; remove them when those surfaces are redesigned.
-- Ticket detail modal layout (title as heading, sticky save) still to design inside this world.
-- Mobile: one lane at a time vs horizontal scroll.
-- Board/modal vocabulary unification (Bug/Story vs Issue/Initiative).
+- Ceiling ideas: priority as a service class in the label header, a stage-fill moment on drop, label-header treatment for backlog rows and auth card.
+- Mobile board still scrolls lanes horizontally (one lane at a time not built).
+- Project role "Owner" (dashboard, settings) shares a word with the ticket Owner field; role names left as domain terms.
