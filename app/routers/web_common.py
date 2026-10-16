@@ -1,6 +1,7 @@
 """Rendering helpers shared by the web routers."""
 
 from fastapi import Request, Response
+from pydantic import BeforeValidator
 from sqlmodel import Session, select
 
 from app.auth import make_csrf_token
@@ -12,6 +13,9 @@ COLUMNS = (
     TicketStatus.IN_PROGRESS,
     TicketStatus.DONE,
 )
+
+# Filter forms submit their "All ..." option as an empty string; treat it as no filter.
+BlankAsNone = BeforeValidator(lambda value: value or None)
 
 
 def render(

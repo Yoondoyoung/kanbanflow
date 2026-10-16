@@ -420,3 +420,17 @@ def test_member_cannot_create_or_assign_sprints(client, backlog_world, add_membe
 
     assert create.status_code == 403
     assert assign.status_code == 403
+
+
+def test_blank_filter_selects_render_html(client, backlog_world, login_as):
+    # The filter forms submit "All ..." options as empty strings.
+    login_as(backlog_world.owner.email)
+    slug = backlog_world.project.slug
+
+    backlog = client.get(f"/projects/{slug}/backlog?q=&type=&priority=")
+    assert backlog.status_code == 200
+    assert 'aria-label="Backlog filters"' in backlog.text
+
+    listing = client.get(f"/projects/{slug}/list?q=&status=&assignee=&type=&priority=&sprint=")
+    assert listing.status_code == 200, listing.text
+    assert 'aria-label="Ticket filters"' in listing.text

@@ -1,3 +1,4 @@
+from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
@@ -45,7 +46,7 @@ from app.models import (
     WebhookType,
     utcnow,
 )
-from app.routers.web_common import render
+from app.routers.web_common import BlankAsNone, render
 from app.schemas import SprintCreate
 from app.services import (
     add_project_member,
@@ -322,8 +323,8 @@ def _close_preview(
 def backlog(
     request: Request,
     q: str = "",
-    priority: Priority | None = None,
-    type: TicketType | None = None,
+    priority: Annotated[Priority | None, BlankAsNone] = None,
+    type: Annotated[TicketType | None, BlankAsNone] = None,
     access: tuple[Project, ProjectMember] = Depends(project_reader),
     user: User = Depends(current_user),
     session: Session = Depends(get_session),

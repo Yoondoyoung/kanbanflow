@@ -1,7 +1,7 @@
 """Dashboard, project creation and the sprint board."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
@@ -36,7 +36,7 @@ from app.models import (
     TicketType,
     User,
 )
-from app.routers.web_common import COLUMNS, render
+from app.routers.web_common import COLUMNS, BlankAsNone, render
 from app.services import (
     create_project,
 )
@@ -48,7 +48,6 @@ BOARD_TICKETS_PER_COLUMN = 200
 
 # Hoisted so `Query(...)` isn't called in an argument default (ruff B008).
 _TYPE_FILTER_QUERY = Query(None, alias="type")
-_STATUS_FILTER_QUERY = Query(None, alias="status")
 
 
 def _dashboard_context(session: Session, user: User) -> dict:
@@ -301,9 +300,9 @@ _LIST_SORTS = {
 def ticket_list(
     request: Request,
     q: str = "",
-    status_filter: TicketStatus | None = _STATUS_FILTER_QUERY,
-    type_filter: TicketType | None = _TYPE_FILTER_QUERY,
-    priority: Priority | None = None,
+    status_filter: Annotated[TicketStatus | None, Query(alias="status"), BlankAsNone] = None,
+    type_filter: Annotated[TicketType | None, Query(alias="type"), BlankAsNone] = None,
+    priority: Annotated[Priority | None, BlankAsNone] = None,
     assignee: str = "",
     sprint: str = "",
     sort: Literal["number", "priority", "due"] = "number",
